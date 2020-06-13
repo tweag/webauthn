@@ -2,5 +2,7 @@
 
 ## How to run interactive demo
 ```
-./server/run.sh
+nix-shell
+cd server
+./run.sh
 ```

@@ -17,7 +17,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text.Encoding as Text
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
-import Network.Wai.Middleware.Static (static)
+import Network.Wai.Middleware.Static (staticPolicy, addBase)
 import Web.Spock (SpockM)
 import qualified Web.Spock as Spock
 import qualified Web.Spock.Config as Spock
@@ -60,6 +60,7 @@ data Session
 --
 app :: SpockM () Session () ()
 app = do
+  Spock.middleware (staticPolicy (addBase "dist"))
   Spock.get "/register/begin" $ do
     challenge <- liftIO $ newChallenge
     -- Spock.writeSession . Registering . Challenge $ challenge
@@ -152,5 +153,6 @@ app = do
 main :: IO ()
 main = do
   cfg <- Spock.defaultSpockCfg Unauthenticated Spock.PCNoDatabase ()
+  putStrLn "http://localhost:8080/index.html"
   Spock.runSpock 8080 (Spock.spock cfg app)
 
