@@ -1,6 +1,19 @@
 let
   pkgs = (import (import ./nix/sources.nix).nixpkgs) {};
-  ghc = pkgs.haskellPackages.ghcWithPackages (import ./nix/haskell-deps.nix);
+  haskellPackages = pkgs.haskellPackages.override {
+    overrides = self: super: {
+      cborg = pkgs.haskell.lib.overrideCabal super.cborg {
+        version = "0.2.3.0";
+        sha256 = "14y7yckj1xzldadyq8g84dgsdaygf9ss0gd38vjfw62smdjq1in8";
+      };
+      base64-bytestring = pkgs.haskell.lib.overrideCabal super.base64-bytestring {
+        version = "1.1.0.0";
+        # sha256 = pkgs.lib.fakeSha256;
+        sha256 = "1adcnkcx4nh3d59k94bkndj0wkgbvchz576qwlpaa7148a86q391";
+      };
+    };
+  };
+  ghc = haskellPackages.ghcWithPackages (import ./nix/haskell-deps.nix);
 in
 pkgs.mkShell rec {
   name = "fido2-devshell";
