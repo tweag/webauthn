@@ -1,19 +1,33 @@
 let
   pkgs = (import (import ./nix/sources.nix).nixpkgs) {};
+  haskellPackages = pkgs.haskellPackages.override {
+    overrides = self: super: {
+      cborg = pkgs.haskell.lib.overrideCabal super.cborg {
+        version = "0.2.3.0";
+        sha256 = "14y7yckj1xzldadyq8g84dgsdaygf9ss0gd38vjfw62smdjq1in8";
+      };
+      base64-bytestring = pkgs.haskell.lib.overrideCabal super.base64-bytestring {
+        version = "1.1.0.0";
+        # sha256 = pkgs.lib.fakeSha256;
+        sha256 = "1adcnkcx4nh3d59k94bkndj0wkgbvchz576qwlpaa7148a86q391";
+      };
+    };
+  };
+  ghc = haskellPackages.ghcWithPackages (import ./nix/haskell-deps.nix);
 in
 pkgs.mkShell rec {
-  name = "shell-file";
+  name = "fido2-devshell";
   buildInputs = [
-    pkgs.haskell.compiler.ghc865
+    ghc
     pkgs.cabal-install
-    pkgs.pkg-config
     pkgs.entr
+    pkgs.pkg-config
     pkgs.yarn
   ];
   nativeBuildInputs = [
-    pkgs.zlib
     pkgs.gmp
     pkgs.ncurses
+    pkgs.zlib
   ];
   shellHook = ''
     export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath nativeBuildInputs}:$LD_LIBRARY_PATH

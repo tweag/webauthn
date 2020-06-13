@@ -18,9 +18,8 @@ import qualified Data.Text.Encoding as Text
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
-import Web.Spock (SpockM)
-import qualified Web.Spock as Spock
-import qualified Web.Spock.Config as Spock
+import Web.Scotty (ScottyM)
+import qualified Web.Scotty as Scotty
 import qualified Network.HTTP.Types.Status as Status
 import Data.List.NonEmpty
 
@@ -53,19 +52,19 @@ data Session
 --
 -- deserialize gadt:
 --
---  credential <- Spock.jsonBody' @_ @(PublicKeyCredential a)
+--  credential <- Scotty.jsonBody' @_ @(PublicKeyCredential a)
 --  case credential of
 --    AttestationResponse resp ->
 --    AssertionResponse resp ->
 --
-app :: SpockM () Session () ()
+app :: ScottyM ()
 app = do
-  Spock.middleware (staticPolicy (addBase "dist"))
-  Spock.get "/register/begin" $ do
+  Scotty.middleware (staticPolicy (addBase "dist"))
+  Scotty.get "/register/begin" $ do
     challenge <- liftIO $ newChallenge
-    -- Spock.writeSession . Registering . Challenge $ challenge
+    -- Scotty.writeSession . Registering . Challenge $ challenge
     identifier <- liftIO $ newUserId
-    Spock.json $
+    Scotty.json $
       PublicKeyCredentialCreationOptions
         { rp =
             PublicKeyCredentialRpEntity
@@ -92,14 +91,13 @@ app = do
           },
           attestation = Nothing
         }
-  Spock.post "/register/complete" $ do
-    session <- Spock.readSession
-    credential <- Spock.jsonBody' @_ @(PublicKeyCredential AuthenticatorAttestationResponse)
+  Scotty.post "/register/complete" $ do
+    credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
     liftIO . print $ credential
     {-
     case session of
       Unauthenticated -> do
-        Spock.setStatus  Status.status401
+        Scotty.setStatus  Status.status401
         pure ()
       Registering challenge -> do
         let clientData' :: ClientData = Fido2.clientData (response credential)
@@ -107,36 +105,36 @@ app = do
         -- step 3
         if Fido2.typ (clientData' :: ClientData) /= Createj
         then do
-          Spock.setStatus Status.status401
-          Spock.text "typ mismatch"
+          Scotty.setStatus Status.status401
+          Scotty.text "typ mismatch"
         -- step 4
         else if challenge /= (Challenge  challenge')
         then do
-          Spock.setStatus Status.status401
-          Spock.text "challenge mismatch"
+          Scotty.setStatus Status.status401
+          Scotty.text "challenge mismatch"
         -- step 5
         else if (Fido2.origin clientData') /= "http://localhost:8080"
         then do
-          Spock.setStatus Status.status401
-          Spock.text "origin mismatch"
+          Scotty.setStatus Status.status401
+          Scotty.text "origin mismatch"
         else do
           -- skip step 6 for now
-          Spock.writeSession Authenticated
+          Scotty.writeSession Authenticated
           pure ()
           -- step 7 we get for free
           --
       Authenticating challenge -> do
         -- We should merge /login/complete and /register/complete. Same code here. Dual
-        Spock.setStatus  Status.status401
-        Spock.text "authenticating"
+        Scotty.setStatus  Status.status401
+        Scotty.text "authenticating"
         pure ()
       Authenticated -> pure ()
       -}
-  Spock.get "/login/begin" $ do
+  Scotty.get "/login/begin" $ do
     challenge <- liftIO $ newChallenge
-    -- Spock.writeSession . Registering . Challenge $ challenge
+    -- Scotty.writeSession . Registering . Challenge $ challenge
     identifier <- liftIO $ newUserId
-    Spock.json $
+    Scotty.json $
       PublicKeyCredentialRequestOptions
         { rpId = Nothing,
           timeout = Nothing,
@@ -145,14 +143,11 @@ app = do
           userVerification = Nothing
         }
     pure ()
-  Spock.post "/login/complete" $ do
-    credential <- Spock.jsonBody' @_ @(PublicKeyCredential AuthenticatorAssertionResponse)
+  Scotty.post "/login/complete" $ do
+    credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAssertionResponse)
     liftIO . print $ credential
     pure ()
 
 main :: IO ()
 main = do
-  cfg <- Spock.defaultSpockCfg Unauthenticated Spock.PCNoDatabase ()
-  putStrLn "http://localhost:8080/index.html"
-  Spock.runSpock 8080 (Spock.spock cfg app)
-
+  Scotty.scotty 8080 app
