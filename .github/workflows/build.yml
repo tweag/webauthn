@@ -14,7 +14,7 @@ jobs:
         signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-    - run: nix-shell --command "cd server && yarn && yarn parcel build"
+    - run: nix-shell --command "cd server && yarn && yarn parcel build index.html"
     - run: nix-shell --command "cabal build all"
     - run: nix-shell --command "cabal test all"
     - run: nix-shell --command "cabal haddock all"
