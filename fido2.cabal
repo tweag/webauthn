@@ -65,6 +65,7 @@ executable server
     wai,
     wai-middleware-static,
     text,
+    transformers,
     warp,
     http-types
 

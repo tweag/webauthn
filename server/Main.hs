@@ -8,8 +8,10 @@ module Main
 where
 
 import Control.Concurrent.STM (TVar)
+import Control.Applicative ((<|>))
 import qualified Control.Concurrent.STM as STM
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
 import Crypto.Fido2 as Fido2
 import qualified Crypto.Random as Random
 import Data.Aeson.QQ (aesonQQ)
@@ -34,14 +36,17 @@ import Data.List.NonEmpty
 
 
 -- Generate a new session for the current user and expose it as a @SetCookie@.
-newSession :: TVar Sessions -> IO Cookie.SetCookie
+newSession :: TVar Sessions -> IO (Session, Cookie.SetCookie)
 newSession sessions = do
   sessionId <- UUID.nextRandom
+
+  let session = Unauthenticated
+
   STM.atomically $ do
     contents <- STM.readTVar sessions
-    STM.writeTVar sessions $ Map.insert sessionId Unauthenticated contents
+    STM.writeTVar sessions $ Map.insert sessionId session contents
 
-  pure $ Cookie.defaultSetCookie
+  pure $ (session, Cookie.defaultSetCookie
     { Cookie.setCookieName = "session"
     , Cookie.setCookieValue = UUID.toASCIIBytes sessionId
     , Cookie.setCookieSameSite = Just Cookie.sameSiteStrict
@@ -51,7 +56,34 @@ newSession sessions = do
     -- might not apply to this field.) Otherwise, we can use mkcert to
     -- get a HTTPS setup for localhost.
     , Cookie.setCookieSecure = True
-    }
+    })
+
+
+newSessionScotty :: TVar Sessions -> Scotty.ActionM Session
+newSessionScotty sessions = do
+  (session, setCookie) <- liftIO $ newSession sessions
+  -- Scotty is great. Internally, it contains [(HeaderName, ByteString)]
+  -- for the headers. The API does not expose this, so here we convert from
+  -- bytestring to text and then internally in scotty to bytestring again..
+  -- This is quite the unfortunate conversion because the Builder type can
+  -- only output lazy bytestrings. Fun times.
+  Scotty.setHeader "SetCookie"
+    (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
+  pure session
+
+
+getSession :: TVar Sessions -> UUID -> MaybeT Scotty.ActionM Session
+getSession sessions uuid = do
+  contents <- liftIO $ STM.atomically $ STM.readTVar sessions
+  MaybeT . pure $ Map.lookup uuid contents
+
+
+readSessionId :: MaybeT Scotty.ActionM UUID
+readSessionId = do
+  cookieHeader <- MaybeT $ Scotty.header "cookie"
+  let cookies = Cookie.parseCookies $ LBS.toStrict $ LText.encodeUtf8 cookieHeader
+  sessionCookie <- MaybeT . pure $ lookup "session" cookies
+  MaybeT . pure $ UUID.fromByteString (LBS.fromStrict sessionCookie)
 
 
 -- Check if the user has a session cookie.
@@ -60,24 +92,10 @@ newSession sessions = do
 -- with our session registry.
 --
 -- If the user already has a session set, we don't do anything.
-setInitialSession :: TVar Sessions -> Scotty.ActionM ()
-setInitialSession sessions = do
-  cookieHeaderM <- Scotty.header "cookie"
-  case cookieHeaderM of
-    Just cookieHeader ->
-      -- TODO: Check whether the session is active. Overwrite it if it isn't.
-      undefined
-    Nothing -> do
-      setCookie <- liftIO $ newSession sessions
-      -- Scotty is great. Internally, it contains [(HeaderName, ByteString)]
-      -- for the headers. The API does not expose this, so here we convert from
-      -- bytestring to text and then internally in scotty to bytestring again..
-      -- This is quite the unfortunate conversion because the Builder type can
-      -- only output lazy bytestrings. Fun times.
-      Scotty.setHeader "SetCookie"
-        (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
-
-  pure ()
+getSessionScotty :: TVar Sessions -> MaybeT Scotty.ActionM Session
+getSessionScotty sessions = do
+  uuid <- readSessionId
+  getSession sessions uuid <|> (MaybeT $ (Just <$> newSessionScotty sessions))
 
 -- Session data that we store for each user.
 --
