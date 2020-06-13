@@ -68,7 +68,7 @@ newSessionScotty sessions = do
   -- bytestring to text and then internally in scotty to bytestring again..
   -- This is quite the unfortunate conversion because the Builder type can
   -- only output lazy bytestrings. Fun times.
-  Scotty.setHeader "SetCookie"
+  Scotty.setHeader "Set-Cookie"
     (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
   pure (sessionId, session)
 
@@ -85,7 +85,7 @@ readSessionId = do
   cookieHeader <- MaybeT $ Scotty.header "cookie"
   let cookies = Cookie.parseCookies $ LBS.toStrict $ LText.encodeUtf8 cookieHeader
   sessionCookie <- MaybeT . pure $ lookup "session" cookies
-  MaybeT . pure $ UUID.fromByteString (LBS.fromStrict sessionCookie)
+  MaybeT . pure $ UUID.fromASCIIBytes sessionCookie
 
 
 -- Check if the user has a session cookie.
@@ -132,7 +132,7 @@ data Session
   | Registering UserId Challenge
   | Authenticating Challenge
   | Authenticated UserId
-  deriving (Eq)
+  deriving (Eq, Show)
 
 
 data User = User
