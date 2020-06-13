@@ -14,11 +14,14 @@ import Crypto.Fido2 as Fido2
 import qualified Crypto.Random as Random
 import Data.Aeson.QQ (aesonQQ)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Builder as Builder
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text.Encoding as Text
+import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
@@ -30,6 +33,7 @@ import qualified Network.HTTP.Types.Status as Status
 import Data.List.NonEmpty
 
 
+-- Generate a new session for the current user and expose it as a @SetCookie@.
 newSession :: TVar Sessions -> IO Cookie.SetCookie
 newSession sessions = do
   sessionId <- UUID.nextRandom
@@ -48,6 +52,32 @@ newSession sessions = do
     -- get a HTTPS setup for localhost.
     , Cookie.setCookieSecure = True
     }
+
+
+-- Check if the user has a session cookie.
+--
+-- If the user doens't have a session set, create a new one and register it
+-- with our session registry.
+--
+-- If the user already has a session set, we don't do anything.
+setInitialSession :: TVar Sessions -> Scotty.ActionM ()
+setInitialSession sessions = do
+  cookieHeaderM <- Scotty.header "cookie"
+  case cookieHeaderM of
+    Just cookieHeader ->
+      -- TODO: Check whether the session is active. Overwrite it if it isn't.
+      undefined
+    Nothing -> do
+      setCookie <- liftIO $ newSession sessions
+      -- Scotty is great. Internally, it contains [(HeaderName, ByteString)]
+      -- for the headers. The API does not expose this, so here we convert from
+      -- bytestring to text and then internally in scotty to bytestring again..
+      -- This is quite the unfortunate conversion because the Builder type can
+      -- only output lazy bytestrings. Fun times.
+      Scotty.setHeader "SetCookie"
+        (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
+
+  pure ()
 
 -- Session data that we store for each user.
 --
