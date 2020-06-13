@@ -104,6 +104,19 @@ getSessionScotty sessions = do
   maybe (newSessionScotty sessions) pure result
 
 
+setSessionToRegistering :: TVar Sessions -> SessionId -> UserId -> Challenge -> IO ()
+setSessionToRegistering sessions sessionId userId challenge =
+  STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
+  where
+    -- Only update hte session to Registering when the session is Unauthenticated.
+    -- This prevents race conditions where two concurrent register requests happen
+    -- for the same session.
+    update :: Session -> Session
+    update (Unauthenticated) = Registering userId challenge
+    -- Keep the same state if there are racy calls to the /register endpoints.
+    update a = a
+
+
 -- Session data that we store for each user.
 --
 --                         +---> Registering ----+
@@ -145,7 +158,7 @@ app sessions users = do
     when (session /= Unauthenticated) (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to register")
 
     challenge <- liftIO $ newChallenge
-    identifier <- liftIO $ newUserId
+    userId <- liftIO $ newUserId
     Scotty.json $
       PublicKeyCredentialCreationOptions
         { rp =
@@ -155,7 +168,7 @@ app sessions users = do
               },
           user =
             PublicKeyCredentialUserEntity
-              { id = identifier,
+              { id = userId,
                 displayName = "Hello",
                 name = "Hello"
               },
@@ -173,6 +186,8 @@ app sessions users = do
           },
           attestation = Nothing
         }
+
+    liftIO $ setSessionToRegistering sessions sessionId userId challenge
 
   Scotty.post "/register/complete" $ do
     (sessionId, session) <- getSessionScotty sessions
