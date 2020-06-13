@@ -1,0 +1,76 @@
+cabal-version: 3.0
+name: fido2
+version: 0.1.0.0
+author: Arian van Putten
+maintainer: arian.vanputten@gmail.com
+build-type: Simple
+
+common sanity
+  default-language: Haskell2010
+  build-depends: base ^>= 4.12
+  ghc-options:
+    -Wall
+    -Wmissing-export-lists
+    -Wmissing-import-lists
+    -Wno-name-shadowing
+  default-extensions:
+    DerivingStrategies
+    DerivingVia
+    DeriveAnyClass
+    DeriveGeneric
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+    TypeApplications
+    DuplicateRecordFields
+
+library
+  import: sanity
+  hs-source-dirs: fido
+  build-depends:
+    binary,
+    aeson,
+    bytestring,
+    base64-bytestring >= 1.0.1.0,
+    containers,
+    cryptonite,
+    cborg,
+    serialise,
+    text,
+    unordered-containers,
+    x509,
+    scientific,
+    vector
+  exposed-modules:
+    Crypto.Fido2,
+    Crypto.Fido2.Protocol,
+
+executable server
+  import: sanity
+  hs-source-dirs: server
+  main-is: Main.hs
+
+  build-depends:
+    aeson,
+    aeson-qq,
+    cryptonite,
+    fido2,
+    bytestring,
+    uuid,
+    base64-bytestring >= 1.0.1.0,
+    Spock,
+    wai,
+    wai-middleware-static,
+    text,
+    warp,
+    http-types
+
+test-suite tests
+  import: sanity
+  type: exitcode-stdio-1.0
+  hs-source-dirs: tests
+  main-is: Spec.hs
+  build-depends:
+    fido2,
+    tasty,
+    tasty-hunit

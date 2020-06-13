@@ -1,0 +1,15 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "parcel-bundler": "^1.12.4"
+  },
+  "dependencies": {
+    "@github/webauthn-json": "^0.4.1"
+  },
+  "browserslist": [
+      "last 1 Chrome versions"
+  ]
+}
