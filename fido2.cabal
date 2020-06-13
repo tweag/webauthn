@@ -7,7 +7,7 @@ build-type: Simple
 
 common sanity
   default-language: Haskell2010
-  build-depends: base ^>= 4.12
+  build-depends: base
   ghc-options:
     -Wall
     -Wmissing-export-lists
@@ -31,7 +31,7 @@ library
     binary,
     aeson,
     bytestring,
-    base64-bytestring >= 1.0.1.0,
+    base64-bytestring,
     containers,
     cryptonite,
     cborg,
@@ -57,7 +57,7 @@ executable server
     fido2,
     bytestring,
     uuid,
-    base64-bytestring >= 1.0.1.0,
+    base64-bytestring,
     Spock,
     wai,
     wai-middleware-static,
