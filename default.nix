@@ -13,6 +13,11 @@ let
         # sha256 = pkgs.lib.fakeSha256;
         sha256 = "1adcnkcx4nh3d59k94bkndj0wkgbvchz576qwlpaa7148a86q391";
       };
+      scotty = pkgs.haskell.lib.overrideCabal super.scotty {
+        version = "0.12";
+        # sha256 = pkgs.lib.fakeSha256;
+        sha256 = "1lpggpdzgjk23mq7aa64yylds5dbm4ynhcvbarqihjxabvh7xmz1";
+      };
     };
   };
 in
