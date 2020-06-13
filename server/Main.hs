@@ -60,7 +60,6 @@ data Session
 --
 app :: SpockM () Session () ()
 app = do
-  Spock.middleware static
   Spock.get "/register/begin" $ do
     challenge <- liftIO $ newChallenge
     -- Spock.writeSession . Registering . Challenge $ challenge
