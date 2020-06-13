@@ -7,14 +7,19 @@ module Main
   )
 where
 
+import Control.Concurrent.STM (TVar)
+import qualified Control.Concurrent.STM as STM
 import Control.Monad.IO.Class (liftIO)
 import Crypto.Fido2 as Fido2
 import qualified Crypto.Random as Random
 import Data.Aeson.QQ (aesonQQ)
 import Data.ByteString (ByteString)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text.Encoding as Text
+import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
@@ -42,8 +47,15 @@ data Session
   | Authenticated UserId
 
 
-app :: ScottyM ()
-app = do
+type Sessions = Map UUID Session
+
+type Users = Map UserId User
+
+data User
+
+
+app :: TVar Sessions -> TVar Users -> ScottyM ()
+app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
   Scotty.get "/register/begin" $ do
     challenge <- liftIO $ newChallenge
@@ -135,5 +147,8 @@ app = do
 
 main :: IO ()
 main = do
+  sessions <- STM.newTVarIO Map.empty
+  users <- STM.newTVarIO Map.empty
+
   putStrLn "You can view the web-app at: http://localhost:8080/index.html"
-  Scotty.scotty 8080 app
+  Scotty.scotty 8080 (app sessions users)
