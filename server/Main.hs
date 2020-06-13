@@ -7,36 +7,116 @@ module Main
   )
 where
 
+import Control.Applicative ((<|>))
+import Control.Concurrent.STM (TVar)
+import qualified Control.Concurrent.STM as STM
+import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
 import Crypto.Fido2 as Fido2
 import qualified Crypto.Random as Random
 import Data.Aeson.QQ (aesonQQ)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Builder as Builder
+import Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text.Encoding as Text
+import qualified Data.Text.Lazy.Encoding as LText
+import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
+import Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
+import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
 import qualified Network.HTTP.Types.Status as Status
 import Data.List.NonEmpty
 
-{-
-instance Aeson.FromJSON PublicKeyCredential where
-  parseJSON = Aeson.withObject "PublicKeyCredential" $ \obj -> do
-    -- Decode the base64 public key credential
-    --
--}
 
--- Good
-data Session
-  = Unauthenticated
-  | Registering UserId Challenge
-  | Authenticating Challenge
-  | Authenticated UserId
+-- Generate a new session for the current user and expose it as a @SetCookie@.
+newSession :: TVar Sessions -> IO (SessionId, Session, Cookie.SetCookie)
+newSession sessions = do
+  sessionId <- UUID.nextRandom
 
+  let session = Unauthenticated
+
+  STM.atomically $ do
+    contents <- STM.readTVar sessions
+    STM.writeTVar sessions $ Map.insert sessionId session contents
+
+  pure $ (sessionId, session, Cookie.defaultSetCookie
+    { Cookie.setCookieName = "session"
+    , Cookie.setCookieValue = UUID.toASCIIBytes sessionId
+    , Cookie.setCookieSameSite = Just Cookie.sameSiteStrict
+    , Cookie.setCookieHttpOnly = True
+    -- Does not work on localhost: the browser doesn't send any cookies
+    -- to a non-TLS version of localhost.
+    -- TODO: Use mkcert to get a HTTPS setup for localhost.
+    -- , Cookie.setCookieSecure = True
+    })
+
+
+newSessionScotty :: TVar Sessions -> Scotty.ActionM (SessionId, Session)
+newSessionScotty sessions = do
+  (sessionId, session, setCookie) <- liftIO $ newSession sessions
+  -- Scotty is great. Internally, it contains [(HeaderName, ByteString)]
+  -- for the headers. The API does not expose this, so here we convert from
+  -- bytestring to text and then internally in scotty to bytestring again..
+  -- This is quite the unfortunate conversion because the Builder type can
+  -- only output lazy bytestrings. Fun times.
+  Scotty.setHeader "Set-Cookie"
+    (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
+  pure (sessionId, session)
+
+
+getSession :: TVar Sessions -> SessionId -> MaybeT Scotty.ActionM (SessionId, Session)
+getSession sessions sessionId = do
+  contents <- liftIO $ STM.atomically $ STM.readTVar sessions
+  session <- MaybeT . pure $ Map.lookup sessionId contents
+  pure $ (sessionId, session)
+
+
+readSessionId :: MaybeT Scotty.ActionM UUID
+readSessionId = do
+  cookieHeader <- MaybeT $ Scotty.header "cookie"
+  let cookies = Cookie.parseCookies $ LBS.toStrict $ LText.encodeUtf8 cookieHeader
+  sessionCookie <- MaybeT . pure $ lookup "session" cookies
+  MaybeT . pure $ UUID.fromASCIIBytes sessionCookie
+
+
+-- Check if the user has a session cookie.
+--
+-- If the user doens't have a session set, create a new one and register it
+-- with our session registry.
+--
+-- If the user already has a session set, we don't do anything.
+getSessionScotty :: TVar Sessions -> Scotty.ActionM (SessionId, Session)
+getSessionScotty sessions = do
+  result <- runMaybeT $ do
+    uuid <- readSessionId
+    getSession sessions uuid
+
+  maybe (newSessionScotty sessions) pure result
+
+
+setSessionToRegistering :: TVar Sessions -> SessionId -> UserId -> Challenge -> IO ()
+setSessionToRegistering sessions sessionId userId challenge =
+  STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
+  where
+    -- Only update hte session to Registering when the session is Unauthenticated.
+    -- This prevents race conditions where two concurrent register requests happen
+    -- for the same session.
+    update :: Session -> Session
+    update (Unauthenticated) = Registering userId challenge
+    -- Keep the same state if there are racy calls to the /register endpoints.
+    update a = a
+
+
+-- Session data that we store for each user.
 --
 --                         +---> Registering ----+
 --                         |                     |
@@ -44,26 +124,40 @@ data Session
 --                         |                     |
 --                         +---> Authenticating -+
 --
---
 --  Whether we consider Authenticated right after Registering is a design
---  choice I guess. I think it's safe to do
+--  choice. Should be safe to do? But let's double check that the spec
+--  actually guarantees that you own the public key after registering.
+data Session
+  = Unauthenticated
+  | Registering UserId Challenge
+  | Authenticating Challenge
+  | Authenticated UserId
+  deriving (Eq, Show)
 
--- What I want is
---
--- deserialize gadt:
---
---  credential <- Scotty.jsonBody' @_ @(PublicKeyCredential a)
---  case credential of
---    AttestationResponse resp ->
---    AssertionResponse resp ->
---
-app :: ScottyM ()
-app = do
+
+data User = User
+  { credentials :: [AttestedCredentialData]
+  }
+
+type Sessions = Map SessionId Session
+
+type SessionId = UUID
+
+type Users = Map UserId User
+
+
+app :: TVar Sessions -> TVar Users -> ScottyM ()
+app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
+
   Scotty.get "/register/begin" $ do
+    (sessionId, session) <- getSessionScotty sessions
+
+    -- NOTE: We currently do not support multiple credentials per user.
+    when (session /= Unauthenticated) (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to register")
+
     challenge <- liftIO $ newChallenge
-    -- Scotty.writeSession . Registering . Challenge $ challenge
-    identifier <- liftIO $ newUserId
+    userId <- liftIO $ newUserId
     Scotty.json $
       PublicKeyCredentialCreationOptions
         { rp =
@@ -73,7 +167,7 @@ app = do
               },
           user =
             PublicKeyCredentialUserEntity
-              { id = identifier,
+              { id = userId,
                 displayName = "Hello",
                 name = "Hello"
               },
@@ -91,7 +185,14 @@ app = do
           },
           attestation = Nothing
         }
+
+    liftIO $ setSessionToRegistering sessions sessionId userId challenge
+
   Scotty.post "/register/complete" $ do
+    (sessionId, session) <- getSessionScotty sessions
+
+    -- TODO: Verify the user is "Registering"
+
     credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
     liftIO . print $ credential
     {-
@@ -130,6 +231,7 @@ app = do
         pure ()
       Authenticated -> pure ()
       -}
+
   Scotty.get "/login/begin" $ do
     challenge <- liftIO $ newChallenge
     -- Scotty.writeSession . Registering . Challenge $ challenge
@@ -143,6 +245,7 @@ app = do
           userVerification = Nothing
         }
     pure ()
+
   Scotty.post "/login/complete" $ do
     credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAssertionResponse)
     liftIO . print $ credential
@@ -150,4 +253,8 @@ app = do
 
 main :: IO ()
 main = do
-  Scotty.scotty 8080 app
+  sessions <- STM.newTVarIO Map.empty
+  users <- STM.newTVarIO Map.empty
+
+  putStrLn "You can view the web-app at: http://localhost:8080/index.html"
+  Scotty.scotty 8080 (app sessions users)

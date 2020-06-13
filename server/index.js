@@ -5,7 +5,7 @@ window.addEventListener("load", () => {
   const registerForm = document.getElementById("registerForm");
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const response = await fetch(`${SERVER}/register/begin`);
+    const response = await fetch(`${SERVER}/register/begin`, { credentials: "include" });
     const params = await response.json();
 
     const publicKey = {
@@ -27,7 +27,8 @@ window.addEventListener("load", () => {
     const result = await fetch(`${SERVER}/register/complete`, {
       method: "POST",
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credential)
+      body: JSON.stringify(credential),
+      credentials: "include"
     });
 
     console.log(await result.text());
@@ -36,7 +37,7 @@ window.addEventListener("load", () => {
   const loginForm = document.getElementById("loginForm");
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const response = await fetch(`${SERVER}/login/begin`);
+    const response = await fetch(`${SERVER}/login/begin`, { credentials: "include" });
     const params = await response.json();
 
     const publicKey = params;
@@ -46,7 +47,8 @@ window.addEventListener("load", () => {
     const result = await fetch(`${SERVER}/login/complete`, {
       method: "POST",
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credential)
+      body: JSON.stringify(credential),
+      credentials: "include"
     });
 
     console.log(await result.text());

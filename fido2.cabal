@@ -53,15 +53,19 @@ executable server
   build-depends:
     aeson,
     aeson-qq,
+    containers,
     cryptonite,
+    cookie,
     fido2,
     bytestring,
-    uuid,
     base64-bytestring,
     scotty,
+    stm,
+    uuid,
     wai,
     wai-middleware-static,
     text,
+    transformers,
     warp,
     http-types
 

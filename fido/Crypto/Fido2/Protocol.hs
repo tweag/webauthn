@@ -11,6 +11,7 @@
 module Crypto.Fido2.Protocol
   ( AuthenticatorAttestationResponse (..),
     AuthenticatorAssertionResponse (..),
+    AttestedCredentialData (..),
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),
     PublicKeyCredentialRpEntity (..),
