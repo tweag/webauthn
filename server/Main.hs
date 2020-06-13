@@ -23,11 +23,24 @@ import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
+import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
 import qualified Network.HTTP.Types.Status as Status
 import Data.List.NonEmpty
 
+
+newSession :: TVar Sessions -> IO Cookie.SetCookie
+newSession sessions = do
+  sessionId <- UUID.nextRandom
+  STM.atomically $ do
+    contents <- STM.readTVar sessions
+    STM.writeTVar sessions $ Map.insert sessionId Unauthenticated contents
+
+  pure $ Cookie.defaultSetCookie
+    { Cookie.setCookieName = "session"
+    , Cookie.setCookieValue = UUID.toASCIIBytes sessionId
+    }
 
 -- Session data that we store for each user.
 --
@@ -57,9 +70,9 @@ data User
 app :: TVar Sessions -> TVar Users -> ScottyM ()
 app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
+
   Scotty.get "/register/begin" $ do
     challenge <- liftIO $ newChallenge
-    -- Scotty.writeSession . Registering . Challenge $ challenge
     identifier <- liftIO $ newUserId
     Scotty.json $
       PublicKeyCredentialCreationOptions
@@ -88,6 +101,7 @@ app sessions users = do
           },
           attestation = Nothing
         }
+
   Scotty.post "/register/complete" $ do
     credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
     liftIO . print $ credential
@@ -127,6 +141,7 @@ app sessions users = do
         pure ()
       Authenticated -> pure ()
       -}
+
   Scotty.get "/login/begin" $ do
     challenge <- liftIO $ newChallenge
     -- Scotty.writeSession . Registering . Challenge $ challenge
@@ -140,6 +155,7 @@ app sessions users = do
           userVerification = Nothing
         }
     pure ()
+
   Scotty.post "/login/complete" $ do
     credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAssertionResponse)
     liftIO . print $ credential

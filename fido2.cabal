@@ -55,6 +55,7 @@ executable server
     aeson-qq,
     containers,
     cryptonite,
+    cookie,
     fido2,
     bytestring,
     base64-bytestring,
