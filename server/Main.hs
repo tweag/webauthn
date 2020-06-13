@@ -38,7 +38,7 @@ import Data.List.NonEmpty
 
 
 -- Generate a new session for the current user and expose it as a @SetCookie@.
-newSession :: TVar Sessions -> IO (Session, Cookie.SetCookie)
+newSession :: TVar Sessions -> IO (SessionId, Session, Cookie.SetCookie)
 newSession sessions = do
   sessionId <- UUID.nextRandom
 
@@ -48,7 +48,7 @@ newSession sessions = do
     contents <- STM.readTVar sessions
     STM.writeTVar sessions $ Map.insert sessionId session contents
 
-  pure $ (session, Cookie.defaultSetCookie
+  pure $ (sessionId, session, Cookie.defaultSetCookie
     { Cookie.setCookieName = "session"
     , Cookie.setCookieValue = UUID.toASCIIBytes sessionId
     , Cookie.setCookieSameSite = Just Cookie.sameSiteStrict
@@ -61,9 +61,9 @@ newSession sessions = do
     })
 
 
-newSessionScotty :: TVar Sessions -> Scotty.ActionM Session
+newSessionScotty :: TVar Sessions -> Scotty.ActionM (SessionId, Session)
 newSessionScotty sessions = do
-  (session, setCookie) <- liftIO $ newSession sessions
+  (sessionId, session, setCookie) <- liftIO $ newSession sessions
   -- Scotty is great. Internally, it contains [(HeaderName, ByteString)]
   -- for the headers. The API does not expose this, so here we convert from
   -- bytestring to text and then internally in scotty to bytestring again..
@@ -71,13 +71,14 @@ newSessionScotty sessions = do
   -- only output lazy bytestrings. Fun times.
   Scotty.setHeader "SetCookie"
     (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
-  pure session
+  pure (sessionId, session)
 
 
-getSession :: TVar Sessions -> UUID -> MaybeT Scotty.ActionM Session
-getSession sessions uuid = do
+getSession :: TVar Sessions -> SessionId -> MaybeT Scotty.ActionM (SessionId, Session)
+getSession sessions sessionId = do
   contents <- liftIO $ STM.atomically $ STM.readTVar sessions
-  MaybeT . pure $ Map.lookup uuid contents
+  session <- MaybeT . pure $ Map.lookup sessionId contents
+  pure $ (sessionId, session)
 
 
 readSessionId :: MaybeT Scotty.ActionM UUID
@@ -94,7 +95,7 @@ readSessionId = do
 -- with our session registry.
 --
 -- If the user already has a session set, we don't do anything.
-getSessionScotty :: TVar Sessions -> Scotty.ActionM Session
+getSessionScotty :: TVar Sessions -> Scotty.ActionM (SessionId, Session)
 getSessionScotty sessions = do
   result <- runMaybeT $ do
     uuid <- readSessionId
@@ -122,11 +123,15 @@ data Session
   deriving (Eq)
 
 
-type Sessions = Map UUID Session
+data User = User
+  { credentials :: [AttestedCredentialData]
+  }
+
+type Sessions = Map SessionId Session
+
+type SessionId = UUID
 
 type Users = Map UserId User
-
-data User
 
 
 app :: TVar Sessions -> TVar Users -> ScottyM ()
@@ -134,7 +139,7 @@ app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
 
   Scotty.get "/register/begin" $ do
-    session <- getSessionScotty sessions
+    (sessionId, session) <- getSessionScotty sessions
 
     -- NOTE: We currently do not support multiple credentials per user.
     when (session /= Unauthenticated) (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to register")
@@ -170,6 +175,10 @@ app sessions users = do
         }
 
   Scotty.post "/register/complete" $ do
+    (sessionId, session) <- getSessionScotty sessions
+
+    -- TODO: Verify the user is "Registering"
+
     credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
     liftIO . print $ credential
     {-
