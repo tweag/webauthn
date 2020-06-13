@@ -13,6 +13,7 @@ import Crypto.Fido2.Protocol
 import Crypto.Random (MonadRandom)
 import Data.Semigroup (Endo)
 import Data.Text (Text)
+
 {-
 data RegistrationMode
   = NewUser NewUser

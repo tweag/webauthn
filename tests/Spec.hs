@@ -2,21 +2,22 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Main (main) where
+module Main
+  ( main,
+  )
+where
 
-import Data.Foldable (for_)
+import qualified Crypto.Fido2.Protocol as Fido2
 import Data.Aeson (FromJSON)
-import System.FilePath ((</>))
-import Test.Hspec (Spec, describe, it)
-import GHC.Stack (HasCallStack)
-
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
+import Data.Foldable (for_)
+import GHC.Stack (HasCallStack)
 import qualified System.Directory as Directory
+import System.FilePath ((</>))
+import Test.Hspec (Spec, describe, it)
 import qualified Test.Hspec as Hspec
-
-import qualified Crypto.Fido2.Protocol as Fido2
 
 -- Load all files in the given directory, and ensure that all of them can be
 -- decoded. The caller can pass in a function to run further checks on the
@@ -37,19 +38,16 @@ ignoreDecodedValue _ = pure ()
 
 main :: IO ()
 main = Hspec.hspec $ do
-
   describe "AuthenticatorAttestationResponse" $
     canDecodeAll
       @(Fido2.PublicKeyCredential Fido2.AuthenticatorAttestationResponse)
       "tests/fixtures/register-complete"
       ignoreDecodedValue
-
   describe "AuthenticatorAssertionResponse" $
     canDecodeAll
       @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
       "tests/fixtures/login-complete"
       ignoreDecodedValue
-
 -- TODO: Restore this test.
 -- tests :: TestTree
 -- tests = Tasty.testGroup "Some tests"
