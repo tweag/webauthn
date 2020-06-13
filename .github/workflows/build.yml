@@ -15,5 +15,13 @@ jobs:
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
     - name: "Make sure nix files are up to date. Run `cabal2nix . > fido2.nix` if this step failed"
-      run: nix-shell -p cabal2nix --command "cabal2nix . > /tmp/fido2.nix.new" && git diff --no-index fido2.nix /tmp/fido2.nix.new
+      run: |
+        nix-shell --pure --packages cabal2nix --command "cabal2nix . > /tmp/fido2.nix.new"
+        git diff --no-index fido2.nix /tmp/fido2.nix.new
+
     - run: nix-build
+
+    - name: "Stylecheck"
+      run: |
+        nix-shell --pure --packages ormolu --command "ormolu --mode inplace \$(fd -e 'hs')"
+        git diff --exit-code
