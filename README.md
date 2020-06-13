@@ -16,5 +16,5 @@ cd server
 ## How to autoformat all Haskell code
 ```
 nix-shell
-ormolu --mode inplace $(fd -e 'hs')
+./bin/autoformat.sh
 ```

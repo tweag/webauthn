@@ -16,7 +16,7 @@ jobs:
 
     - name: "Stylecheck"
       run: |
-        nix-shell --pure --packages ormolu --command "ormolu --mode inplace \$(fd -e 'hs')"
+        nix-shell --pure --command ./bin/autoformat.sh
         git diff --exit-code
 
     - name: "Make sure nix files are up to date. Run `cabal2nix . > fido2.nix` if this step failed"
