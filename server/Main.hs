@@ -53,11 +53,10 @@ newSession sessions = do
     , Cookie.setCookieValue = UUID.toASCIIBytes sessionId
     , Cookie.setCookieSameSite = Just Cookie.sameSiteStrict
     , Cookie.setCookieHttpOnly = True
-    -- Might not work on the dev server. Let's see if localhost is always
-    -- a secure origin. (Arian says it is for the FIDO standard, but it
-    -- might not apply to this field.) Otherwise, we can use mkcert to
-    -- get a HTTPS setup for localhost.
-    , Cookie.setCookieSecure = True
+    -- Does not work on localhost: the browser doesn't send any cookies
+    -- to a non-TLS version of localhost.
+    -- TODO: Use mkcert to get a HTTPS setup for localhost.
+    -- , Cookie.setCookieSecure = True
     })
 
 
