@@ -71,6 +71,9 @@ test-suite tests
   hs-source-dirs: tests
   main-is: Spec.hs
   build-depends:
+    aeson,
+    bytestring,
+    directory,
     fido2,
-    tasty,
-    tasty-hunit
+    filepath,
+    hspec,

@@ -270,6 +270,7 @@ data PublicKeyCredentialRequestOptions
       { challenge :: Challenge,
         timeout :: Maybe Timeout,
         rpId :: Maybe Text,
+        -- TODO: Should be list of nonempty?
         allowCredentials :: Maybe [PublicKeyCredentialDescriptor],
         userVerification :: Maybe UserVerificationRequirement
       }
@@ -417,7 +418,7 @@ data AuthenticatorDataRaw
       { rpIdHash' :: ByteString,
         flags' :: Word8,
         counter' :: Word32,
-        attestedCredentialDataHeader' :: AttestedCredentialDataHeader
+        attestedCredentialDataHeader' :: Maybe AttestedCredentialDataHeader
       }
   deriving (Show)
 
@@ -463,15 +464,9 @@ decodeAuthenticatorData' bs = do
 
 decodeAuthenticatorData :: AuthenticatorDataRaw -> Decoder s AuthenticatorData
 decodeAuthenticatorData x = do
-  -- TODO: Is lazy eval enough here to stop decoding if this thing isn't there??
-  -- or will it fail?
   let userPresent = Bits.testBit (flags' x) 0
   let userVerified = Bits.testBit (flags' x) 2
-  let attestedCredentials = Bits.testBit (flags' x) 6
-  attestedCredentialData <- do
-    if attestedCredentials
-      then Just <$> decodeAttestedCredentialData (attestedCredentialDataHeader' x)
-      else pure Nothing
+  attestedCredentialData <- traverse decodeAttestedCredentialData $ attestedCredentialDataHeader' x
   pure $
     AuthenticatorData
       { rpIdHash = rpIdHash' x,
@@ -495,7 +490,14 @@ decodeAuthenticatorDataRaw = do
   rpIdHash <- Binary.getByteString 32
   flags <- Binary.getWord8
   counter <- Binary.getWord32be
-  header <- getAttestedCredentialDataHeader
+  -- If bit 6 is set, attested credential data is included.
+  header <- if Bits.testBit flags 6
+    then Just <$> getAttestedCredentialDataHeader
+    else pure Nothing
+  -- If bit 7 is set, extension-defined authenticator data is included.
+  _extensions <- if Bits.testBit flags 7
+    then fail "Authenticator data extensions are currently not supported."
+    else pure ()
   pure $ AuthenticatorDataRaw rpIdHash flags counter header
 
 -- TODO: rename

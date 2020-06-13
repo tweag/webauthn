@@ -1,6 +1,6 @@
 { mkDerivation, aeson, aeson-qq, base, base64-bytestring, binary
-, bytestring, cborg, containers, cryptonite, http-types, scientific
-, scotty, serialise, stdenv, tasty, tasty-hunit, text
+, bytestring, cborg, containers, cryptonite, directory, filepath
+, hspec, http-types, scientific, scotty, serialise, stdenv, text
 , unordered-containers, uuid, vector, wai, wai-middleware-static
 , warp, x509
 }:
@@ -19,7 +19,9 @@ mkDerivation {
     aeson aeson-qq base base64-bytestring bytestring cryptonite
     http-types scotty text uuid wai wai-middleware-static warp
   ];
-  testHaskellDepends = [ base tasty tasty-hunit ];
+  testHaskellDepends = [
+    aeson base bytestring directory filepath hspec
+  ];
   license = "unknown";
   hydraPlatforms = stdenv.lib.platforms.none;
 }
