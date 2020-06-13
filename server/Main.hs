@@ -40,6 +40,13 @@ newSession sessions = do
   pure $ Cookie.defaultSetCookie
     { Cookie.setCookieName = "session"
     , Cookie.setCookieValue = UUID.toASCIIBytes sessionId
+    , Cookie.setCookieSameSite = Just Cookie.sameSiteStrict
+    , Cookie.setCookieHttpOnly = True
+    -- Might not work on the dev server. Let's see if localhost is always
+    -- a secure origin. (Arian says it is for the FIDO standard, but it
+    -- might not apply to this field.) Otherwise, we can use mkcert to
+    -- get a HTTPS setup for localhost.
+    , Cookie.setCookieSecure = True
     }
 
 -- Session data that we store for each user.
