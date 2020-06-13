@@ -3,18 +3,18 @@ let
   ghc = pkgs.haskellPackages.ghcWithPackages (import ./nix/haskell-deps.nix);
 in
 pkgs.mkShell rec {
-  name = "shell-file";
+  name = "fido2-devshell";
   buildInputs = [
     ghc
     pkgs.cabal-install
-    pkgs.pkg-config
     pkgs.entr
+    pkgs.pkg-config
     pkgs.yarn
   ];
   nativeBuildInputs = [
-    pkgs.zlib
     pkgs.gmp
     pkgs.ncurses
+    pkgs.zlib
   ];
   shellHook = ''
     export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath nativeBuildInputs}:$LD_LIBRARY_PATH
