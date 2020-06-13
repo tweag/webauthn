@@ -14,7 +14,6 @@ jobs:
         signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-    - run: nix-shell --command "cd server && yarn && yarn parcel build index.html"
-    - run: nix-shell --command "cabal build all"
-    - run: nix-shell --command "cabal test all"
-    - run: nix-shell --command "cabal haddock all"
+    - name: "Make sure nix files are up to date. Run `cabal2nix . > fido2.nix` if this step failed"
+      run: nix-shell -p cabal2nix --command "cabal2nix . > /tmp/fido2.nix.new" && git diff --no-index fido2.nix /tmp/fido2.nix.new
+    - run: nix-build
