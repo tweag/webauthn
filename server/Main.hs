@@ -133,6 +133,26 @@ data User
       { credentials :: [AttestedCredentialData]
       }
 
+isUnauthenticated :: Session -> Bool
+isUnauthenticated session = case session of
+  Unauthenticated -> True
+  _ -> False
+
+isRegistering :: Session -> Bool
+isRegistering session = case session of
+  Registering _ _ -> True
+  _ -> False
+
+isAuthenticating :: Session -> Bool
+isAuthenticating session = case session of
+  Authenticating _ -> True
+  _ -> False
+
+isAuthenticated :: Session -> Bool
+isAuthenticated session = case session of
+  Authenticated _ -> True
+  _ -> False
+
 type Sessions = Map SessionId Session
 
 type SessionId = UUID
@@ -145,7 +165,9 @@ app sessions users = do
   Scotty.get "/register/begin" $ do
     (sessionId, session) <- getSessionScotty sessions
     -- NOTE: We currently do not support multiple credentials per user.
-    when (session /= Unauthenticated) (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to register")
+    when
+      (not . isUnauthenticated $ session)
+      (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin registration")
     challenge <- liftIO $ newChallenge
     userId <- liftIO $ newUserId
     Scotty.json $
@@ -182,8 +204,9 @@ app sessions users = do
     liftIO $ setSessionToRegistering sessions sessionId userId challenge
   Scotty.post "/register/complete" $ do
     (sessionId, session) <- getSessionScotty sessions
-    -- TODO: Verify the user is "Registering"
-
+    when
+      (not . isRegistering $ session)
+      (Scotty.raiseStatus HTTP.status400 "You need to be registering to complete registration")
     credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
     liftIO . print $ credential
   {-
@@ -224,6 +247,10 @@ app sessions users = do
     -}
 
   Scotty.get "/login/begin" $ do
+    (sessionId, session) <- getSessionScotty sessions
+    when
+      (not . isUnauthenticated $ session)
+      (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
     challenge <- liftIO $ newChallenge
     -- Scotty.writeSession . Registering . Challenge $ challenge
     identifier <- liftIO $ newUserId
@@ -237,6 +264,10 @@ app sessions users = do
         }
     pure ()
   Scotty.post "/login/complete" $ do
+    (sessionId, session) <- getSessionScotty sessions
+    when
+      (not . isAuthenticating $ session)
+      (Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login")
     credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAssertionResponse)
     liftIO . print $ credential
     pure ()
