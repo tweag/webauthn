@@ -58,7 +58,7 @@ executable server
     bytestring,
     uuid,
     base64-bytestring,
-    Spock,
+    scotty,
     wai,
     wai-middleware-static,
     text,
