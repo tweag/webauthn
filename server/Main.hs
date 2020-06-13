@@ -7,9 +7,10 @@ module Main
   )
 where
 
-import Control.Concurrent.STM (TVar)
 import Control.Applicative ((<|>))
+import Control.Concurrent.STM (TVar)
 import qualified Control.Concurrent.STM as STM
+import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
 import Crypto.Fido2 as Fido2
@@ -27,6 +28,7 @@ import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
+import Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (staticPolicy, addBase)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
@@ -92,10 +94,14 @@ readSessionId = do
 -- with our session registry.
 --
 -- If the user already has a session set, we don't do anything.
-getSessionScotty :: TVar Sessions -> MaybeT Scotty.ActionM Session
+getSessionScotty :: TVar Sessions -> Scotty.ActionM Session
 getSessionScotty sessions = do
-  uuid <- readSessionId
-  getSession sessions uuid <|> (MaybeT $ (Just <$> newSessionScotty sessions))
+  result <- runMaybeT $ do
+    uuid <- readSessionId
+    getSession sessions uuid
+
+  maybe (newSessionScotty sessions) pure result
+
 
 -- Session data that we store for each user.
 --
@@ -113,6 +119,7 @@ data Session
   | Registering UserId Challenge
   | Authenticating Challenge
   | Authenticated UserId
+  deriving (Eq)
 
 
 type Sessions = Map UUID Session
@@ -127,6 +134,11 @@ app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
 
   Scotty.get "/register/begin" $ do
+    session <- getSessionScotty sessions
+
+    -- NOTE: We currently do not support multiple credentials per user.
+    when (session /= Unauthenticated) (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to register")
+
     challenge <- liftIO $ newChallenge
     identifier <- liftIO $ newUserId
     Scotty.json $
