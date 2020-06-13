@@ -1,10 +1,11 @@
 let
   pkgs = (import (import ./nix/sources.nix).nixpkgs) {};
+  ghc = pkgs.haskellPackages.ghcWithPackages (import ./nix/haskell-deps.nix);
 in
 pkgs.mkShell rec {
   name = "shell-file";
   buildInputs = [
-    pkgs.haskell.compiler.ghc865
+    ghc
     pkgs.cabal-install
     pkgs.pkg-config
     pkgs.entr
