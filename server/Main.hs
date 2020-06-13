@@ -23,20 +23,8 @@ import qualified Web.Scotty as Scotty
 import qualified Network.HTTP.Types.Status as Status
 import Data.List.NonEmpty
 
-{-
-instance Aeson.FromJSON PublicKeyCredential where
-  parseJSON = Aeson.withObject "PublicKeyCredential" $ \obj -> do
-    -- Decode the base64 public key credential
-    --
--}
 
--- Good
-data Session
-  = Unauthenticated
-  | Registering UserId Challenge
-  | Authenticating Challenge
-  | Authenticated UserId
-
+-- Session data that we store for each user.
 --
 --                         +---> Registering ----+
 --                         |                     |
@@ -44,19 +32,16 @@ data Session
 --                         |                     |
 --                         +---> Authenticating -+
 --
---
 --  Whether we consider Authenticated right after Registering is a design
---  choice I guess. I think it's safe to do
+--  choice. Should be safe to do? But let's double check that the spec
+--  actually guarantees that you own the public key after registering.
+data Session
+  = Unauthenticated
+  | Registering UserId Challenge
+  | Authenticating Challenge
+  | Authenticated UserId
 
--- What I want is
---
--- deserialize gadt:
---
---  credential <- Scotty.jsonBody' @_ @(PublicKeyCredential a)
---  case credential of
---    AttestationResponse resp ->
---    AssertionResponse resp ->
---
+
 app :: ScottyM ()
 app = do
   Scotty.middleware (staticPolicy (addBase "dist"))
@@ -150,4 +135,5 @@ app = do
 
 main :: IO ()
 main = do
+  putStrLn "You can view the web-app at: http://localhost:8080/index.html"
   Scotty.scotty 8080 app
