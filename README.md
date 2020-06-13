@@ -13,3 +13,8 @@ cd server
 ./run.sh
 ```
 
+## How to autoformat all Haskell code
+```
+nix-shell
+./bin/autoformat.sh
+```

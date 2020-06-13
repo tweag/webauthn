@@ -29,6 +29,8 @@ then haskellPackages.fido2.env.overrideAttrs (
       pkgs.yarn
       pkgs.cabal-install
       pkgs.cabal2nix
+      pkgs.fd
+      pkgs.ormolu
     ];
   }
 )

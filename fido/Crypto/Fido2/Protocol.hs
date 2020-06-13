@@ -18,7 +18,7 @@ module Crypto.Fido2.Protocol
     PublicKeyCredentialParameters (..),
     PublicKeyCredentialUserEntity (..),
     PublicKeyCredentialDescriptor (..),
-    AuthenticatorSelectionCriteria(..),
+    AuthenticatorSelectionCriteria (..),
     AttestationObject (..),
     ClientData (..),
     URLEncodedBase64 (..),
@@ -28,16 +28,15 @@ module Crypto.Fido2.Protocol
     newUserId,
     Challenge,
     newChallenge,
-    Timeout(..),
-    COSEAlgorithmIdentifier(..),
-    PublicKeyCredentialType(..),
-    ResidentKeyRequirement(..),
-    UserVerificationRequirement(..),
-    AuthenticatorAttachment(..)
+    Timeout (..),
+    COSEAlgorithmIdentifier (..),
+    PublicKeyCredentialType (..),
+    ResidentKeyRequirement (..),
+    UserVerificationRequirement (..),
+    AuthenticatorAttachment (..),
   )
 where
 
-import Data.List.NonEmpty (NonEmpty)
 import Codec.CBOR.Decoding (Decoder)
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
@@ -64,6 +63,7 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.HashMap.Strict (HashMap)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Data.Word (Word32, Word8)
@@ -492,13 +492,15 @@ decodeAuthenticatorDataRaw = do
   flags <- Binary.getWord8
   counter <- Binary.getWord32be
   -- If bit 6 is set, attested credential data is included.
-  header <- if Bits.testBit flags 6
-    then Just <$> getAttestedCredentialDataHeader
-    else pure Nothing
+  header <-
+    if Bits.testBit flags 6
+      then Just <$> getAttestedCredentialDataHeader
+      else pure Nothing
   -- If bit 7 is set, extension-defined authenticator data is included.
-  _extensions <- if Bits.testBit flags 7
-    then fail "Authenticator data extensions are currently not supported."
-    else pure ()
+  _extensions <-
+    if Bits.testBit flags 7
+      then fail "Authenticator data extensions are currently not supported."
+      else pure ()
   pure $ AuthenticatorDataRaw rpIdHash flags counter header
 
 -- TODO: rename
