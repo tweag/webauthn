@@ -184,7 +184,7 @@ app sessions users = do
     (sessionId, session) <- getSessionScotty sessions
     -- TODO: Verify the user is "Registering"
 
-    credential <- Scotty.jsonData@(PublicKeyCredential AuthenticatorAttestationResponse)
+    credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
     liftIO . print $ credential
   {-
   case session of
@@ -237,7 +237,7 @@ app sessions users = do
         }
     pure ()
   Scotty.post "/login/complete" $ do
-    credential <- Scotty.jsonData@(PublicKeyCredential AuthenticatorAssertionResponse)
+    credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAssertionResponse)
     liftIO . print $ credential
     pure ()
 
