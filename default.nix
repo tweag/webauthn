@@ -31,6 +31,7 @@ then haskellPackages.fido2.env.overrideAttrs (
       pkgs.cabal2nix
       pkgs.fd
       pkgs.ormolu
+      pkgs.ghcid
     ];
   }
 )

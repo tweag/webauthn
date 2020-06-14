@@ -2,6 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main
   ( main,
@@ -11,6 +12,7 @@ where
 import Control.Concurrent.STM (TVar)
 import qualified Control.Concurrent.STM as STM
 import Control.Monad (when)
+import Control.Monad.Except (lift, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
@@ -198,7 +200,7 @@ app sessions users = do
           attestation = Nothing
         }
     liftIO $ setSessionToRegistering sessions sessionId userId challenge
-  Scotty.post "/register/complete" (handleRegistration sessions users)
+  Scotty.post "/register/complete" (finishRegistration sessions users)
   Scotty.get "/login/begin" $ do
     (_sessionId, session) <- getSessionScotty sessions
     when
@@ -229,45 +231,54 @@ app sessions users = do
     when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
     Scotty.json @Text $ "This should only be visible when authenticated"
 
-data RegistrationResult = Success | AlreadyRegistered | AttestationError Error deriving (Eq, Show)
+data RegistrationResult
+  = Success
+  | AlreadyRegistered
+  | AttestationError Error
+  deriving (Eq, Show)
 
-handleRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-handleRegistration sessions users = do
+handleError :: Show e => Either e a -> Scotty.ActionM a
+handleError (Left x) = Scotty.raiseStatus HTTP.status400 . fromStrict . pack . show $ x
+handleError (Right x) = pure x
+
+finishRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+finishRegistration sessions users = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
-    Registering userId challenge -> verifyRegistration sessionId userId challenge
-    _ -> Scotty.raiseStatus HTTP.status400 "You need to be registering to complete registration"
+    Registering userId challenge ->
+      verifyRegistration sessionId userId challenge
+    _ ->
+      Scotty.raiseStatus
+        HTTP.status400
+        "You need to be registering to complete registration"
   where
+    verifyRegistration :: SessionId -> Fido2.UserId -> Fido2.Challenge -> Scotty.ActionM ()
     verifyRegistration sessionId userId challenge = do
-      credentials@(Fido2.PublicKeyCredential {response}) <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAttestationResponse)
-      liftIO $ print credentials
-      result <- case (verifyAttestationResponse serverOrigin (Fido2.RpId domain) challenge Fido2.UserVerificationRequired response) of
-        Left e -> pure $ AttestationError e
-        Right creds@(Fido2.AttestedCredentialData {credentialId}) -> liftIO $ processCredentials sessionId userId credentialId creds
-      liftIO $ print result
-      case result of
-        AttestationError e -> Scotty.raiseStatus HTTP.status400 $ fromStrict $ pack $ show e
-        AlreadyRegistered -> Scotty.raiseStatus HTTP.status400 $ "Key has already been registered with a different user"
-        Success -> pure ()
-    processCredentials sessionId userId credentialId creds =
-      STM.atomically
-        ( do
-            (userMap, credentialsIndex) <- STM.readTVar users
-            let result = case (Map.lookup credentialId credentialsIndex) of
-                  Nothing -> Success
-                  Just existingUserId -> if userId == existingUserId then Success else AlreadyRegistered
-            when (result == Success) $ do
-              STM.writeTVar users $ updateCredentials userMap credentialsIndex userId creds
-              STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
-            pure result
-        )
-    updateCredentials users credentialsIndex userId creds@(Fido2.AttestedCredentialData {credentialId}) =
-      ( Map.insert userId updatedUser users,
-        Map.insert credentialId userId credentialsIndex
-      )
-      where
-        existingAttestations = credentials <$> Map.lookup userId users
-        updatedUser = User $ creds : (fromMaybe [] existingAttestations)
+      Fido2.PublicKeyCredential {response} <- Scotty.jsonData
+      -- step 1 to 17
+      -- We abort if we couldn't attest the credential
+      attestedCredential@Fido2.AttestedCredentialData {credentialId} <-
+        handleError $
+          verifyAttestationResponse
+            serverOrigin
+            (Fido2.RpId domain)
+            challenge
+            Fido2.UserVerificationRequired
+            response
+      -- if the credential was succesfully attested, we will see if the
+      -- credential doesn't exist yet, and if it doesn't, insert it.
+      result <- liftIO . STM.atomically . runExceptT $ do
+        (userMap, credentialsIndex) <- lift . STM.readTVar $ users
+        when (Map.member credentialId credentialsIndex) $
+          throwError AlreadyRegistered
+        let existingCredentials = credentials <$> Map.lookup userId userMap
+        let updatedUser = User $ attestedCredential : (fromMaybe [] existingCredentials)
+        lift . STM.writeTVar users $
+          ( Map.insert userId updatedUser userMap,
+            Map.insert credentialId userId credentialsIndex
+          )
+        lift $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
+      handleError result
 
 port :: Int
 port = 8080

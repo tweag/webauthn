@@ -1,6 +1,6 @@
 { mkDerivation, aeson, aeson-qq, base, base64-bytestring, binary
 , bytestring, cborg, containers, cookie, cryptonite, directory
-, filepath, hspec, http-types, scientific, scotty, serialise
+, filepath, hspec, http-types, mtl, scientific, scotty, serialise
 , stdenv, stm, text, transformers, unordered-containers, uuid
 , vector, wai, wai-middleware-static, warp, x509
 }:
@@ -17,7 +17,7 @@ mkDerivation {
   ];
   executableHaskellDepends = [
     aeson aeson-qq base base64-bytestring bytestring containers cookie
-    cryptonite http-types scotty stm text transformers uuid wai
+    cryptonite http-types mtl scotty stm text transformers uuid wai
     wai-middleware-static warp
   ];
   testHaskellDepends = [
