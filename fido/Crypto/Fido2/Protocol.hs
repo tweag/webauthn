@@ -85,6 +85,18 @@ newtype UserId = UserId URLEncodedBase64
 newUserId :: MonadRandom m => m UserId
 newUserId = UserId . URLEncodedBase64 <$> Random.getRandomBytes 64
 
+-- | A valid domain string that identifies the WebAuthn Relying Party on whose
+-- behalf a given registration or authentication ceremony is being performed. A
+-- public key credential can only be used for authentication with the same
+-- entity (as identified by RP ID) it was registered with.
+--
+-- By default, the RP ID for a WebAuthn operation is set to the caller’s
+-- origin's effective domain. This default MAY be overridden by the caller, as
+-- long as the caller-specified RP ID value is a registrable domain suffix of
+-- or is equal to the caller’s origin's effective domain. See also §5.1.3
+-- Create a New Credential - PublicKeyCredential’s [[Create]](origin, options,
+-- sameOriginWithAncestors) Method and §5.1.4 Use an Existing Credential to
+-- Make an Assertion - PublicKeyCredential’s [[Get]](options) Method.
 newtype RpId = RpId {unRpId :: Text}
   deriving newtype (Eq, FromJSON, ToJSON, Show)
 
@@ -119,9 +131,24 @@ newtype Timeout = Timeout Word32
   deriving stock (Generic, Show)
   deriving newtype (FromJSON, ToJSON)
 
+-- | Information about the Relying Party responsible for a @PublicKeyCredentialCreationOptions@.
 data PublicKeyCredentialRpEntity
   = PublicKeyCredentialRpEntity
-      { id :: Maybe Text,
+      { -- | A unique identifier for the Relying Party entity, which sets the RP ID.
+        id :: Maybe RpId,
+        -- | A human-palatable identifier for the Relying Party, intended only for display.
+        -- For example, "ACME Corporation", "Wonderful Widgets, Inc." or "ОАО Примертех".
+        --
+        -- Relying Parties SHOULD perform enforcement, as prescribed in Section
+        -- 2.3 of [RFC8266] for the Nickname Profile of the PRECIS
+        -- FreeformClass [RFC8264], when setting name's value, or displaying
+        -- the value to the user.
+        --
+        -- Clients SHOULD perform enforcement, as prescribed in Section 2.3 of
+        -- [RFC8266] for the Nickname Profile of the PRECIS FreeformClass
+        -- [RFC8264], on name's value prior to displaying the value to the user
+        -- or including the value as a parameter of the
+        -- authenticatorMakeCredential operation.
         name :: Text
       }
   deriving stock (Generic, Show)
@@ -143,7 +170,7 @@ data PublicKeyCredentialUserEntity
         -- Party SHOULD let the user choose this, and SHOULD NOT restrict the
         -- choice more than necessary.
         displayName :: Text,
-        -- |  it is a human-palatable identifier for a user account. It is
+        -- | A human-palatable identifier for a user account. It is
         -- intended only for display, i.e., aiding the user in determining the
         -- difference between user accounts with similar displayNames. For
         -- example, "alexm", "alex.p.mueller@example.com" or "+14255551234".
