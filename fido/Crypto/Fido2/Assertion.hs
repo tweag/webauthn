@@ -3,6 +3,8 @@
 module Crypto.Fido2.Assertion
   ( Error (..),
     verifyAssertionResponse,
+    RelyingPartyConfig (..),
+    Credential (..),
   )
 where
 
