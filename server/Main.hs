@@ -178,7 +178,7 @@ data RegisterBeginReq
 app :: Database.Connection -> TVar Sessions -> ScottyM ()
 app db sessions = do
   Scotty.middleware (staticPolicy (addBase "dist"))
-  Scotty.post "/register/begin" $ beginRegistration sessions
+  Scotty.post "/register/begin" $ beginRegistration db sessions
   Scotty.post "/register/complete" $ completeRegistration db sessions
   Scotty.post "/login/begin" $ beginLogin db sessions
   Scotty.post "/login/complete" $ completeLogin db sessions
@@ -209,9 +209,11 @@ beginLogin :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
 beginLogin db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   userId <- Scotty.jsonData @Fido2.UserId
-  tx <- liftIO $ Database.begin db
-  theCredentials <- error "TODO(ruuda): Get credentials from db by user id." :: Scotty.ActionM [Fido2.CredentialId]
-  liftIO $ Database.commit tx
+  theCredentials <- liftIO $ do
+    tx <- Database.begin db
+    cr <- Database.getCredentialsByUserId tx userId
+    Database.commit tx
+    pure cr
   when (theCredentials == []) $ Scotty.raiseStatus HTTP.status404 "User not found"
   when
     (not . isUnauthenticated $ session)
@@ -255,8 +257,8 @@ attestedCredentialDataToCredential :: Fido2.AttestedCredentialData -> Assertion.
 attestedCredentialDataToCredential Fido2.AttestedCredentialData {credentialId, credentialPublicKey} =
   Assertion.Credential {id = credentialId, publicKey = credentialPublicKey}
 
-beginRegistration :: TVar Sessions -> Scotty.ActionM ()
-beginRegistration sessions = do
+beginRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
+beginRegistration db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   -- NOTE: We currently do not support multiple credentials per user.
   case session of
@@ -265,11 +267,21 @@ beginRegistration sessions = do
   where
     generateRegistrationChallenge :: SessionId -> Session -> Scotty.ActionM ()
     generateRegistrationChallenge sessionId session = do
-      registerBeginReq <- Scotty.jsonData @RegisterBeginReq
+      RegisterBeginReq{userName, displayName} <- Scotty.jsonData @RegisterBeginReq
       challenge <- liftIO $ Fido2.newChallenge
       userId <- liftIO $ Fido2.newUserId
-      Scotty.json $ defaultPkcco registerBeginReq userId challenge
-      liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
+      let user =
+            Fido2.PublicKeyCredentialUserEntity
+              { id = userId,
+                displayName = displayName,
+                name = userName
+              }
+      Scotty.json $ defaultPkcco user challenge
+      liftIO $ do
+        tx <- Database.begin db
+        Database.addUser tx user
+        Database.commit tx
+        STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
 
 completeRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
 completeRegistration db sessions = do
@@ -309,24 +321,16 @@ completeRegistration db sessions = do
         -- but we do want to add a new credential.
         Just existingUserId | userId == existingUserId -> pure ()
         Just _differentUserId -> handleError $ Left AlreadyRegistered
-      let -- TODO: Put username and display name in the session on begin,
-          -- so we can get it back here.
-          fakeUser =
-            Fido2.PublicKeyCredentialUserEntity
-              { Fido2.displayName = "Frederik Frederikson",
-                Fido2.name = "Frederik Frederikson",
-                Fido2.id = userId
-              }
       liftIO $ do
-        Database.addUserWithAttestedCredentialData tx fakeUser credentialId credentialPublicKey
+        Database.addAttestedCredentialData tx userId credentialId credentialPublicKey
         STM.atomically $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
         Database.commit tx
 
-defaultPkcco :: RegisterBeginReq -> Fido2.UserId -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
-defaultPkcco RegisterBeginReq {userName, displayName} userId challenge =
+defaultPkcco :: Fido2.PublicKeyCredentialUserEntity -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
+defaultPkcco userEntity challenge =
   Fido2.PublicKeyCredentialCreationOptions
     { rp = rpEntity,
-      user = Fido2.PublicKeyCredentialUserEntity {id = userId, displayName = displayName, name = userName},
+      user = userEntity,
       challenge = challenge,
       -- Empty credentialparameters are not supported.
       pubKeyCredParams = [Fido2.PublicKeyCredentialParameters {typ = Fido2.PublicKey, alg = Fido2.ES256}],

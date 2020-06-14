@@ -6,7 +6,6 @@ module Database
     Transaction (), -- Constructor deliberately not exposed.
     addAttestedCredentialData,
     addUser,
-    addUserWithAttestedCredentialData,
     begin,
     commit,
     connect,
@@ -118,18 +117,6 @@ addAttestedCredentialData
         Fido2.publicKeyX publicKey,
         Fido2.publicKeyY publicKey
       )
-
-addUserWithAttestedCredentialData ::
-  Transaction ->
-  Fido2.PublicKeyCredentialUserEntity ->
-  Fido2.CredentialId ->
-  Fido2.PublicKey ->
-  IO ()
-addUserWithAttestedCredentialData tx user credentialId publicKey =
-  let Fido2.PublicKeyCredentialUserEntity {id = userId} = user
-   in do
-        addUser tx user
-        addAttestedCredentialData tx userId credentialId publicKey
 
 getUserByCredentialId :: Transaction -> Fido2.CredentialId -> IO (Maybe Fido2.UserId)
 getUserByCredentialId
