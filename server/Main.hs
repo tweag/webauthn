@@ -32,14 +32,13 @@ import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
+import qualified Database
 import GHC.Generics (Generic)
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (addBase, staticPolicy)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
-
-import qualified Database
 
 -- Generate a new session for the current user and expose it as a @SetCookie@.
 newSession :: TVar Sessions -> IO (SessionId, Session, Cookie.SetCookie)
@@ -189,11 +188,12 @@ app db sessions = do
     Scotty.json @Text $ "This should only be visible when authenticated"
 
 mkCredentialDescriptor :: Fido2.CredentialId -> Fido2.PublicKeyCredentialDescriptor
-mkCredentialDescriptor credentialId = Fido2.PublicKeyCredentialDescriptor
-  { typ = Fido2.PublicKey
-  , id = credentialId
-  , transports = Nothing
-  }
+mkCredentialDescriptor credentialId =
+  Fido2.PublicKeyCredentialDescriptor
+    { typ = Fido2.PublicKey,
+      id = credentialId,
+      transports = Nothing
+    }
 
 data RegistrationResult
   = Success
@@ -251,7 +251,6 @@ completeLogin db sessions = do
         $ casSession sessions sessionId session (Authenticated userId)
       Scotty.json @Text "Welcome."
 
-
 attestedCredentialDataToCredential :: Fido2.AttestedCredentialData -> Assertion.Credential
 attestedCredentialDataToCredential Fido2.AttestedCredentialData {credentialId, credentialPublicKey} =
   Assertion.Credential {id = credentialId, publicKey = credentialPublicKey}
@@ -289,14 +288,16 @@ completeRegistration db sessions = do
       -- step 1 to 17
       -- We abort if we couldn't attest the credential
       attestedCredential@Fido2.AttestedCredentialData
-        { credentialId
-        , credentialPublicKey
-        } <- handleError $ verifyAttestationResponse
-          serverOrigin
-          (Fido2.RpId domain)
-          challenge
-          Fido2.UserVerificationPreferred
-          response
+        { credentialId,
+          credentialPublicKey
+        } <-
+        handleError $
+          verifyAttestationResponse
+            serverOrigin
+            (Fido2.RpId domain)
+            challenge
+            Fido2.UserVerificationPreferred
+            response
       -- if the credential was succesfully attested, we will see if the
       -- credential doesn't exist yet, and if it doesn't, insert it.
       tx <- liftIO $ Database.begin db
@@ -308,21 +309,18 @@ completeRegistration db sessions = do
         -- but we do want to add a new credential.
         Just existingUserId | userId == existingUserId -> pure ()
         Just _differentUserId -> handleError $ Left AlreadyRegistered
-      let
-        -- TODO: Put username and display name in the session on begin,
-        -- so we can get it back here.
-        fakeUser = Fido2.PublicKeyCredentialUserEntity
-          { Fido2.displayName = "Frederik Frederikson"
-          , Fido2.name = "Frederik Frederikson"
-          , Fido2.id = userId
-          }
+      let -- TODO: Put username and display name in the session on begin,
+          -- so we can get it back here.
+          fakeUser =
+            Fido2.PublicKeyCredentialUserEntity
+              { Fido2.displayName = "Frederik Frederikson",
+                Fido2.name = "Frederik Frederikson",
+                Fido2.id = userId
+              }
       liftIO $ do
         Database.addUserWithAttestedCredentialData tx fakeUser credentialId credentialPublicKey
         STM.atomically $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
         Database.commit tx
-
-
-
 
 defaultPkcco :: RegisterBeginReq -> Fido2.UserId -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
 defaultPkcco RegisterBeginReq {userName, displayName} userId challenge =
