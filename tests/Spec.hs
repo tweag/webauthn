@@ -60,10 +60,6 @@ main = Hspec.hspec $ do
         decodeFile
           @(Fido2.PublicKeyCredential Fido2.AuthenticatorAttestationResponse)
           "tests/fixtures/register-complete/01.json"
-      loginReq <-
-        decodeFile
-          @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-          "tests/fixtures/login-complete/01.json"
       let Fido2.AuthenticatorAttestationResponse {clientData} = response
           Fido2.ClientData {challenge} = clientData
       let registerResult =
@@ -75,6 +71,14 @@ main = Hspec.hspec $ do
               response
       registerResult `shouldSatisfy` isRight
       let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
+      loginReq <-
+        decodeFile
+          @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
+          "tests/fixtures/login-complete/01.json"
+      let Fido2.PublicKeyCredential {response} = loginReq
+      let Fido2.AuthenticatorAssertionResponse {clientData} = response
+      let Fido2.ClientData {challenge} = clientData
+      print $ response
       let signInResult =
             Fido2.verifyAssertionResponse
               Fido2.RelyingPartyConfig {origin = Fido2.Origin "http://localhost:8080", rpId = Fido2.RpId "localhost"}
