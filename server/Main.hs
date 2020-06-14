@@ -313,12 +313,12 @@ completeRegistration db sessions = do
       -- if the credential was succesfully attested, we will see if the
       -- credential doesn't exist yet, and if it doesn't, insert it.
       tx <- liftIO $ Database.begin db
+      -- If a credential with this id existed already, it must belong to the
+      -- current user, otherwise it's an error. The spec allows removing the
+      -- credential from the old user instead, but we don't do that.
       existingUserId <- liftIO $ Database.getUserByCredentialId tx credentialId
       case existingUserId of
         Nothing -> pure ()
-        -- TODO(ruuda): Handle the case of the user existing,
-        -- in that case we do not want to insert the user again,
-        -- but we do want to add a new credential.
         Just existingUserId | userId == existingUserId -> pure ()
         Just _differentUserId -> handleError $ Left AlreadyRegistered
       liftIO $ do
