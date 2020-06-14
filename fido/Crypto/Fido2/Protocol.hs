@@ -39,6 +39,7 @@ module Crypto.Fido2.Protocol
     ResidentKeyRequirement (..),
     UserVerificationRequirement (..),
     AuthenticatorAttachment (..),
+    EncodingRules (..),
   )
 where
 

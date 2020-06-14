@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,6 +18,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
 import qualified Crypto.Fido2.Protocol as Fido2
+import Data.Aeson (FromJSON)
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
@@ -28,6 +30,7 @@ import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
+import GHC.Generics (Generic)
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (addBase, staticPolicy)
 import qualified Web.Cookie as Cookie
@@ -96,6 +99,15 @@ getSessionScotty sessions = do
     getSession sessions uuid
   maybe (newSessionScotty sessions) pure result
 
+setSessionToAuthenticating :: TVar Sessions -> SessionId -> Fido2.Challenge -> IO ()
+setSessionToAuthenticating sessions sessionId challenge =
+  STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
+  where
+    update :: Session -> Session
+    update _ = Authenticating challenge
+
+-- Keep the same state if there are racy calls to the /register endpoints.
+
 setSessionToRegistering :: TVar Sessions -> SessionId -> Fido2.UserId -> Fido2.Challenge -> IO ()
 setSessionToRegistering sessions sessionId userId challenge =
   STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
@@ -157,11 +169,20 @@ type SessionId = UUID
 
 type Users = (Map Fido2.UserId User, Map Fido2.CredentialId Fido2.UserId)
 
+data RegisterBegin
+  = RegisterBegin
+      { name :: Text,
+        displayName :: Text
+      }
+  deriving (FromJSON) via (Fido2.EncodingRules RegisterBegin)
+  deriving stock (Generic)
+
 app :: TVar Sessions -> TVar Users -> ScottyM ()
 app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
-  Scotty.get "/register/begin" $ do
+  Scotty.post "/register/begin" $ do
     (sessionId, session) <- getSessionScotty sessions
+    RegisterBegin {name, displayName} <- Scotty.jsonData @RegisterBegin
     -- NOTE: We currently do not support multiple credentials per user.
     when
       (not . isUnauthenticated $ session)
@@ -178,8 +199,8 @@ app sessions users = do
           user =
             Fido2.PublicKeyCredentialUserEntity
               { id = userId,
-                displayName = "Hello",
-                name = "Hello"
+                displayName = displayName,
+                name = name
               },
           challenge = challenge,
           pubKeyCredParams =
@@ -195,26 +216,31 @@ app sessions users = do
               Fido2.AuthenticatorSelectionCriteria
                 { authenticatorAttachment = Nothing,
                   residentKey = Just Fido2.ResidentKeyDiscouraged,
-                  userVerification = Just Fido2.UserVerificationRequired
+                  userVerification = Just Fido2.UserVerificationPreferred
                 },
           attestation = Nothing
         }
     liftIO $ setSessionToRegistering sessions sessionId userId challenge
   Scotty.post "/register/complete" (finishRegistration sessions users)
-  Scotty.get "/login/begin" $ do
-    (_sessionId, session) <- getSessionScotty sessions
+  Scotty.post "/login/begin" $ do
+    (sessionId, session) <- getSessionScotty sessions
+    userId <- Scotty.jsonData @Fido2.UserId
+    muser <- liftIO $ STM.atomically $ do
+      (map, _) <- STM.readTVar users
+      pure $ Map.lookup userId map
+    User {credentials} <- maybe (Scotty.raiseStatus HTTP.status404 "User not found") pure muser
     when
       (not . isUnauthenticated $ session)
       (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
     challenge <- liftIO $ Fido2.newChallenge
+    liftIO $ setSessionToAuthenticating sessions sessionId challenge
     -- Scotty.writeSession . Registering . Challenge $ challenge
-    _identifier <- liftIO $ Fido2.newUserId
     Scotty.json $
       Fido2.PublicKeyCredentialRequestOptions
         { rpId = Nothing,
           timeout = Nothing,
           challenge = challenge,
-          allowCredentials = Nothing,
+          allowCredentials = Just (map mkCredentialDescriptor credentials),
           userVerification = Nothing
         }
     pure ()
@@ -230,6 +256,9 @@ app sessions users = do
     (_sessionId, session) <- getSessionScotty sessions
     when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
     Scotty.json @Text $ "This should only be visible when authenticated"
+
+mkCredentialDescriptor :: Fido2.AttestedCredentialData -> Fido2.PublicKeyCredentialDescriptor
+mkCredentialDescriptor Fido2.AttestedCredentialData {credentialId} = Fido2.PublicKeyCredentialDescriptor {typ = Fido2.PublicKey, id = credentialId, transports = Nothing}
 
 data RegistrationResult
   = Success
@@ -263,7 +292,7 @@ finishRegistration sessions users = do
             serverOrigin
             (Fido2.RpId domain)
             challenge
-            Fido2.UserVerificationRequired
+            Fido2.UserVerificationPreferred
             response
       -- if the credential was succesfully attested, we will see if the
       -- credential doesn't exist yet, and if it doesn't, insert it.

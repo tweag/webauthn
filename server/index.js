@@ -1,24 +1,33 @@
 import {supported, get, create} from  "@github/webauthn-json";
 
 const SERVER = "http://localhost:8080";
+var userHandle = null;
 window.addEventListener("load", () => {
   const registerForm = document.getElementById("registerForm");
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const response = await fetch(`${SERVER}/register/begin`, { credentials: "include" });
+    const userHandle = document.getElementById("userHandle");
+    const userName = document.getElementById("userName").value;
+    const displayName = document.getElementById("displayName").value;
+    const response = await fetch(`${SERVER}/register/begin`, {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: userName,
+        displayName: displayName,
+      }),
+      credentials: "include"
+    });
     const params = await response.json();
 
-    console.log("params", params);
+
+    userHandle.value = params.user.id;
 
     const publicKey = {
       rp: params.rp,
       challenge: params.challenge,
       pubKeyCredParams: params.pubKeyCredParams,
-      user: {
-        name: "john.doe",
-        displayName: "John Doe",
-        id: params.user.id,
-      },
+      user: params.user,
       authenticatorSelection: params.authenticatorSelection,
     };
 
@@ -28,10 +37,10 @@ window.addEventListener("load", () => {
     console.log("credential", credential);
 
     const result = await fetch(`${SERVER}/register/complete`, {
+      credentials: "include",
       method: "POST",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credential),
-      credentials: "include"
     });
 
     console.log(await result.text());
@@ -40,7 +49,13 @@ window.addEventListener("load", () => {
   const loginForm = document.getElementById("loginForm");
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const response = await fetch(`${SERVER}/login/begin`, { credentials: "include" });
+    const userHandle = document.getElementById("userHandle").value;
+    const response = await fetch(`${SERVER}/login/begin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userHandle),
+      credentials: "include"
+    });
     const params = await response.json();
 
     const publicKey = params;
