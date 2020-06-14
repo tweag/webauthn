@@ -41,6 +41,7 @@ module Crypto.Fido2.Protocol
     AuthenticatorAttachment (..),
     EncodingRules (..),
     PublicKey (..),
+    verifyEC,
   )
 where
 
@@ -52,6 +53,8 @@ import qualified Codec.Serialise.Class as Serialise
 import Control.Monad (guard)
 import qualified Crypto.Hash as Hash
 import Crypto.Hash (Digest, SHA256)
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Types as ECDSA
 import qualified Crypto.Random as Random
 import Crypto.Random (MonadRandom)
 import Data.Aeson (FromJSON, ToJSON)
@@ -60,10 +63,13 @@ import qualified Data.Aeson.Internal as Aeson
 import qualified Data.Aeson.Parser as Aeson
 import qualified Data.Aeson.Types as Aeson
 import Data.Aeson.Types ((.:), (.:?))
+import Data.Bifunctor (bimap)
 import Data.Bifunctor (first)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
+import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.HashMap.Strict as HashMap
@@ -377,6 +383,35 @@ data PublicKey
       }
   deriving (Show)
 
+-- | Convert an unsigned big endian octet sequence to the integer
+-- it represents. Taken from @hs-jose@.
+--
+-- TODO: Test the crap out of this.
+bsToInteger :: ByteString -> Integer
+bsToInteger = BS.foldl (\acc x -> acc * 256 + toInteger x) 0
+
+-- | Verify an EC key. Taken from @hs-jose@.
+--
+-- TODO: Test the crap out of this.
+verifyEC ::
+  (BA.ByteArrayAccess msg) =>
+  PublicKey ->
+  msg ->
+  ByteString ->
+  Bool
+verifyEC Ec2Key {x, y} m s = ECDSA.verify Hash.SHA256 pubkey sig m
+  where
+    pubkey = ECDSA.PublicKey curve point
+    -- Source: https://tools.ietf.org/html/rfc8152#section-13.1 For P-256, we need
+    -- the secp256r1 curve.
+    curve = ECDSA.getCurveByName ECDSA.SEC_p256r1
+    -- The octets are in big endian order.
+    point = ECDSA.Point (bsToInteger x) (bsToInteger y)
+    sig =
+      uncurry ECDSA.Signature
+        $ bimap bsToInteger bsToInteger
+        $ BS.splitAt (BS.length s `div` 2) s
+
 data WebauthnType = Create | Get
   deriving (Eq, Show)
 
@@ -449,10 +484,13 @@ data AuthenticatorData
         counter :: Word32,
         userPresent :: Bool,
         userVerified :: Bool,
-        attestedCredentialData :: Maybe AttestedCredentialData -- Only present if bit 6 of flags is set, otherwise can be ignored
+        attestedCredentialData :: Maybe AttestedCredentialData, -- Only present if bit 6 of flags is set, otherwise can be ignored
             -- TODO, better type?
-            --
             -- We don't support extensions. so we don't check the ED flag
+
+        -- Used for verifying the signature currently. Not used for attestation in
+        -- our current implementation which is why this is a maybe.
+        rawData :: Maybe ByteString
       }
   deriving (Show)
 
@@ -497,7 +535,7 @@ decodeAttestationObject bs = do
   -- TODO maybe use the incremental API here?
   (_rest, (AttestationObjectRaw {authDataRaw, fmt, attStmt})) <- first CBOR $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
   (rest, _, authDataRaw) <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw) rest
+  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData Nothing authDataRaw) rest
   pure (AttestationObject authData fmt attStmt)
 
 -- Helper. TODO  come up with more consistent names for all of these things, and allow
@@ -505,11 +543,14 @@ decodeAttestationObject bs = do
 decodeAuthenticatorData' :: ByteString -> Either Error AuthenticatorData
 decodeAuthenticatorData' bs = do
   (rest, _, authDataRaw) <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict bs)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw) rest
+  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData (Just bs) authDataRaw) rest
   pure authData
 
-decodeAuthenticatorData :: AuthenticatorDataRaw -> Decoder s AuthenticatorData
-decodeAuthenticatorData x = do
+-- The first parameter is a maybe bytestring in case we want to save the raw data
+-- to the authenticatordata struct. This is ugly, but required because we need to
+-- compute a hash based on the raw signature of this crap.
+decodeAuthenticatorData :: Maybe ByteString -> AuthenticatorDataRaw -> Decoder s AuthenticatorData
+decodeAuthenticatorData originalBs x = do
   let userPresent = Bits.testBit (flags' x) 0
   let userVerified = Bits.testBit (flags' x) 2
   attestedCredentialData <- traverse decodeAttestedCredentialData $ attestedCredentialDataHeader' x
@@ -520,7 +561,8 @@ decodeAuthenticatorData x = do
         userPresent = userPresent,
         userVerified = userVerified,
         counter = counter' x,
-        attestedCredentialData = attestedCredentialData
+        attestedCredentialData = attestedCredentialData,
+        rawData = originalBs
       }
 
 -- Effe voor de duidelijkheid. De bytes die overblijven van parsen van
