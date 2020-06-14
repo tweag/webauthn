@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -14,6 +16,7 @@ import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
 import Crypto.Fido2 as Fido2
+import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
 import qualified Crypto.Random as Random
 import Data.Aeson.QQ (aesonQQ)
 import Data.ByteString (ByteString)
@@ -24,7 +27,10 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
+import Data.Text (Text, pack)
 import qualified Data.Text.Encoding as Text
+import Data.Text.Lazy (fromStrict)
 import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
@@ -157,7 +163,7 @@ type Sessions = Map SessionId Session
 
 type SessionId = UUID
 
-type Users = Map UserId User
+type Users = (Map UserId User, Map CredentialId UserId)
 
 app :: TVar Sessions -> TVar Users -> ScottyM ()
 app sessions users = do
@@ -202,13 +208,7 @@ app sessions users = do
           attestation = Nothing
         }
     liftIO $ setSessionToRegistering sessions sessionId userId challenge
-  Scotty.post "/register/complete" $ do
-    (sessionId, session) <- getSessionScotty sessions
-    when
-      (not . isRegistering $ session)
-      (Scotty.raiseStatus HTTP.status400 "You need to be registering to complete registration")
-    credential <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
-    liftIO . print $ credential
+  Scotty.post "/register/complete" (handleRegistration sessions users)
   {-
   case session of
     Unauthenticated -> do
@@ -272,9 +272,58 @@ app sessions users = do
     liftIO . print $ credential
     pure ()
 
+data RegistrationResult = Success | AlreadyRegistered | AttestationError Error deriving (Eq, Show)
+
+handleRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+handleRegistration sessions users = do
+  (sessionId, session) <- getSessionScotty sessions
+  case session of
+    Registering userId challenge -> verifyRegistration sessionId userId challenge
+    otherwise -> Scotty.raiseStatus HTTP.status400 "You need to be registering to complete registration"
+  where
+    verifyRegistration sessionId userId challenge = do
+      credentials@(PublicKeyCredential {response}) <- Scotty.jsonData @(PublicKeyCredential AuthenticatorAttestationResponse)
+      liftIO $ print credentials
+      result <- case (verifyAttestationResponse serverOrigin (RpId domain) challenge UserVerificationRequired response) of
+        Left e -> pure $ AttestationError e
+        Right creds@(AttestedCredentialData {credentialId}) -> liftIO $ processCredentials sessionId userId credentialId creds
+      liftIO $ print result
+      case result of
+        AttestationError e -> Scotty.raiseStatus HTTP.status400 $ fromStrict $ pack $ show e
+        AlreadyRegistered -> Scotty.raiseStatus HTTP.status400 $ "Key has already been registered with a different user"
+        Success -> pure ()
+    processCredentials sessionId userId credentialId creds =
+      STM.atomically
+        ( do
+            (userMap, credentialsIndex) <- STM.readTVar users
+            let result = case (Map.lookup credentialId credentialsIndex) of
+                  Nothing -> Success
+                  Just existingUserId -> if userId == existingUserId then Success else AlreadyRegistered
+            when (result == Success) $ do
+              STM.writeTVar users $ updateCredentials userMap credentialsIndex userId creds
+              STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
+            pure result
+        )
+    updateCredentials users credentialsIndex userId creds@(AttestedCredentialData {credentialId}) =
+      ( Map.insert userId updatedUser users,
+        Map.insert credentialId userId credentialsIndex
+      )
+      where
+        existingAttestations = credentials <$> Map.lookup userId users
+        updatedUser = User $ creds : (fromMaybe [] existingAttestations)
+
+port :: Int
+port = 8080
+
+domain :: Text
+domain = "localhost"
+
+serverOrigin :: Origin
+serverOrigin = Origin $ "http://" <> domain <> ":" <> (pack $ show port)
+
 main :: IO ()
 main = do
   sessions <- STM.newTVarIO Map.empty
-  users <- STM.newTVarIO Map.empty
+  users <- STM.newTVarIO (Map.empty, Map.empty)
   putStrLn "You can view the web-app at: http://localhost:8080/index.html"
-  Scotty.scotty 8080 (app sessions users)
+  Scotty.scotty port (app sessions users)

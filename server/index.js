@@ -8,6 +8,8 @@ window.addEventListener("load", () => {
     const response = await fetch(`${SERVER}/register/begin`, { credentials: "include" });
     const params = await response.json();
 
+    console.log("params", params);
+
     const publicKey = {
       rp: params.rp,
       challenge: params.challenge,
@@ -17,12 +19,13 @@ window.addEventListener("load", () => {
         displayName: "John Doe",
         id: params.user.id,
       },
+      authenticatorSelection: params.authenticatorSelection,
     };
 
     const credentialCreationOptions = { publicKey };
 
     const credential = await create(credentialCreationOptions);
-    console.log(credential);
+    console.log("credential", credential);
 
     const result = await fetch(`${SERVER}/register/complete`, {
       method: "POST",

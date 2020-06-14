@@ -4,7 +4,6 @@
 module Crypto.Fido2.Attestation
   ( verifyAttestationResponse,
     Error (..),
-    AttestationResult (..),
   )
 where
 
@@ -38,6 +37,8 @@ data Error
   | UnsupportedAttestationFormat
   | InvalidAttestationStatement
   | NoAttestedCredentialDataFound
+  | NotTrustworthy
+  deriving (Show, Eq)
 
 -- | Use this result to implement step 17, 18 and 19 of
 -- <https://www.w3.org/TR/webauthn/#registering-a-new-credential "7.1.
@@ -73,7 +74,6 @@ data Error
 -- certificate status information for the intermediate CA certificates. The
 -- Relying Party MUST also be able to build the attestation certificate chain
 -- if the client did not provide this chain in the attestation information.
-data AttestationResult = Trustworthy AttestedCredentialData | NotTrustworthy
 
 -- | Runs step 1 to 16 of
 -- <https://www.w3.org/TR/webauthn/#registering-a-new-credential "7.1.  Registering a New Credential">
@@ -86,7 +86,7 @@ verifyAttestationResponse ::
   Challenge ->
   UserVerificationRequirement ->
   AuthenticatorAttestationResponse ->
-  Either Error AttestationResult
+  Either Error AttestedCredentialData
 verifyAttestationResponse
   origin
   rpId
@@ -185,10 +185,10 @@ verifyAttestationResponse
     -- --> TODO: This is a no-op as we only support "none"
     validateAttStmt fmt attStmt authData clientDataHash
 
-validateAttStmt :: Text -> [(Term, Term)] -> AuthenticatorData -> Digest SHA256 -> Either Error AttestationResult
+validateAttStmt :: Text -> [(Term, Term)] -> AuthenticatorData -> Digest SHA256 -> Either Error AttestedCredentialData
 validateAttStmt "none" [] AuthenticatorData {attestedCredentialData} _ =
   case attestedCredentialData of
-    Just attestedCredentialData -> pure $ Trustworthy attestedCredentialData
+    Just attestedCredentialData -> pure $ attestedCredentialData
     Nothing -> Left NoAttestedCredentialDataFound
 validateAttStmt "none" _ _ _ = Left InvalidAttestationStatement
 validateAttStmt _ _ _ _ = Left UnsupportedAttestationFormat
