@@ -40,6 +40,7 @@ module Crypto.Fido2.Protocol
     UserVerificationRequirement (..),
     AuthenticatorAttachment (..),
     EncodingRules (..),
+    PublicKey (..),
   )
 where
 
@@ -113,7 +114,7 @@ newChallenge = Challenge . URLEncodedBase64 <$> Random.getRandomBytes 16
 data PublicKeyCredential response
   = PublicKeyCredential
       { id :: Text,
-        rawId :: URLEncodedBase64,
+        rawId :: CredentialId,
         response :: response,
         typ :: PublicKeyCredentialType
         -- clientExtensionResults ignored
@@ -368,7 +369,7 @@ instance Aeson.FromJSON URLEncodedBase64 where
 instance Aeson.ToJSON URLEncodedBase64 where
   toJSON (URLEncodedBase64 bs) = Aeson.toJSON . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
 
-data Ec2Key
+data PublicKey
   = Ec2Key
       { curve :: Int,
         x :: ByteString,
@@ -421,13 +422,13 @@ clientDataParser hash = Aeson.withObject "ClientData" $ \o -> do
   pure $ ClientData typ challenge origin hash
 
 newtype CredentialId = CredentialId URLEncodedBase64
-  deriving newtype (Show, Eq, Ord, ToJSON)
+  deriving newtype (Show, Eq, Ord, FromJSON, ToJSON)
 
 data AttestedCredentialData
   = AttestedCredentialData
       { aaguid :: ByteString, -- 16 byte acceptable anchors guid, see step 15 of verifyAttestationResponse
         credentialId :: CredentialId, -- Length L
-        credentialPublicKey :: Ec2Key
+        credentialPublicKey :: PublicKey
       }
   deriving (Show)
 
@@ -566,7 +567,7 @@ decodeAttestationObjectRaw = do
   pure $ AttestationObjectRaw authDataRaw fmt attStmt
 
 -- TODO Make more generic
-keyDecoder :: Decoder s Ec2Key
+keyDecoder :: Decoder s PublicKey
 keyDecoder = do
   map :: (IntMap CBOR.Term) <- Serialise.decode
   let key = do

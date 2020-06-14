@@ -282,7 +282,8 @@ handleSignIn sessions _users = do
       Either Assertion.Error ()
     verifyLogin challenge credential =
       undefined
-      -- Assertion.verifyAssertionResponse undefined
+
+-- Assertion.verifyAssertionResponse undefined
 
 finishRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
 finishRegistration sessions users = do
