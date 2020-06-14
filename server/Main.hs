@@ -99,26 +99,22 @@ getSessionScotty sessions = do
     getSession sessions uuid
   maybe (newSessionScotty sessions) pure result
 
-setSessionToAuthenticating :: TVar Sessions -> SessionId -> Fido2.Challenge -> IO ()
-setSessionToAuthenticating sessions sessionId challenge =
-  STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
+-- | @casVersion@ searches for the session with the given @SessionId@ and will compare
+-- and swap it, replacing the @old@ session with the @new@ session. Returns @Nothing@
+-- if the CAS was unsuccessful.
+casSession :: TVar Sessions -> SessionId -> Session -> Session -> STM.STM ()
+casSession sessions sessionId old new = do
+    contents <- STM.readTVar sessions
+    case Map.updateLookupWithKey casSession sessionId contents of
+      (Just _, newMap) -> do
+        STM.writeTVar sessions newMap
+        pure ()
+      (Nothing, _map) -> pure ()
   where
-    update :: Session -> Session
-    update _ = Authenticating challenge
-
--- Keep the same state if there are racy calls to the /register endpoints.
-
-setSessionToRegistering :: TVar Sessions -> SessionId -> Fido2.UserId -> Fido2.Challenge -> IO ()
-setSessionToRegistering sessions sessionId userId challenge =
-  STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
-  where
-    -- Only update hte session to Registering when the session is Unauthenticated.
-    -- This prevents race conditions where two concurrent register requests happen
-    -- for the same session.
-    update :: Session -> Session
-    update (Unauthenticated) = Registering userId challenge
-    -- Keep the same state if there are racy calls to the /register endpoints.
-    update a = a
+    casSession :: SessionId -> Session -> Maybe Session
+    casSession _sessionId current
+      | current == old = Just new
+      | otherwise      = Nothing
 
 -- Session data that we store for each user.
 --
@@ -220,7 +216,7 @@ app sessions users = do
                 },
           attestation = Nothing
         }
-    liftIO $ setSessionToRegistering sessions sessionId userId challenge
+    liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
   Scotty.post "/register/complete" (finishRegistration sessions users)
   Scotty.post "/login/begin" $ do
     (sessionId, session) <- getSessionScotty sessions
@@ -233,7 +229,7 @@ app sessions users = do
       (not . isUnauthenticated $ session)
       (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
     challenge <- liftIO $ Fido2.newChallenge
-    liftIO $ setSessionToAuthenticating sessions sessionId challenge
+    liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating challenge)
     -- Scotty.writeSession . Registering . Challenge $ challenge
     Scotty.json $
       Fido2.PublicKeyCredentialRequestOptions
