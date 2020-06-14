@@ -168,8 +168,6 @@ type Sessions = Map SessionId Session
 
 type SessionId = UUID
 
-type Users = (Map Fido2.UserId User, Map Fido2.CredentialId Fido2.UserId)
-
 data RegisterBeginReq
   = RegisterBeginReq
       { userName :: Text,
@@ -178,21 +176,24 @@ data RegisterBeginReq
   deriving (FromJSON) via (Fido2.EncodingRules RegisterBeginReq)
   deriving stock (Generic)
 
-app :: TVar Sessions -> TVar Users -> ScottyM ()
-app sessions users = do
+app :: Database.Connection -> TVar Sessions -> ScottyM ()
+app db sessions = do
   Scotty.middleware (staticPolicy (addBase "dist"))
   Scotty.post "/register/begin" $ beginRegistration sessions
-  Scotty.post "/register/complete" $ completeRegistration sessions users
-  Scotty.post "/login/begin" $ beginLogin sessions users
-  Scotty.post "/login/complete" $ completeLogin sessions users
+  Scotty.post "/register/complete" $ completeRegistration db sessions
+  Scotty.post "/login/begin" $ beginLogin db sessions
+  Scotty.post "/login/complete" $ completeLogin db sessions
   Scotty.get "/requires-auth" $ do
     (_sessionId, session) <- getSessionScotty sessions
     when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
     Scotty.json @Text $ "This should only be visible when authenticated"
 
-mkCredentialDescriptor :: Fido2.AttestedCredentialData -> Fido2.PublicKeyCredentialDescriptor
-mkCredentialDescriptor Fido2.AttestedCredentialData {credentialId} =
-  Fido2.PublicKeyCredentialDescriptor {typ = Fido2.PublicKey, id = credentialId, transports = Nothing}
+mkCredentialDescriptor :: Fido2.CredentialId -> Fido2.PublicKeyCredentialDescriptor
+mkCredentialDescriptor credentialId = Fido2.PublicKeyCredentialDescriptor
+  { typ = Fido2.PublicKey
+  , id = credentialId
+  , transports = Nothing
+  }
 
 data RegistrationResult
   = Success
@@ -204,14 +205,14 @@ handleError :: Show e => Either e a -> Scotty.ActionM a
 handleError (Left x) = Scotty.raiseStatus HTTP.status400 . LText.fromStrict . Text.pack . show $ x
 handleError (Right x) = pure x
 
-beginLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-beginLogin sessions users = do
+beginLogin :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
+beginLogin db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   userId <- Scotty.jsonData @Fido2.UserId
-  muser <- liftIO $ STM.atomically $ do
-    (map, _) <- STM.readTVar users
-    pure $ Map.lookup userId map
-  User {credentials} <- maybe (Scotty.raiseStatus HTTP.status404 "User not found") pure muser
+  tx <- liftIO $ Database.begin db
+  theCredentials <- error "TODO(ruuda): Get credentials from db by user id." :: Scotty.ActionM [Fido2.CredentialId]
+  liftIO $ Database.commit tx
+  when (theCredentials == []) $ Scotty.raiseStatus HTTP.status404 "User not found"
   when
     (not . isUnauthenticated $ session)
     (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
@@ -222,12 +223,12 @@ beginLogin sessions users = do
       { rpId = Nothing,
         timeout = Nothing,
         challenge = challenge,
-        allowCredentials = Just (map mkCredentialDescriptor credentials),
+        allowCredentials = Just (map mkCredentialDescriptor theCredentials),
         userVerification = Nothing
       }
 
-completeLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-completeLogin sessions users = do
+completeLogin :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
+completeLogin db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
     Authenticating userId challenge -> verifyLogin sessionId session userId challenge
@@ -236,12 +237,12 @@ completeLogin sessions users = do
     verifyLogin :: SessionId -> Session -> Fido2.UserId -> Fido2.Challenge -> Scotty.ActionM ()
     verifyLogin sessionId session userId challenge = do
       credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-      credentials <- (liftIO $ getUserCredentials userId users) >>= handleError
+      theCredentials <- error "TODO(ruuda): Get credentials from db by user id." :: Scotty.ActionM [Assertion.Credential]
       handleError $
         Assertion.verifyAssertionResponse
           relyingPartyConfig
           challenge
-          credentials
+          theCredentials
           -- TODO: Read this from a DB or something?
           Fido2.UserVerificationPreferred
           credential
@@ -250,13 +251,6 @@ completeLogin sessions users = do
         $ casSession sessions sessionId session (Authenticated userId)
       Scotty.json @Text "Welcome."
 
-getUserCredentials :: Fido2.UserId -> TVar Users -> IO (Either String [Assertion.Credential])
-getUserCredentials userId users = runExceptT $ do
-  users <- lift $ STM.atomically $ do
-    (users, _) <- STM.readTVar users
-    pure users
-  User {credentials} <- maybe (throwError "asdf") (pure) $ Map.lookup userId users
-  pure $ fmap attestedCredentialDataToCredential credentials
 
 attestedCredentialDataToCredential :: Fido2.AttestedCredentialData -> Assertion.Credential
 attestedCredentialDataToCredential Fido2.AttestedCredentialData {credentialId, credentialPublicKey} =
@@ -278,8 +272,8 @@ beginRegistration sessions = do
       Scotty.json $ defaultPkcco registerBeginReq userId challenge
       liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
 
-completeRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-completeRegistration sessions users = do
+completeRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
+completeRegistration db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
     Registering userId challenge ->
@@ -294,28 +288,41 @@ completeRegistration sessions users = do
       Fido2.PublicKeyCredential {response} <- Scotty.jsonData
       -- step 1 to 17
       -- We abort if we couldn't attest the credential
-      attestedCredential@Fido2.AttestedCredentialData {credentialId} <-
-        handleError $
-          verifyAttestationResponse
-            serverOrigin
-            (Fido2.RpId domain)
-            challenge
-            Fido2.UserVerificationPreferred
-            response
+      attestedCredential@Fido2.AttestedCredentialData
+        { credentialId
+        , credentialPublicKey
+        } <- handleError $ verifyAttestationResponse
+          serverOrigin
+          (Fido2.RpId domain)
+          challenge
+          Fido2.UserVerificationPreferred
+          response
       -- if the credential was succesfully attested, we will see if the
       -- credential doesn't exist yet, and if it doesn't, insert it.
-      result <- liftIO . STM.atomically . runExceptT $ do
-        (userMap, credentialsIndex) <- lift . STM.readTVar $ users
-        when (Map.member credentialId credentialsIndex) $
-          throwError AlreadyRegistered
-        let existingCredentials = credentials <$> Map.lookup userId userMap
-        let updatedUser = User $ attestedCredential : (fromMaybe [] existingCredentials)
-        lift . STM.writeTVar users $
-          ( Map.insert userId updatedUser userMap,
-            Map.insert credentialId userId credentialsIndex
-          )
-        lift $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
-      handleError result
+      tx <- liftIO $ Database.begin db
+      existingUserId <- liftIO $ Database.getUserByCredentialId tx credentialId
+      case existingUserId of
+        Nothing -> pure ()
+        -- TODO(ruuda): Handle the case of the user existing,
+        -- in that case we do not want to insert the user again,
+        -- but we do want to add a new credential.
+        Just existingUserId | userId == existingUserId -> pure ()
+        Just _differentUserId -> handleError $ Left AlreadyRegistered
+      let
+        -- TODO: Put username and display name in the session on begin,
+        -- so we can get it back here.
+        fakeUser = Fido2.PublicKeyCredentialUserEntity
+          { Fido2.displayName = "Frederik Frederikson"
+          , Fido2.name = "Frederik Frederikson"
+          , Fido2.id = userId
+          }
+      liftIO $ do
+        Database.addUserWithAttestedCredentialData tx fakeUser credentialId credentialPublicKey
+        STM.atomically $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
+        Database.commit tx
+
+
+
 
 defaultPkcco :: RegisterBeginReq -> Fido2.UserId -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
 defaultPkcco RegisterBeginReq {userName, displayName} userId challenge =
@@ -359,6 +366,5 @@ main = do
   db <- Database.connect
   Database.initialize db
   sessions <- STM.newTVarIO Map.empty
-  users <- STM.newTVarIO (Map.empty, Map.empty)
   putStrLn "You can view the web-app at: http://localhost:8080/index.html"
-  Scotty.scotty port (app sessions users)
+  Scotty.scotty port $ app db sessions

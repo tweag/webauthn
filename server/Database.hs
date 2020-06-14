@@ -1,8 +1,17 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 module Database
-  ( addAttestedCredentialData
+  ( Connection
+  , Transaction () -- Constructor deliberately not exposed.
+  , addAttestedCredentialData
   , addUser
+  , addUserWithAttestedCredentialData
+  , begin
+  , commit
   , connect
+  , getUserByCredentialId
   , initialize
+  , rollback
   )
 where
 
@@ -16,6 +25,9 @@ import Crypto.Fido2.Protocol
 
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Database.SQLite.Simple as Sqlite
+
+type Connection = Sqlite.Connection
+newtype Transaction = Transaction Sqlite.Connection
 
 connect :: IO Sqlite.Connection
 connect = do
@@ -47,29 +59,50 @@ initialize conn = do
     \ );                                                                       "
     ()
 
+  Sqlite.execute conn
+    " create index if not exists                                               \
+    \ ix_attested_credential_data_user_id                                      \
+    \ on attested_credential_data(user_id);                                    "
+    ()
+
+begin :: Sqlite.Connection -> IO Transaction
+begin conn = do
+  Sqlite.execute conn "begin;" ()
+  pure $ Transaction conn
+
+commit :: Transaction -> IO ()
+commit (Transaction conn) = Sqlite.execute conn "commit;" ()
+
+rollback :: Transaction -> IO ()
+rollback (Transaction conn) = Sqlite.execute conn "rollback;" ()
+
 addUser
-  :: Sqlite.Connection
-  -> Fido2.UserId
-  -> Text
-  -> Text
+  :: Transaction
+  -> Fido2.PublicKeyCredentialUserEntity
   -> IO ()
-addUser
-  conn (UserId (URLEncodedBase64 userId)) username displayName = do
+addUser (Transaction conn) user =
+  let
+    Fido2.PublicKeyCredentialUserEntity
+      { id = (UserId (URLEncodedBase64 userId))
+      , name = username
+      , displayName = displayName
+      } = user
+  in
     Sqlite.execute conn
       "insert into users (id, username, display_name) values (?, ?, ?);"
       (userId, username, displayName)
 
 addAttestedCredentialData
-  :: Sqlite.Connection
+  :: Transaction
   -> Fido2.UserId
   -> Fido2.CredentialId
   -> Fido2.PublicKey
   -> IO ()
 addAttestedCredentialData
-  conn
+  (Transaction conn)
   (UserId (URLEncodedBase64 userId))
   (CredentialId (URLEncodedBase64 credentialId))
-  publicKey = do
+  publicKey =
     Sqlite.execute conn
       " insert into attested_credential_data                        \
       \ (id, user_id, public_key_x, public_key_y)                   \
@@ -80,3 +113,29 @@ addAttestedCredentialData
       , Fido2.publicKeyX publicKey
       , Fido2.publicKeyY publicKey
       )
+
+addUserWithAttestedCredentialData
+  :: Transaction
+  -> Fido2.PublicKeyCredentialUserEntity
+  -> Fido2.CredentialId
+  -> Fido2.PublicKey
+  -> IO ()
+addUserWithAttestedCredentialData tx user credentialId publicKey =
+  let
+    Fido2.PublicKeyCredentialUserEntity { id = userId } = user
+  in do
+    addUser tx user
+    addAttestedCredentialData tx userId credentialId publicKey
+
+getUserByCredentialId :: Transaction -> Fido2.CredentialId -> IO (Maybe Fido2.UserId)
+getUserByCredentialId
+  (Transaction conn)
+  (CredentialId (URLEncodedBase64 credentialId)) = do
+    result <- Sqlite.query
+      conn
+      "select user_id from attested_credential_data where id = ?;"
+      [credentialId]
+    case result of
+      []                   -> pure Nothing
+      [Sqlite.Only userId] -> pure $ Just $ UserId $ URLEncodedBase64 $ userId
+      _ -> fail "Unreachable: attested_credential_data.id has a unique index."
