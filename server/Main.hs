@@ -281,7 +281,8 @@ handleSignIn sessions _users = do
       Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse ->
       Either Assertion.Error ()
     verifyLogin challenge credential =
-      Assertion.verifyAssertionResponse credential
+      undefined
+      -- Assertion.verifyAssertionResponse undefined
 
 finishRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
 finishRegistration sessions users = do
