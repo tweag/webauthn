@@ -47,7 +47,7 @@ import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import Codec.CBOR.Term (Term (TBytes, TInt, TMap, TString))
 import qualified Codec.Serialise.Class as Serialise
-import Control.Monad (guard, when)
+import Control.Monad (guard)
 import qualified Crypto.Hash as Hash
 import Crypto.Hash (Digest, SHA256)
 import qualified Crypto.Random as Random
@@ -72,7 +72,6 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Data.Word (Word32, Word8)
-import Data.Word
 import GHC.Generics (Generic, Rep)
 
 newtype UserId = UserId URLEncodedBase64

@@ -42,7 +42,6 @@ library
     scientific,
     vector
   exposed-modules:
-    Crypto.Fido2,
     Crypto.Fido2.Protocol,
     Crypto.Fido2.Attestation,
 

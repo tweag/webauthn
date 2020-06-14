@@ -18,7 +18,6 @@ import Crypto.Fido2.Protocol
     ClientData (ClientData, challenge, clientDataHash, origin, typ),
     Origin,
     RpId (unRpId),
-    URLEncodedBase64 (),
     UserVerificationRequirement (UserVerificationRequired),
     WebauthnType (Create),
   )
@@ -44,7 +43,7 @@ data Error
 -- <https://www.w3.org/TR/webauthn/#registering-a-new-credential "7.1.
 -- Registering a New Credential">
 --
--- 17 Check that the 'credentialId' is not yet registered to any other user.
+-- 17 Check that the 'Crypto.Fido2.Protocol.credentialId' is not yet registered to any other user.
 -- If registration is requested for a credential that is already registered to
 -- a different user, the Relying Party SHOULD fail this registration ceremony,
 -- or it MAY decide to accept the registration, e.g. while deleting the older
@@ -53,7 +52,7 @@ data Error
 -- 18 If the attestation statement 'attStmt' verified successfully and is
 -- found to be trustworthy, then register the new credential with the account
 -- that was denoted in the options.user passed to create(), by associating it
--- with the 'credentialId' and 'credentialPublicKey' in the
+-- with the 'Crypto.Fido2.Protocol.credentialId' and 'Crypto.Fido2.Protocol.credentialPublicKey' in the
 -- 'attestedCredentialData' in 'authData', as appropriate for the Relying
 -- Party's system.
 --

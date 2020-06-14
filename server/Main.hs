@@ -15,7 +15,7 @@ import qualified Control.Concurrent.STM as STM
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
-import Crypto.Fido2 as Fido2
+import Crypto.Fido2.Protocol as Fido2
 import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
 import qualified Crypto.Random as Random
 import Data.Aeson.QQ (aesonQQ)
