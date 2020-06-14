@@ -16,6 +16,7 @@ import Control.Monad (when)
 import Control.Monad.Except (lift, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
+import qualified Crypto.Fido2.Assertion as Assertion
 import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
 import qualified Crypto.Fido2.Protocol as Fido2
 import Data.Aeson (FromJSON)
@@ -104,17 +105,17 @@ getSessionScotty sessions = do
 -- if the CAS was unsuccessful.
 casSession :: TVar Sessions -> SessionId -> Session -> Session -> STM.STM ()
 casSession sessions sessionId old new = do
-    contents <- STM.readTVar sessions
-    case Map.updateLookupWithKey casSession sessionId contents of
-      (Just _, newMap) -> do
-        STM.writeTVar sessions newMap
-        pure ()
-      (Nothing, _map) -> pure ()
+  contents <- STM.readTVar sessions
+  case Map.updateLookupWithKey casSession sessionId contents of
+    (Just _, newMap) -> do
+      STM.writeTVar sessions newMap
+      pure ()
+    (Nothing, _map) -> pure ()
   where
     casSession :: SessionId -> Session -> Maybe Session
     casSession _sessionId current
       | current == old = Just new
-      | otherwise      = Nothing
+      | otherwise = Nothing
 
 -- Session data that we store for each user.
 --
@@ -240,14 +241,7 @@ app sessions users = do
           userVerification = Nothing
         }
     pure ()
-  Scotty.post "/login/complete" $ do
-    (_sessionId, session) <- getSessionScotty sessions
-    when
-      (not . isAuthenticating $ session)
-      (Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login")
-    credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-    liftIO . print $ credential
-    pure ()
+  Scotty.post "/login/complete" $ handleSignIn sessions users
   Scotty.get "/requires-auth" $ do
     (_sessionId, session) <- getSessionScotty sessions
     when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
@@ -265,6 +259,29 @@ data RegistrationResult
 handleError :: Show e => Either e a -> Scotty.ActionM a
 handleError (Left x) = Scotty.raiseStatus HTTP.status400 . fromStrict . pack . show $ x
 handleError (Right x) = pure x
+
+handleSignIn :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+handleSignIn sessions _users = do
+  (sessionId, session) <- getSessionScotty sessions
+  case session of
+    Authenticating challenge -> do
+      credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
+      case verifyLogin challenge credential of
+        Left _err -> Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login"
+        Right _unit -> do
+          let userId = undefined -- TODO: how do we get this??
+          liftIO
+            $ STM.atomically
+            $ casSession sessions sessionId session (Authenticated userId)
+          Scotty.json @Text "Welcome."
+    _ -> Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login"
+  where
+    verifyLogin ::
+      Fido2.Challenge ->
+      Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse ->
+      Either Assertion.Error ()
+    verifyLogin challenge credential =
+      Assertion.verifyAssertionResponse credential
 
 finishRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
 finishRegistration sessions users = do
