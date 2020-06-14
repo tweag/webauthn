@@ -42,8 +42,9 @@ library
     scientific,
     vector
   exposed-modules:
-    Crypto.Fido2.Protocol,
+    Crypto.Fido2.Assertion,
     Crypto.Fido2.Attestation,
+    Crypto.Fido2.Protocol,
 
 executable server
   import: sanity
