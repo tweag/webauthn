@@ -18,3 +18,12 @@ cd server
 nix-shell
 ./bin/autoformat.sh
 ```
+
+## Using the binary cache
+
+A binary cache for both MacOS and Linux is maintained by CI and served by
+https://cachix.org
+
+```
+$ cachix use haskell-fido2
+```
