@@ -42,9 +42,11 @@ module Crypto.Fido2.Protocol
     EncodingRules (..),
     PublicKey (..),
     verifyEC,
+    -- This will definitely change do not depend on it.
     publicKeyPoint,
     publicKeyX,
     publicKeyY,
+    mkPublicKey,
   )
 where
 
@@ -401,6 +403,16 @@ publicKeyY key =
     ECDSA.Point _x y -> y
     -- TODO: Does this ever happen?
     ECDSA.PointO -> error "Got PointO at infinity. We always expect a key with X and Y"
+
+-- Make a public key at the constant curve that we currently only support.
+mkPublicKey :: Integer -> Integer -> PublicKey
+mkPublicKey x y =
+  let curve = ECDSA.getCurveByName ECDSA.SEC_p256r1
+   in Ec2Key
+        ECDSA.PublicKey
+          { public_curve = curve,
+            public_q = ECDSA.Point x y
+          }
 
 -- | EC2 signatures are ASN.1 encoded
 --

@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Database
   ( Connection
@@ -10,6 +11,8 @@ module Database
   , commit
   , connect
   , getUserByCredentialId
+  , getCredentialsByUserId
+  , getPublicKeyByCredentialId
   , initialize
   , rollback
   )
@@ -24,6 +27,7 @@ import Crypto.Fido2.Protocol
   )
 
 import qualified Crypto.Fido2.Protocol as Fido2
+import Data.ByteString (ByteString)
 import qualified Database.SQLite.Simple as Sqlite
 
 type Connection = Sqlite.Connection
@@ -139,3 +143,28 @@ getUserByCredentialId
       []                   -> pure Nothing
       [Sqlite.Only userId] -> pure $ Just $ UserId $ URLEncodedBase64 $ userId
       _ -> fail "Unreachable: attested_credential_data.id has a unique index."
+
+getCredentialsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]
+getCredentialsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
+  credentialIds :: [[ByteString]] <- Sqlite.query
+    conn
+    "select id from attested_credential_data where user_id = ?;"
+    [userId]
+  pure $ fmap (CredentialId . URLEncodedBase64) $ concat credentialIds
+
+getPublicKeyByCredentialId
+  :: Transaction
+  -> Fido2.CredentialId
+  -> IO (Maybe Fido2.PublicKey)
+getPublicKeyByCredentialId
+  (Transaction conn)
+  (CredentialId (URLEncodedBase64 credentialId)) = do
+    result <- Sqlite.query
+      conn
+      " select (public_key_x, public_key_y) \
+      \ from attested_credential_data                         \
+      \ where id = ?;                                         "
+      [credentialId]
+    case result of
+      [] -> pure Nothing
+      [(x, y)] -> pure $ Just $ Fido2.mkPublicKey x y
