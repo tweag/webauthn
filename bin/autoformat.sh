@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # NB: We don't use `nix-shell` as a shebang, because that implicitly
 # depends on NIX_PATH which is local to the users machine. Just run
