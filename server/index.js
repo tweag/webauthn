@@ -72,4 +72,14 @@ window.addEventListener("load", () => {
     console.log(await result.text());
 
   });
+
+  const testAuthForm = document.getElementById("testAuthForm");
+  testAuthForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const userHandle = document.getElementById("userHandle").value;
+    const response = await fetch(`${SERVER}/requires-auth`, {
+      credentials: "include"
+    });
+    console.log(await response.text());
+  });
 });
