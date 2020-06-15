@@ -28,15 +28,16 @@ data Error
     RawDataUnavailable
   deriving (Show, Eq)
 
--- Domain type for the users to use, because the types from Protocol
--- are killing us.
+-- | Domain type: combination of a user's ID and publickey. This should be eventually
+-- extracted into some opinionated module that builds on top of the actual protocol types.
 data Credential = Credential {id :: Fido2.CredentialId, publicKey :: Fido2.PublicKey}
 
--- Domain type: configuration for our relying party.
+-- | Domain type: configuration for our relying party. Should eventually be moved to
+-- some other opinionated module.
 data RelyingPartyConfig = RelyingPartyConfig {origin :: Fido2.Origin, rpId :: Fido2.RpId}
 
--- | Verify that a @Fido2.PublicKeyCredential@ is valid for the given
--- @RelyingPartyConfig@, @Challenge@, and list of @Creedential@s known to be
+-- | Verify that a 'Fido2.PublicKeyCredential' is valid for the given
+-- 'RelyingPartyConfig', 'Fido2.Challenge', and list of 'Credential's known to be
 -- associated with a given user.
 --
 -- Use this function when you want to authenticate a user where:
