@@ -25,8 +25,9 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import Data.Text (Text, pack)
-import Data.Text.Lazy (fromStrict)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
@@ -197,7 +198,7 @@ data RegistrationResult
   deriving (Eq, Show)
 
 handleError :: Show e => Either e a -> Scotty.ActionM a
-handleError (Left x) = Scotty.raiseStatus HTTP.status400 . fromStrict . pack . show $ x
+handleError (Left x) = Scotty.raiseStatus HTTP.status400 . LText.fromStrict . Text.pack . show $ x
 handleError (Right x) = pure x
 
 beginLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
@@ -229,8 +230,8 @@ completeLogin sessions _users = do
     Authenticating challenge -> do
       credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
       case verifyLogin challenge credential of
-        Left _err -> Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login"
-        Right _unit -> do
+        Left err -> Scotty.raiseStatus HTTP.status400 $ "Login error: " <> (LText.pack . show $ err)
+        Right () -> do
           let userId = undefined -- TODO: how do we get this??
           liftIO
             $ STM.atomically
@@ -327,7 +328,7 @@ domain :: Text
 domain = "localhost"
 
 serverOrigin :: Fido2.Origin
-serverOrigin = Fido2.Origin $ "http://" <> domain <> ":" <> (pack $ show port)
+serverOrigin = Fido2.Origin $ "http://" <> domain <> ":" <> (Text.pack $ show port)
 
 main :: IO ()
 main = do
