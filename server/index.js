@@ -13,7 +13,7 @@ window.addEventListener("load", () => {
       method: "POST",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: userName,
+        userName: userName,
         displayName: displayName,
       }),
       credentials: "include"
