@@ -177,78 +177,18 @@ data RegisterBegin
 app :: TVar Sessions -> TVar Users -> ScottyM ()
 app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
-  Scotty.post "/register/begin" $ do
-    (sessionId, session) <- getSessionScotty sessions
-    RegisterBegin {name, displayName} <- Scotty.jsonData @RegisterBegin
-    -- NOTE: We currently do not support multiple credentials per user.
-    when
-      (not . isUnauthenticated $ session)
-      (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin registration")
-    challenge <- liftIO $ Fido2.newChallenge
-    userId <- liftIO $ Fido2.newUserId
-    Scotty.json $
-      Fido2.PublicKeyCredentialCreationOptions
-        { rp =
-            Fido2.PublicKeyCredentialRpEntity
-              { id = Nothing,
-                name = "ACME"
-              },
-          user =
-            Fido2.PublicKeyCredentialUserEntity
-              { id = userId,
-                displayName = displayName,
-                name = name
-              },
-          challenge = challenge,
-          pubKeyCredParams =
-            [ Fido2.PublicKeyCredentialParameters
-                { typ = Fido2.PublicKey,
-                  alg = Fido2.ES256
-                }
-            ], -- EDIT: NO Is empty supported?
-          timeout = Nothing,
-          excludeCredentials = Nothing,
-          authenticatorSelection =
-            Just
-              Fido2.AuthenticatorSelectionCriteria
-                { authenticatorAttachment = Nothing,
-                  residentKey = Just Fido2.ResidentKeyDiscouraged,
-                  userVerification = Just Fido2.UserVerificationPreferred
-                },
-          attestation = Nothing
-        }
-    liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
-  Scotty.post "/register/complete" (finishRegistration sessions users)
-  Scotty.post "/login/begin" $ do
-    (sessionId, session) <- getSessionScotty sessions
-    userId <- Scotty.jsonData @Fido2.UserId
-    muser <- liftIO $ STM.atomically $ do
-      (map, _) <- STM.readTVar users
-      pure $ Map.lookup userId map
-    User {credentials} <- maybe (Scotty.raiseStatus HTTP.status404 "User not found") pure muser
-    when
-      (not . isUnauthenticated $ session)
-      (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
-    challenge <- liftIO $ Fido2.newChallenge
-    liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating challenge)
-    -- Scotty.writeSession . Registering . Challenge $ challenge
-    Scotty.json $
-      Fido2.PublicKeyCredentialRequestOptions
-        { rpId = Nothing,
-          timeout = Nothing,
-          challenge = challenge,
-          allowCredentials = Just (map mkCredentialDescriptor credentials),
-          userVerification = Nothing
-        }
-    pure ()
-  Scotty.post "/login/complete" $ handleSignIn sessions users
+  Scotty.post "/register/begin" $ beginRegistration sessions
+  Scotty.post "/register/complete" $ completeRegistration sessions users
+  Scotty.post "/login/begin" $ beginLogin sessions users
+  Scotty.post "/login/complete" $ completeLogin sessions users
   Scotty.get "/requires-auth" $ do
     (_sessionId, session) <- getSessionScotty sessions
     when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
     Scotty.json @Text $ "This should only be visible when authenticated"
 
 mkCredentialDescriptor :: Fido2.AttestedCredentialData -> Fido2.PublicKeyCredentialDescriptor
-mkCredentialDescriptor Fido2.AttestedCredentialData {credentialId} = Fido2.PublicKeyCredentialDescriptor {typ = Fido2.PublicKey, id = credentialId, transports = Nothing}
+mkCredentialDescriptor Fido2.AttestedCredentialData {credentialId} =
+  Fido2.PublicKeyCredentialDescriptor {typ = Fido2.PublicKey, id = credentialId, transports = Nothing}
 
 data RegistrationResult
   = Success
@@ -260,8 +200,30 @@ handleError :: Show e => Either e a -> Scotty.ActionM a
 handleError (Left x) = Scotty.raiseStatus HTTP.status400 . fromStrict . pack . show $ x
 handleError (Right x) = pure x
 
-handleSignIn :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-handleSignIn sessions _users = do
+beginLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+beginLogin sessions users = do
+  (sessionId, session) <- getSessionScotty sessions
+  userId <- Scotty.jsonData @Fido2.UserId
+  muser <- liftIO $ STM.atomically $ do
+    (map, _) <- STM.readTVar users
+    pure $ Map.lookup userId map
+  User {credentials} <- maybe (Scotty.raiseStatus HTTP.status404 "User not found") pure muser
+  when
+    (not . isUnauthenticated $ session)
+    (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
+  challenge <- liftIO $ Fido2.newChallenge
+  liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating challenge)
+  Scotty.json $
+    Fido2.PublicKeyCredentialRequestOptions
+      { rpId = Nothing,
+        timeout = Nothing,
+        challenge = challenge,
+        allowCredentials = Just (map mkCredentialDescriptor credentials),
+        userVerification = Nothing
+      }
+
+completeLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+completeLogin sessions _users = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
     Authenticating challenge -> do
@@ -283,10 +245,51 @@ handleSignIn sessions _users = do
     verifyLogin challenge credential =
       undefined
 
--- Assertion.verifyAssertionResponse undefined
+beginRegistration :: TVar Sessions -> Scotty.ActionM ()
+beginRegistration sessions = do
+  (sessionId, session) <- getSessionScotty sessions
+  RegisterBegin {name, displayName} <- Scotty.jsonData @RegisterBegin
+  -- NOTE: We currently do not support multiple credentials per user.
+  when
+    (not . isUnauthenticated $ session)
+    (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin registration")
+  challenge <- liftIO $ Fido2.newChallenge
+  userId <- liftIO $ Fido2.newUserId
+  Scotty.json $
+    Fido2.PublicKeyCredentialCreationOptions
+      { rp =
+          Fido2.PublicKeyCredentialRpEntity
+            { id = Nothing,
+              name = "ACME"
+            },
+        user =
+          Fido2.PublicKeyCredentialUserEntity
+            { id = userId,
+              displayName = displayName,
+              name = name
+            },
+        challenge = challenge,
+        pubKeyCredParams =
+          [ Fido2.PublicKeyCredentialParameters
+              { typ = Fido2.PublicKey,
+                alg = Fido2.ES256
+              }
+          ], -- EDIT: NO Is empty supported?
+        timeout = Nothing,
+        excludeCredentials = Nothing,
+        authenticatorSelection =
+          Just
+            Fido2.AuthenticatorSelectionCriteria
+              { authenticatorAttachment = Nothing,
+                residentKey = Just Fido2.ResidentKeyDiscouraged,
+                userVerification = Just Fido2.UserVerificationPreferred
+              },
+        attestation = Nothing
+      }
+  liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
 
-finishRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-finishRegistration sessions users = do
+completeRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+completeRegistration sessions users = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
     Registering userId challenge ->
