@@ -54,6 +54,7 @@ import Control.Monad (guard)
 import qualified Crypto.Hash as Hash
 import Crypto.Hash (Digest, SHA256)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Prim as ECDSA
 import qualified Crypto.PubKey.ECC.Types as ECDSA
 import qualified Crypto.Random as Random
 import Crypto.Random (MonadRandom)
@@ -624,15 +625,16 @@ keyDecoder = do
         alg <- IntMap.lookup 3 map
         guard $ alg == TInt (-7) -- TODO COSEAlgorithmIdentifier
         TInt _curve <- IntMap.lookup (-1) map -- TODO based on identifier select curve
+        let curve = ECDSA.getCurveByName ECDSA.SEC_p256r1
         TBytes x <- IntMap.lookup (-2) map
         TBytes y <- IntMap.lookup (-3) map
-        let x' = bsToInteger x
-        let y' = bsToInteger y
+        let point = ECDSA.Point (bsToInteger x) (bsToInteger y)
+        guard $ ECDSA.isPointValid curve point
         pure $
           Ec2Key
             ECDSA.PublicKey
-              { public_curve = ECDSA.getCurveByName ECDSA.SEC_p256r1,
-                public_q = ECDSA.Point x' y'
+              { public_curve = curve,
+                public_q = point
               }
   maybe (fail "invalid key") pure key
 

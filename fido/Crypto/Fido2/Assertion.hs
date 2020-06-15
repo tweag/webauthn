@@ -11,11 +11,8 @@ where
 import Control.Monad (when)
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Crypto.Hash as Hash
-import Crypto.Hash (Digest, SHA256)
-import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Data.ByteArray as BA
 import qualified Data.List as List
-import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 
 data Error
@@ -63,7 +60,7 @@ verifyAssertionResponse
   challenge
   userCredentials
   userVerificationRequirement
-  Fido2.PublicKeyCredential {id, rawId, response, typ} = do
+  Fido2.PublicKeyCredential {rawId, response, typ = _typ} = do
     -- Verify that the given credential is within the list of userCredentials.
     -- Spec 7.2 steps 1 and 3. (Step 2 has already been implemented by the caller).
     Credential {publicKey} <-
@@ -72,7 +69,7 @@ verifyAssertionResponse
     -- 4. Let clientData, authenticatorData and signature denote the value of
     -- credential’s response's clientDataJSON, authenticatorData, and signature
     -- respectively.
-    let Fido2.AuthenticatorAssertionResponse {clientData, authenticatorData, signature, userHandle} = response
+    let Fido2.AuthenticatorAssertionResponse {clientData, authenticatorData, signature, userHandle = _userHandle} = response
     let Fido2.ClientData {typ, challenge = clientChallenge, origin = clientOrigin, clientDataHash} = clientData
     -- 7. Verify that the value of C.type is the string webauthn.get.
     when (typ /= Fido2.Get) (Left UnsupportedClientDataType)
