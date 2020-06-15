@@ -166,12 +166,12 @@ type SessionId = UUID
 
 type Users = (Map Fido2.UserId User, Map Fido2.CredentialId Fido2.UserId)
 
-data RegisterBegin
-  = RegisterBegin
-      { name :: Text,
+data RegisterBeginReq
+  = RegisterBeginReq
+      { userName :: Text,
         displayName :: Text
       }
-  deriving (FromJSON) via (Fido2.EncodingRules RegisterBegin)
+  deriving (FromJSON) via (Fido2.EncodingRules RegisterBeginReq)
   deriving stock (Generic)
 
 app :: TVar Sessions -> TVar Users -> ScottyM ()
@@ -248,45 +248,18 @@ completeLogin sessions _users = do
 beginRegistration :: TVar Sessions -> Scotty.ActionM ()
 beginRegistration sessions = do
   (sessionId, session) <- getSessionScotty sessions
-  RegisterBegin {name, displayName} <- Scotty.jsonData @RegisterBegin
   -- NOTE: We currently do not support multiple credentials per user.
-  when
-    (not . isUnauthenticated $ session)
-    (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin registration")
-  challenge <- liftIO $ Fido2.newChallenge
-  userId <- liftIO $ Fido2.newUserId
-  Scotty.json $
-    Fido2.PublicKeyCredentialCreationOptions
-      { rp =
-          Fido2.PublicKeyCredentialRpEntity
-            { id = Nothing,
-              name = "ACME"
-            },
-        user =
-          Fido2.PublicKeyCredentialUserEntity
-            { id = userId,
-              displayName = displayName,
-              name = name
-            },
-        challenge = challenge,
-        pubKeyCredParams =
-          [ Fido2.PublicKeyCredentialParameters
-              { typ = Fido2.PublicKey,
-                alg = Fido2.ES256
-              }
-          ], -- EDIT: NO Is empty supported?
-        timeout = Nothing,
-        excludeCredentials = Nothing,
-        authenticatorSelection =
-          Just
-            Fido2.AuthenticatorSelectionCriteria
-              { authenticatorAttachment = Nothing,
-                residentKey = Just Fido2.ResidentKeyDiscouraged,
-                userVerification = Just Fido2.UserVerificationPreferred
-              },
-        attestation = Nothing
-      }
-  liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
+  case session of
+    Unauthenticated -> generateRegistrationChallenge sessionId session
+    _ -> Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin registration"
+  where
+    generateRegistrationChallenge :: SessionId -> Session -> Scotty.ActionM ()
+    generateRegistrationChallenge sessionId session = do
+      registerBeginReq <- Scotty.jsonData @RegisterBeginReq
+      challenge <- liftIO $ Fido2.newChallenge
+      userId <- liftIO $ Fido2.newUserId
+      Scotty.json $ defaultPkcco registerBeginReq userId challenge
+      liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
 
 completeRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
 completeRegistration sessions users = do
@@ -326,6 +299,26 @@ completeRegistration sessions users = do
           )
         lift $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
       handleError result
+
+defaultPkcco :: RegisterBeginReq -> Fido2.UserId -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
+defaultPkcco RegisterBeginReq {userName, displayName} userId challenge =
+  Fido2.PublicKeyCredentialCreationOptions
+    { rp = Fido2.PublicKeyCredentialRpEntity {id = Nothing, name = "ACME"},
+      user = Fido2.PublicKeyCredentialUserEntity {id = userId, displayName = displayName, name = userName},
+      challenge = challenge,
+      -- Empty credentialparameters are not supported.
+      pubKeyCredParams = [Fido2.PublicKeyCredentialParameters {typ = Fido2.PublicKey, alg = Fido2.ES256}],
+      timeout = Nothing,
+      excludeCredentials = Nothing,
+      authenticatorSelection =
+        Just
+          Fido2.AuthenticatorSelectionCriteria
+            { authenticatorAttachment = Nothing,
+              residentKey = Just Fido2.ResidentKeyDiscouraged,
+              userVerification = Just Fido2.UserVerificationPreferred
+            },
+      attestation = Nothing
+    }
 
 port :: Int
 port = 8080
