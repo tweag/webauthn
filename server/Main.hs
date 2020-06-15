@@ -16,6 +16,7 @@ import Control.Monad (when)
 import Control.Monad.Except (lift, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
+import qualified Crypto.Fido2.Assertion as Assertion
 import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
 import qualified Crypto.Fido2.Protocol as Fido2
 import Data.Aeson (FromJSON)
@@ -24,8 +25,9 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import Data.Text (Text, pack)
-import Data.Text.Lazy (fromStrict)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
@@ -52,7 +54,8 @@ newSession sessions = do
         { Cookie.setCookieName = "session",
           Cookie.setCookieValue = UUID.toASCIIBytes sessionId,
           Cookie.setCookieSameSite = Just Cookie.sameSiteStrict,
-          Cookie.setCookieHttpOnly = True
+          Cookie.setCookieHttpOnly = True,
+          Cookie.setCookiePath = Just "/"
           -- Does not work on localhost: the browser doesn't send any cookies
           -- to a non-TLS version of localhost.
           -- TODO: Use mkcert to get a HTTPS setup for localhost.
@@ -99,26 +102,22 @@ getSessionScotty sessions = do
     getSession sessions uuid
   maybe (newSessionScotty sessions) pure result
 
-setSessionToAuthenticating :: TVar Sessions -> SessionId -> Fido2.Challenge -> IO ()
-setSessionToAuthenticating sessions sessionId challenge =
-  STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
+-- | @casVersion@ searches for the session with the given @SessionId@ and will compare
+-- and swap it, replacing the @old@ session with the @new@ session. Returns @Nothing@
+-- if the CAS was unsuccessful.
+casSession :: TVar Sessions -> SessionId -> Session -> Session -> STM.STM ()
+casSession sessions sessionId old new = do
+  contents <- STM.readTVar sessions
+  case Map.updateLookupWithKey casSession sessionId contents of
+    (Just _, newMap) -> do
+      STM.writeTVar sessions newMap
+      pure ()
+    (Nothing, _map) -> pure ()
   where
-    update :: Session -> Session
-    update _ = Authenticating challenge
-
--- Keep the same state if there are racy calls to the /register endpoints.
-
-setSessionToRegistering :: TVar Sessions -> SessionId -> Fido2.UserId -> Fido2.Challenge -> IO ()
-setSessionToRegistering sessions sessionId userId challenge =
-  STM.atomically $ STM.modifyTVar sessions $ Map.adjust update sessionId
-  where
-    -- Only update hte session to Registering when the session is Unauthenticated.
-    -- This prevents race conditions where two concurrent register requests happen
-    -- for the same session.
-    update :: Session -> Session
-    update (Unauthenticated) = Registering userId challenge
-    -- Keep the same state if there are racy calls to the /register endpoints.
-    update a = a
+    casSession :: SessionId -> Session -> Maybe Session
+    casSession _sessionId current
+      | current == old = Just new
+      | otherwise = Nothing
 
 -- Session data that we store for each user.
 --
@@ -134,7 +133,7 @@ setSessionToRegistering sessions sessionId userId challenge =
 data Session
   = Unauthenticated
   | Registering Fido2.UserId Fido2.Challenge
-  | Authenticating Fido2.Challenge
+  | Authenticating Fido2.UserId Fido2.Challenge
   | Authenticated Fido2.UserId
   deriving (Eq, Show)
 
@@ -155,7 +154,7 @@ _isRegistering session = case session of
 
 isAuthenticating :: Session -> Bool
 isAuthenticating session = case session of
-  Authenticating _ -> True
+  Authenticating _ _ -> True
   _ -> False
 
 isAuthenticated :: Session -> Bool
@@ -169,96 +168,29 @@ type SessionId = UUID
 
 type Users = (Map Fido2.UserId User, Map Fido2.CredentialId Fido2.UserId)
 
-data RegisterBegin
-  = RegisterBegin
-      { name :: Text,
+data RegisterBeginReq
+  = RegisterBeginReq
+      { userName :: Text,
         displayName :: Text
       }
-  deriving (FromJSON) via (Fido2.EncodingRules RegisterBegin)
+  deriving (FromJSON) via (Fido2.EncodingRules RegisterBeginReq)
   deriving stock (Generic)
 
 app :: TVar Sessions -> TVar Users -> ScottyM ()
 app sessions users = do
   Scotty.middleware (staticPolicy (addBase "dist"))
-  Scotty.post "/register/begin" $ do
-    (sessionId, session) <- getSessionScotty sessions
-    RegisterBegin {name, displayName} <- Scotty.jsonData @RegisterBegin
-    -- NOTE: We currently do not support multiple credentials per user.
-    when
-      (not . isUnauthenticated $ session)
-      (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin registration")
-    challenge <- liftIO $ Fido2.newChallenge
-    userId <- liftIO $ Fido2.newUserId
-    Scotty.json $
-      Fido2.PublicKeyCredentialCreationOptions
-        { rp =
-            Fido2.PublicKeyCredentialRpEntity
-              { id = Nothing,
-                name = "ACME"
-              },
-          user =
-            Fido2.PublicKeyCredentialUserEntity
-              { id = userId,
-                displayName = displayName,
-                name = name
-              },
-          challenge = challenge,
-          pubKeyCredParams =
-            [ Fido2.PublicKeyCredentialParameters
-                { typ = Fido2.PublicKey,
-                  alg = Fido2.ES256
-                }
-            ], -- EDIT: NO Is empty supported?
-          timeout = Nothing,
-          excludeCredentials = Nothing,
-          authenticatorSelection =
-            Just
-              Fido2.AuthenticatorSelectionCriteria
-                { authenticatorAttachment = Nothing,
-                  residentKey = Just Fido2.ResidentKeyDiscouraged,
-                  userVerification = Just Fido2.UserVerificationPreferred
-                },
-          attestation = Nothing
-        }
-    liftIO $ setSessionToRegistering sessions sessionId userId challenge
-  Scotty.post "/register/complete" (finishRegistration sessions users)
-  Scotty.post "/login/begin" $ do
-    (sessionId, session) <- getSessionScotty sessions
-    userId <- Scotty.jsonData @Fido2.UserId
-    muser <- liftIO $ STM.atomically $ do
-      (map, _) <- STM.readTVar users
-      pure $ Map.lookup userId map
-    User {credentials} <- maybe (Scotty.raiseStatus HTTP.status404 "User not found") pure muser
-    when
-      (not . isUnauthenticated $ session)
-      (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
-    challenge <- liftIO $ Fido2.newChallenge
-    liftIO $ setSessionToAuthenticating sessions sessionId challenge
-    -- Scotty.writeSession . Registering . Challenge $ challenge
-    Scotty.json $
-      Fido2.PublicKeyCredentialRequestOptions
-        { rpId = Nothing,
-          timeout = Nothing,
-          challenge = challenge,
-          allowCredentials = Just (map mkCredentialDescriptor credentials),
-          userVerification = Nothing
-        }
-    pure ()
-  Scotty.post "/login/complete" $ do
-    (_sessionId, session) <- getSessionScotty sessions
-    when
-      (not . isAuthenticating $ session)
-      (Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login")
-    credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-    liftIO . print $ credential
-    pure ()
+  Scotty.post "/register/begin" $ beginRegistration sessions
+  Scotty.post "/register/complete" $ completeRegistration sessions users
+  Scotty.post "/login/begin" $ beginLogin sessions users
+  Scotty.post "/login/complete" $ completeLogin sessions users
   Scotty.get "/requires-auth" $ do
     (_sessionId, session) <- getSessionScotty sessions
     when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
     Scotty.json @Text $ "This should only be visible when authenticated"
 
 mkCredentialDescriptor :: Fido2.AttestedCredentialData -> Fido2.PublicKeyCredentialDescriptor
-mkCredentialDescriptor Fido2.AttestedCredentialData {credentialId} = Fido2.PublicKeyCredentialDescriptor {typ = Fido2.PublicKey, id = credentialId, transports = Nothing}
+mkCredentialDescriptor Fido2.AttestedCredentialData {credentialId} =
+  Fido2.PublicKeyCredentialDescriptor {typ = Fido2.PublicKey, id = credentialId, transports = Nothing}
 
 data RegistrationResult
   = Success
@@ -267,11 +199,85 @@ data RegistrationResult
   deriving (Eq, Show)
 
 handleError :: Show e => Either e a -> Scotty.ActionM a
-handleError (Left x) = Scotty.raiseStatus HTTP.status400 . fromStrict . pack . show $ x
+handleError (Left x) = Scotty.raiseStatus HTTP.status400 . LText.fromStrict . Text.pack . show $ x
 handleError (Right x) = pure x
 
-finishRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-finishRegistration sessions users = do
+beginLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+beginLogin sessions users = do
+  (sessionId, session) <- getSessionScotty sessions
+  userId <- Scotty.jsonData @Fido2.UserId
+  muser <- liftIO $ STM.atomically $ do
+    (map, _) <- STM.readTVar users
+    pure $ Map.lookup userId map
+  User {credentials} <- maybe (Scotty.raiseStatus HTTP.status404 "User not found") pure muser
+  when
+    (not . isUnauthenticated $ session)
+    (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
+  challenge <- liftIO $ Fido2.newChallenge
+  liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating userId challenge)
+  Scotty.json $
+    Fido2.PublicKeyCredentialRequestOptions
+      { rpId = Nothing,
+        timeout = Nothing,
+        challenge = challenge,
+        allowCredentials = Just (map mkCredentialDescriptor credentials),
+        userVerification = Nothing
+      }
+
+completeLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+completeLogin sessions users = do
+  (sessionId, session) <- getSessionScotty sessions
+  case session of
+    Authenticating userId challenge -> verifyLogin sessionId session userId challenge
+    _ -> Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login"
+  where
+    verifyLogin :: SessionId -> Session -> Fido2.UserId -> Fido2.Challenge -> Scotty.ActionM ()
+    verifyLogin sessionId session userId challenge = do
+      credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
+      credentials <- (liftIO $ getUserCredentials userId users) >>= handleError
+      handleError $
+        Assertion.verifyAssertionResponse
+          relyingPartyConfig
+          challenge
+          credentials
+          -- TODO: Read this from a DB or something?
+          Fido2.UserVerificationPreferred
+          credential
+      liftIO
+        $ STM.atomically
+        $ casSession sessions sessionId session (Authenticated userId)
+      Scotty.json @Text "Welcome."
+
+getUserCredentials :: Fido2.UserId -> TVar Users -> IO (Either String [Assertion.Credential])
+getUserCredentials userId users = runExceptT $ do
+  users <- lift $ STM.atomically $ do
+    (users, _) <- STM.readTVar users
+    pure users
+  User {credentials} <- maybe (throwError "asdf") (pure) $ Map.lookup userId users
+  pure $ fmap attestedCredentialDataToCredential credentials
+
+attestedCredentialDataToCredential :: Fido2.AttestedCredentialData -> Assertion.Credential
+attestedCredentialDataToCredential Fido2.AttestedCredentialData {credentialId, credentialPublicKey} =
+  Assertion.Credential {id = credentialId, publicKey = credentialPublicKey}
+
+beginRegistration :: TVar Sessions -> Scotty.ActionM ()
+beginRegistration sessions = do
+  (sessionId, session) <- getSessionScotty sessions
+  -- NOTE: We currently do not support multiple credentials per user.
+  case session of
+    Unauthenticated -> generateRegistrationChallenge sessionId session
+    _ -> Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin registration"
+  where
+    generateRegistrationChallenge :: SessionId -> Session -> Scotty.ActionM ()
+    generateRegistrationChallenge sessionId session = do
+      registerBeginReq <- Scotty.jsonData @RegisterBeginReq
+      challenge <- liftIO $ Fido2.newChallenge
+      userId <- liftIO $ Fido2.newUserId
+      Scotty.json $ defaultPkcco registerBeginReq userId challenge
+      liftIO $ STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
+
+completeRegistration :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
+completeRegistration sessions users = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
     Registering userId challenge ->
@@ -309,6 +315,26 @@ finishRegistration sessions users = do
         lift $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
       handleError result
 
+defaultPkcco :: RegisterBeginReq -> Fido2.UserId -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
+defaultPkcco RegisterBeginReq {userName, displayName} userId challenge =
+  Fido2.PublicKeyCredentialCreationOptions
+    { rp = rpEntity,
+      user = Fido2.PublicKeyCredentialUserEntity {id = userId, displayName = displayName, name = userName},
+      challenge = challenge,
+      -- Empty credentialparameters are not supported.
+      pubKeyCredParams = [Fido2.PublicKeyCredentialParameters {typ = Fido2.PublicKey, alg = Fido2.ES256}],
+      timeout = Nothing,
+      excludeCredentials = Nothing,
+      authenticatorSelection =
+        Just
+          Fido2.AuthenticatorSelectionCriteria
+            { authenticatorAttachment = Nothing,
+              residentKey = Just Fido2.ResidentKeyDiscouraged,
+              userVerification = Just Fido2.UserVerificationPreferred
+            },
+      attestation = Nothing
+    }
+
 port :: Int
 port = 8080
 
@@ -316,7 +342,15 @@ domain :: Text
 domain = "localhost"
 
 serverOrigin :: Fido2.Origin
-serverOrigin = Fido2.Origin $ "http://" <> domain <> ":" <> (pack $ show port)
+serverOrigin = Fido2.Origin $ "http://" <> domain <> ":" <> (Text.pack $ show port)
+
+-- This type is very very close to the PublicKeyCredentialRpEntity. Should those be the
+-- same thing? Origin and ID are very similar things.
+relyingPartyConfig :: Assertion.RelyingPartyConfig
+relyingPartyConfig = Assertion.RelyingPartyConfig {origin = serverOrigin, rpId = Fido2.RpId domain}
+
+rpEntity :: Fido2.PublicKeyCredentialRpEntity
+rpEntity = Fido2.PublicKeyCredentialRpEntity {id = Just (Fido2.RpId domain), name = "ACME"}
 
 main :: IO ()
 main = do

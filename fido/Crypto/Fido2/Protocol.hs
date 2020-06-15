@@ -40,6 +40,8 @@ module Crypto.Fido2.Protocol
     UserVerificationRequirement (..),
     AuthenticatorAttachment (..),
     EncodingRules (..),
+    PublicKey (..),
+    verifyEC,
   )
 where
 
@@ -51,8 +53,14 @@ import qualified Codec.Serialise.Class as Serialise
 import Control.Monad (guard)
 import qualified Crypto.Hash as Hash
 import Crypto.Hash (Digest, SHA256)
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Prim as ECDSA
+import qualified Crypto.PubKey.ECC.Types as ECDSA
 import qualified Crypto.Random as Random
 import Crypto.Random (MonadRandom)
+import qualified Data.ASN1.BinaryEncoding as ASN1
+import qualified Data.ASN1.Encoding as ASN1
+import qualified Data.ASN1.Prim as ASN1
 import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Internal as Aeson
@@ -63,6 +71,7 @@ import Data.Bifunctor (first)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.HashMap.Strict as HashMap
@@ -113,7 +122,7 @@ newChallenge = Challenge . URLEncodedBase64 <$> Random.getRandomBytes 16
 data PublicKeyCredential response
   = PublicKeyCredential
       { id :: Text,
-        rawId :: URLEncodedBase64,
+        rawId :: CredentialId,
         response :: response,
         typ :: PublicKeyCredentialType
         -- clientExtensionResults ignored
@@ -368,13 +377,47 @@ instance Aeson.FromJSON URLEncodedBase64 where
 instance Aeson.ToJSON URLEncodedBase64 where
   toJSON (URLEncodedBase64 bs) = Aeson.toJSON . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
 
-data Ec2Key
-  = Ec2Key
-      { curve :: Int,
-        x :: ByteString,
-        y :: ByteString
-      }
+data PublicKey = Ec2Key ECDSA.PublicKey
   deriving (Show)
+
+-- | EC2 signatures are ASN.1 encoded
+--
+-- ASN.1 decoding stolen from
+-- https://hackage.haskell.org/package/x509-validation-1.6.11/docs/src/Data.X509.Validation.Signature.html#verifyECDSA
+decodeEC2Signature :: ByteString -> Maybe ECDSA.Signature
+decodeEC2Signature sigbs =
+  case ASN1.decodeASN1' ASN1.BER sigbs of
+    Left _ -> Nothing
+    Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
+      Just (ECDSA.Signature r s)
+    Right _ -> Nothing
+
+-- | Convert an unsigned big endian octet sequence to the integer
+-- it represents. Taken from @hs-jose@.
+--
+-- TODO: Test the crap out of this.
+bsToInteger :: ByteString -> Integer
+bsToInteger = BS.foldl (\acc x -> acc * 256 + toInteger x) 0
+
+-- | Verify an EC key. Taken from @hs-jose@.
+--
+-- TODO: Test the crap out of this.
+--
+-- For backwards compatibility reasons, the "signature" field is NOT
+-- formatted as specified in COSE, but formatted as an ASN.1 pair
+--
+-- RSA keys are formatted as PKCS#1
+-- and EdDSA keys are formatted as COSE (though this is unspecified)
+-- https://github.com/w3c/webauthn/issues/1124#issuecomment-644008314
+verifyEC ::
+  PublicKey ->
+  ByteString ->
+  ByteString ->
+  Bool
+verifyEC (Ec2Key publicKey) message signature =
+  case decodeEC2Signature signature of
+    Nothing -> False
+    Just signature -> ECDSA.verify Hash.SHA256 publicKey signature message
 
 data WebauthnType = Create | Get
   deriving (Eq, Show)
@@ -421,13 +464,13 @@ clientDataParser hash = Aeson.withObject "ClientData" $ \o -> do
   pure $ ClientData typ challenge origin hash
 
 newtype CredentialId = CredentialId URLEncodedBase64
-  deriving newtype (Show, Eq, Ord, ToJSON)
+  deriving newtype (Show, Eq, Ord, FromJSON, ToJSON)
 
 data AttestedCredentialData
   = AttestedCredentialData
       { aaguid :: ByteString, -- 16 byte acceptable anchors guid, see step 15 of verifyAttestationResponse
         credentialId :: CredentialId, -- Length L
-        credentialPublicKey :: Ec2Key
+        credentialPublicKey :: PublicKey
       }
   deriving (Show)
 
@@ -448,10 +491,13 @@ data AuthenticatorData
         counter :: Word32,
         userPresent :: Bool,
         userVerified :: Bool,
-        attestedCredentialData :: Maybe AttestedCredentialData -- Only present if bit 6 of flags is set, otherwise can be ignored
+        attestedCredentialData :: Maybe AttestedCredentialData, -- Only present if bit 6 of flags is set, otherwise can be ignored
             -- TODO, better type?
-            --
             -- We don't support extensions. so we don't check the ED flag
+
+        -- Used for verifying the signature currently. Not used for attestation in
+        -- our current implementation which is why this is a maybe.
+        rawData :: Maybe ByteString
       }
   deriving (Show)
 
@@ -496,7 +542,7 @@ decodeAttestationObject bs = do
   -- TODO maybe use the incremental API here?
   (_rest, (AttestationObjectRaw {authDataRaw, fmt, attStmt})) <- first CBOR $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
   (rest, _, authDataRaw) <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw) rest
+  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData Nothing authDataRaw) rest
   pure (AttestationObject authData fmt attStmt)
 
 -- Helper. TODO  come up with more consistent names for all of these things, and allow
@@ -504,11 +550,14 @@ decodeAttestationObject bs = do
 decodeAuthenticatorData' :: ByteString -> Either Error AuthenticatorData
 decodeAuthenticatorData' bs = do
   (rest, _, authDataRaw) <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict bs)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw) rest
+  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData (Just bs) authDataRaw) rest
   pure authData
 
-decodeAuthenticatorData :: AuthenticatorDataRaw -> Decoder s AuthenticatorData
-decodeAuthenticatorData x = do
+-- The first parameter is a maybe bytestring in case we want to save the raw data
+-- to the authenticatordata struct. This is ugly, but required because we need to
+-- compute a hash based on the raw signature of this crap.
+decodeAuthenticatorData :: Maybe ByteString -> AuthenticatorDataRaw -> Decoder s AuthenticatorData
+decodeAuthenticatorData originalBs x = do
   let userPresent = Bits.testBit (flags' x) 0
   let userVerified = Bits.testBit (flags' x) 2
   attestedCredentialData <- traverse decodeAttestedCredentialData $ attestedCredentialDataHeader' x
@@ -519,7 +568,8 @@ decodeAuthenticatorData x = do
         userPresent = userPresent,
         userVerified = userVerified,
         counter = counter' x,
-        attestedCredentialData = attestedCredentialData
+        attestedCredentialData = attestedCredentialData,
+        rawData = originalBs
       }
 
 -- Effe voor de duidelijkheid. De bytes die overblijven van parsen van
@@ -566,18 +616,26 @@ decodeAttestationObjectRaw = do
   pure $ AttestationObjectRaw authDataRaw fmt attStmt
 
 -- TODO Make more generic
-keyDecoder :: Decoder s Ec2Key
+keyDecoder :: Decoder s PublicKey
 keyDecoder = do
   map :: (IntMap CBOR.Term) <- Serialise.decode
   let key = do
         keyType <- IntMap.lookup 1 map
         guard $ keyType == TInt 2
         alg <- IntMap.lookup 3 map
-        guard $ alg == TInt (-7)
-        TInt curve <- IntMap.lookup (-1) map
+        guard $ alg == TInt (-7) -- TODO COSEAlgorithmIdentifier
+        TInt _curve <- IntMap.lookup (-1) map -- TODO based on identifier select curve
+        let curve = ECDSA.getCurveByName ECDSA.SEC_p256r1
         TBytes x <- IntMap.lookup (-2) map
         TBytes y <- IntMap.lookup (-3) map
-        pure $ Ec2Key {curve = curve, x = x, y = y}
+        let point = ECDSA.Point (bsToInteger x) (bsToInteger y)
+        guard $ ECDSA.isPointValid curve point
+        pure $
+          Ec2Key
+            ECDSA.PublicKey
+              { public_curve = curve,
+                public_q = point
+              }
   maybe (fail "invalid key") pure key
 
 ----- Encoding utils

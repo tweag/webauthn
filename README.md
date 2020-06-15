@@ -33,3 +33,9 @@ $ cachix use haskell-fido2
 1. Install https://marketplace.visualstudio.com/items?itemName=arrterian.nix-env-selector
 2. Install https://marketplace.visualstudio.com/items?itemName=DigitalAssetHoldingsLLC.ghcide
 3. Done!
+
+## Status
+
+This library is experimental and currently does some untested funky stuff.
+Especially the crypto things are in flux and need to be verified by someone
+competent.

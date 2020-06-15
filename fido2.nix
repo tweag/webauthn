@@ -1,8 +1,9 @@
-{ mkDerivation, aeson, aeson-qq, base, base64-bytestring, binary
-, bytestring, cborg, containers, cookie, cryptonite, directory
-, filepath, hspec, http-types, mtl, scientific, scotty, serialise
-, stdenv, stm, text, transformers, unordered-containers, uuid
-, vector, wai, wai-middleware-static, warp, x509
+{ mkDerivation, aeson, aeson-qq, asn1-encoding, base
+, base64-bytestring, binary, bytestring, cborg, containers, cookie
+, cryptonite, directory, filepath, hspec, http-types, memory, mtl
+, scientific, scotty, serialise, stdenv, stm, text, transformers
+, unordered-containers, uuid, vector, wai, wai-middleware-static
+, warp, x509
 }:
 mkDerivation {
   pname = "fido2";
@@ -11,9 +12,9 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    aeson base base64-bytestring binary bytestring cborg containers
-    cryptonite scientific serialise text unordered-containers vector
-    x509
+    aeson asn1-encoding base base64-bytestring binary bytestring cborg
+    containers cryptonite memory scientific serialise text
+    unordered-containers vector x509
   ];
   executableHaskellDepends = [
     aeson aeson-qq base base64-bytestring bytestring containers cookie
