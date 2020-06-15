@@ -48,6 +48,7 @@ data RelyingPartyConfig = RelyingPartyConfig {origin :: Fido2.Origin, rpId :: Fi
 --
 --  - TLS token binding (spec step 10)
 --  - Client extensions (spec step 14)
+--  - Signature counting (spec step 17)
 verifyAssertionResponse ::
   RelyingPartyConfig ->
   Fido2.Challenge ->
@@ -97,25 +98,3 @@ verifyAssertionResponse
         (Fido2.URLEncodedBase64 sig) = signature
         verifyResult = Fido2.verifyEC publicKey msg sig
     when (not verifyResult) (Left InvalidSignature)
-    -- 17. If the signature counter value authData.signCount is nonzero or the value
-    -- stored in conjunction with credential’s id attribute is nonzero, then run
-    -- the following sub-step:
-    --
-    --  - If the signature counter value authData.signCount is
-    --
-    --    - greater than the signature counter value stored in conjunction with
-    --      credential’s id attribute.  Update the stored signature counter value,
-    --      associated with credential’s id attribute, to be the value of
-    --      authData.signCount.
-    --    - less than or equal to the signature counter value stored in conjunction
-    --      with credential’s id attribute.  This is a signal that the authenticator
-    --      may be cloned, i.e. at least two copies of the credential private key may
-    --      exist and are being used in parallel. Relying Parties should incorporate
-    --      this information into their risk scoring. Whether the Relying Party updates
-    --      the stored signature counter value in this case, or not, or fails the
-    --      authentication ceremony or not, is Relying Party-specific.
-    --
-    -- If all the above steps are successful, continue with the authentication
-    -- ceremony as appropriate. Otherwise, fail the authentication ceremony.
-    -- TODO: Implement signature counting
-    pure ()
