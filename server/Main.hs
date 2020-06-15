@@ -235,7 +235,6 @@ completeLogin sessions users = do
     verifyLogin sessionId session userId challenge = do
       credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
       credentials <- (liftIO $ getUserCredentials userId users) >>= handleError
-
       handleError $
         Assertion.verifyAssertionResponse
           relyingPartyConfig
@@ -244,7 +243,6 @@ completeLogin sessions users = do
           -- TODO: Read this from a DB or something?
           Fido2.UserVerificationPreferred
           credential
-
       liftIO
         $ STM.atomically
         $ casSession sessions sessionId session (Authenticated userId)
@@ -255,13 +253,12 @@ getUserCredentials userId users = runExceptT $ do
   users <- lift $ STM.atomically $ do
     (users, _) <- STM.readTVar users
     pure users
-
-  User{credentials} <- maybe (throwError "asdf") (pure) $ Map.lookup userId users
+  User {credentials} <- maybe (throwError "asdf") (pure) $ Map.lookup userId users
   pure $ fmap attestedCredentialDataToCredential credentials
 
 attestedCredentialDataToCredential :: Fido2.AttestedCredentialData -> Assertion.Credential
-attestedCredentialDataToCredential Fido2.AttestedCredentialData{credentialId, credentialPublicKey} =
-  Assertion.Credential{id=credentialId, publicKey=credentialPublicKey}
+attestedCredentialDataToCredential Fido2.AttestedCredentialData {credentialId, credentialPublicKey} =
+  Assertion.Credential {id = credentialId, publicKey = credentialPublicKey}
 
 beginRegistration :: TVar Sessions -> Scotty.ActionM ()
 beginRegistration sessions = do
@@ -354,7 +351,6 @@ relyingPartyConfig = Assertion.RelyingPartyConfig {origin = serverOrigin, rpId =
 
 rpEntity :: Fido2.PublicKeyCredentialRpEntity
 rpEntity = Fido2.PublicKeyCredentialRpEntity {id = Just (Fido2.RpId domain), name = "ACME"}
-
 
 main :: IO ()
 main = do
