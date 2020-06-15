@@ -132,7 +132,7 @@ casSession sessions sessionId old new = do
 data Session
   = Unauthenticated
   | Registering Fido2.UserId Fido2.Challenge
-  | Authenticating Fido2.Challenge
+  | Authenticating Fido2.UserId Fido2.Challenge
   | Authenticated Fido2.UserId
   deriving (Eq, Show)
 
@@ -153,7 +153,7 @@ _isRegistering session = case session of
 
 isAuthenticating :: Session -> Bool
 isAuthenticating session = case session of
-  Authenticating _ -> True
+  Authenticating _ _ -> True
   _ -> False
 
 isAuthenticated :: Session -> Bool
@@ -213,7 +213,7 @@ beginLogin sessions users = do
     (not . isUnauthenticated $ session)
     (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
   challenge <- liftIO $ Fido2.newChallenge
-  liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating challenge)
+  liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating userId challenge)
   Scotty.json $
     Fido2.PublicKeyCredentialRequestOptions
       { rpId = Nothing,
@@ -224,27 +224,43 @@ beginLogin sessions users = do
       }
 
 completeLogin :: TVar Sessions -> TVar Users -> Scotty.ActionM ()
-completeLogin sessions _users = do
+completeLogin sessions users = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
-    Authenticating challenge -> do
-      credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-      case verifyLogin challenge credential of
-        Left err -> Scotty.raiseStatus HTTP.status400 $ "Login error: " <> (LText.pack . show $ err)
-        Right () -> do
-          let userId = undefined -- TODO: how do we get this??
-          liftIO
-            $ STM.atomically
-            $ casSession sessions sessionId session (Authenticated userId)
-          Scotty.json @Text "Welcome."
+    Authenticating userId challenge -> verifyLogin sessionId session userId challenge
     _ -> Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login"
   where
-    verifyLogin ::
-      Fido2.Challenge ->
-      Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse ->
-      Either Assertion.Error ()
-    verifyLogin challenge credential =
-      undefined
+    verifyLogin :: SessionId -> Session -> Fido2.UserId -> Fido2.Challenge -> Scotty.ActionM ()
+    verifyLogin sessionId session userId challenge = do
+      credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
+      credentials <- (liftIO $ getUserCredentials userId users) >>= handleError
+
+      handleError $
+        Assertion.verifyAssertionResponse
+          relyingPartyConfig
+          challenge
+          credentials
+          -- TODO: Read this from a DB or something?
+          Fido2.UserVerificationPreferred
+          credential
+
+      liftIO
+        $ STM.atomically
+        $ casSession sessions sessionId session (Authenticated userId)
+      Scotty.json @Text "Welcome."
+
+getUserCredentials :: Fido2.UserId -> TVar Users -> IO (Either String [Assertion.Credential])
+getUserCredentials userId users = runExceptT $ do
+  users <- lift $ STM.atomically $ do
+    (users, _) <- STM.readTVar users
+    pure users
+
+  User{credentials} <- maybe (throwError "asdf") (pure) $ Map.lookup userId users
+  pure $ fmap attestedCredentialDataToCredential credentials
+
+attestedCredentialDataToCredential :: Fido2.AttestedCredentialData -> Assertion.Credential
+attestedCredentialDataToCredential Fido2.AttestedCredentialData{credentialId, credentialPublicKey} =
+  Assertion.Credential{id=credentialId, publicKey=credentialPublicKey}
 
 beginRegistration :: TVar Sessions -> Scotty.ActionM ()
 beginRegistration sessions = do
