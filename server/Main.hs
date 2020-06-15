@@ -54,7 +54,8 @@ newSession sessions = do
         { Cookie.setCookieName = "session",
           Cookie.setCookieValue = UUID.toASCIIBytes sessionId,
           Cookie.setCookieSameSite = Just Cookie.sameSiteStrict,
-          Cookie.setCookieHttpOnly = True
+          Cookie.setCookieHttpOnly = True,
+          Cookie.setCookiePath = Just "/"
           -- Does not work on localhost: the browser doesn't send any cookies
           -- to a non-TLS version of localhost.
           -- TODO: Use mkcert to get a HTTPS setup for localhost.
