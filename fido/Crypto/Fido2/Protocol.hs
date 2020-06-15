@@ -57,17 +57,18 @@ import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Types as ECDSA
 import qualified Crypto.Random as Random
 import Crypto.Random (MonadRandom)
+import qualified Data.ASN1.BinaryEncoding as ASN1
+import qualified Data.ASN1.Encoding as ASN1
+import qualified Data.ASN1.Prim as ASN1
 import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Internal as Aeson
 import qualified Data.Aeson.Parser as Aeson
 import qualified Data.Aeson.Types as Aeson
 import Data.Aeson.Types ((.:), (.:?))
-import Data.Bifunctor (bimap)
 import Data.Bifunctor (first)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
-import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64
@@ -375,13 +376,20 @@ instance Aeson.FromJSON URLEncodedBase64 where
 instance Aeson.ToJSON URLEncodedBase64 where
   toJSON (URLEncodedBase64 bs) = Aeson.toJSON . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
 
-data PublicKey
-  = Ec2Key
-      { curve :: Int,
-        x :: ByteString,
-        y :: ByteString
-      }
+data PublicKey = Ec2Key ECDSA.PublicKey
   deriving (Show)
+
+-- | EC2 signatures are ASN.1 encoded
+--
+-- ASN.1 decoding stolen from
+-- https://hackage.haskell.org/package/x509-validation-1.6.11/docs/src/Data.X509.Validation.Signature.html#verifyECDSA
+decodeEC2Signature :: ByteString -> Maybe ECDSA.Signature
+decodeEC2Signature sigbs =
+  case ASN1.decodeASN1' ASN1.BER sigbs of
+    Left _ -> Nothing
+    Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
+      Just (ECDSA.Signature r s)
+    Right _ -> Nothing
 
 -- | Convert an unsigned big endian octet sequence to the integer
 -- it represents. Taken from @hs-jose@.
@@ -393,24 +401,22 @@ bsToInteger = BS.foldl (\acc x -> acc * 256 + toInteger x) 0
 -- | Verify an EC key. Taken from @hs-jose@.
 --
 -- TODO: Test the crap out of this.
+--
+-- For backwards compatibility reasons, the "signature" field is NOT
+-- formatted as specified in COSE, but formatted as an ASN.1 pair
+--
+-- RSA keys are formatted as PKCS#1
+-- and EdDSA keys are formatted as COSE (though this is unspecified)
+-- https://github.com/w3c/webauthn/issues/1124#issuecomment-644008314
 verifyEC ::
-  (BA.ByteArrayAccess msg) =>
   PublicKey ->
-  msg ->
+  ByteString ->
   ByteString ->
   Bool
-verifyEC Ec2Key {x, y} m s = ECDSA.verify Hash.SHA256 pubkey sig m
-  where
-    pubkey = ECDSA.PublicKey curve point
-    -- Source: https://tools.ietf.org/html/rfc8152#section-13.1 For P-256, we need
-    -- the secp256r1 curve.
-    curve = ECDSA.getCurveByName ECDSA.SEC_p256r1
-    -- The octets are in big endian order.
-    point = ECDSA.Point (bsToInteger x) (bsToInteger y)
-    sig =
-      uncurry ECDSA.Signature
-        $ bimap bsToInteger bsToInteger
-        $ BS.splitAt (BS.length s `div` 2) s
+verifyEC (Ec2Key publicKey) message signature =
+  case decodeEC2Signature signature of
+    Nothing -> False
+    Just signature -> ECDSA.verify Hash.SHA256 publicKey signature message
 
 data WebauthnType = Create | Get
   deriving (Eq, Show)
@@ -616,11 +622,18 @@ keyDecoder = do
         keyType <- IntMap.lookup 1 map
         guard $ keyType == TInt 2
         alg <- IntMap.lookup 3 map
-        guard $ alg == TInt (-7)
-        TInt curve <- IntMap.lookup (-1) map
+        guard $ alg == TInt (-7) -- TODO COSEAlgorithmIdentifier
+        TInt _curve <- IntMap.lookup (-1) map -- TODO based on identifier select curve
         TBytes x <- IntMap.lookup (-2) map
         TBytes y <- IntMap.lookup (-3) map
-        pure $ Ec2Key {curve = curve, x = x, y = y}
+        let x' = bsToInteger x
+        let y' = bsToInteger y
+        pure $
+          Ec2Key
+            ECDSA.PublicKey
+              { public_curve = ECDSA.getCurveByName ECDSA.SEC_p256r1,
+                public_q = ECDSA.Point x' y'
+              }
   maybe (fail "invalid key") pure key
 
 ----- Encoding utils

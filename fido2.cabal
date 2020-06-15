@@ -30,6 +30,7 @@ library
   build-depends:
     binary,
     aeson,
+    asn1-encoding,
     bytestring,
     base64-bytestring,
     containers,
