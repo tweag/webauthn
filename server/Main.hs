@@ -304,7 +304,7 @@ completeRegistration sessions users = do
 defaultPkcco :: RegisterBeginReq -> Fido2.UserId -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
 defaultPkcco RegisterBeginReq {userName, displayName} userId challenge =
   Fido2.PublicKeyCredentialCreationOptions
-    { rp = Fido2.PublicKeyCredentialRpEntity {id = Nothing, name = "ACME"},
+    { rp = rpEntity,
       user = Fido2.PublicKeyCredentialUserEntity {id = userId, displayName = displayName, name = userName},
       challenge = challenge,
       -- Empty credentialparameters are not supported.
@@ -329,6 +329,15 @@ domain = "localhost"
 
 serverOrigin :: Fido2.Origin
 serverOrigin = Fido2.Origin $ "http://" <> domain <> ":" <> (Text.pack $ show port)
+
+-- This type is very very close to the PublicKeyCredentialRpEntity. Should those be the
+-- same thing? Origin and ID are very similar things.
+relyingPartyConfig :: Assertion.RelyingPartyConfig
+relyingPartyConfig = Assertion.RelyingPartyConfig {origin = serverOrigin, rpId = Fido2.RpId domain}
+
+rpEntity :: Fido2.PublicKeyCredentialRpEntity
+rpEntity = Fido2.PublicKeyCredentialRpEntity {id = Just (Fido2.RpId domain), name = "ACME"}
+
 
 main :: IO ()
 main = do
