@@ -13,7 +13,6 @@ where
 import Control.Concurrent.STM (TVar)
 import qualified Control.Concurrent.STM as STM
 import Control.Monad (when)
-import Control.Monad.Except (lift, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import qualified Crypto.Fido2.Assertion as Assertion
@@ -24,7 +23,6 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
@@ -138,24 +136,9 @@ data Session
   | Authenticated Fido2.UserId
   deriving (Eq, Show)
 
-data User
-  = User
-      { credentials :: [Fido2.AttestedCredentialData]
-      }
-
 isUnauthenticated :: Session -> Bool
 isUnauthenticated session = case session of
   Unauthenticated -> True
-  _ -> False
-
-_isRegistering :: Session -> Bool
-_isRegistering session = case session of
-  Registering _ _ -> True
-  _ -> False
-
-isAuthenticating :: Session -> Bool
-isAuthenticating session = case session of
-  Authenticating _ _ -> True
   _ -> False
 
 isAuthenticated :: Session -> Bool
@@ -257,10 +240,6 @@ completeLogin db sessions = do
         $ casSession sessions sessionId session (Authenticated userId)
       Scotty.json @Text "Welcome."
 
-attestedCredentialDataToCredential :: Fido2.AttestedCredentialData -> Assertion.Credential
-attestedCredentialDataToCredential Fido2.AttestedCredentialData {credentialId, credentialPublicKey} =
-  Assertion.Credential {id = credentialId, publicKey = credentialPublicKey}
-
 beginRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
 beginRegistration db sessions = do
   (sessionId, session) <- getSessionScotty sessions
@@ -303,7 +282,7 @@ completeRegistration db sessions = do
       Fido2.PublicKeyCredential {response} <- Scotty.jsonData
       -- step 1 to 17
       -- We abort if we couldn't attest the credential
-      attestedCredential@Fido2.AttestedCredentialData
+      Fido2.AttestedCredentialData
         { credentialId,
           credentialPublicKey
         } <-
