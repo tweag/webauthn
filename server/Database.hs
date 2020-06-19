@@ -10,7 +10,7 @@ module Database
     commit,
     connect,
     getUserByCredentialId,
-    getCredentialsByUserId,
+    getCredentialIdsByUserId,
     getPublicKeyByCredentialId,
     initialize,
     rollback,
@@ -132,8 +132,8 @@ getUserByCredentialId
       [Sqlite.Only userId] -> pure $ Just $ UserId $ URLEncodedBase64 $ userId
       _ -> fail "Unreachable: attested_credential_data.id has a unique index."
 
-getCredentialsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]
-getCredentialsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
+getCredentialIdsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]
+getCredentialIdsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
   credentialIds :: [[ByteString]] <-
     Sqlite.query
       conn

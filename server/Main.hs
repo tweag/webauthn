@@ -209,12 +209,12 @@ beginLogin :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
 beginLogin db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   userId <- Scotty.jsonData @Fido2.UserId
-  theCredentials <- liftIO $ do
+  credentialIds <- liftIO $ do
     tx <- Database.begin db
-    cr <- Database.getCredentialsByUserId tx userId
+    cr <- Database.getCredentialIdsByUserId tx userId
     Database.commit tx
     pure cr
-  when (theCredentials == []) $ Scotty.raiseStatus HTTP.status404 "User not found"
+  when (credentialIds == []) $ Scotty.raiseStatus HTTP.status404 "User not found"
   when
     (not . isUnauthenticated $ session)
     (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
@@ -225,7 +225,7 @@ beginLogin db sessions = do
       { rpId = Nothing,
         timeout = Nothing,
         challenge = challenge,
-        allowCredentials = Just (map mkCredentialDescriptor theCredentials),
+        allowCredentials = Just (map mkCredentialDescriptor credentialIds),
         userVerification = Nothing
       }
 
