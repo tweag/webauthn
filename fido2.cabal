@@ -56,22 +56,23 @@ executable server
   build-depends:
     aeson,
     aeson-qq,
-    containers,
-    cryptonite,
-    cookie,
-    fido2,
-    bytestring,
     base64-bytestring,
+    bytestring,
+    containers,
+    cookie,
+    cryptonite,
+    fido2,
+    http-types,
+    mtl,
     scotty,
+    sqlite-simple,
     stm,
+    text,
+    transformers,
     uuid,
     wai,
     wai-middleware-static,
-    text,
-    transformers,
-    mtl,
     warp,
-    http-types
 
 test-suite tests
   import: sanity
