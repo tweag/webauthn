@@ -58,6 +58,7 @@ executable server
     aeson,
     aeson-qq,
     base64-bytestring,
+    binary,
     bytestring,
     containers,
     cookie,

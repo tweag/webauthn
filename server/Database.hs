@@ -25,6 +25,7 @@ import Crypto.Fido2.Protocol
     UserId (UserId),
   )
 import qualified Crypto.Fido2.Protocol as Fido2
+import qualified Data.Binary as Binary
 import qualified Database.SQLite.Simple as Sqlite
 
 type Connection = Sqlite.Connection
@@ -124,8 +125,8 @@ addAttestedCredentialData
       \ (?, ?, ?, ?);                                               "
       ( credentialId,
         userId,
-        Fido2.publicKeyX publicKey,
-        Fido2.publicKeyY publicKey
+        Binary.encode $ Fido2.publicKeyX publicKey,
+        Binary.encode $ Fido2.publicKeyY publicKey
       )
 
 getUserByCredentialId :: Transaction -> Fido2.CredentialId -> IO (Maybe Fido2.UserId)
@@ -154,7 +155,7 @@ getCredentialsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = d
     mkCredential (id, x, y) =
       Assertion.Credential
         { id = CredentialId $ URLEncodedBase64 id,
-          publicKey = Fido2.mkPublicKey x y
+          publicKey = Fido2.mkPublicKey (Binary.decode x) (Binary.decode y)
         }
 
 getCredentialIdsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]

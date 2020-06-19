@@ -17,8 +17,8 @@ mkDerivation {
     unordered-containers vector x509
   ];
   executableHaskellDepends = [
-    aeson aeson-qq base base64-bytestring bytestring containers cookie
-    cryptonite http-types mtl scotty sqlite-simple stm text
+    aeson aeson-qq base base64-bytestring binary bytestring containers
+    cookie cryptonite http-types mtl scotty sqlite-simple stm text
     transformers uuid wai wai-middleware-static warp
   ];
   testHaskellDepends = [
