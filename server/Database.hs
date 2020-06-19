@@ -5,6 +5,7 @@ module Database
     Transaction (), -- Constructor deliberately not exposed.
     addAttestedCredentialData,
     addUser,
+    withTransaction,
     begin,
     commit,
     connect,
@@ -66,6 +67,17 @@ initialize conn = do
     \ ix_attested_credential_data_user_id                                      \
     \ on attested_credential_data(user_id);                                    "
     ()
+
+-- | Run an action using `Sqlite.withTransaction`.
+--
+-- If exceptions occur within the transaciton, the transaction is aborted
+-- with `ROLLBACK TRANSACTION`. Otherwise, the transaction is committed using
+-- `COMMIT TRANSACTION`.
+--
+-- This ensures that we always close our transactions and don't leave them
+-- open when exceptions occur.
+withTransaction :: Sqlite.Connection -> (Transaction -> IO a) -> IO a
+withTransaction conn action = Sqlite.withTransaction conn (action (Transaction conn))
 
 begin :: Sqlite.Connection -> IO Transaction
 begin conn = do
