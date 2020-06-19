@@ -42,6 +42,9 @@ module Crypto.Fido2.Protocol
     EncodingRules (..),
     PublicKey (..),
     verifyEC,
+    publicKeyPoint,
+    publicKeyX,
+    publicKeyY,
   )
 where
 
@@ -379,6 +382,25 @@ instance Aeson.ToJSON URLEncodedBase64 where
 
 data PublicKey = Ec2Key ECDSA.PublicKey
   deriving (Show)
+
+publicKeyPoint :: PublicKey -> ECDSA.Point
+publicKeyPoint (Ec2Key key) =
+  let ECDSA.PublicKey {public_q} = key
+   in public_q
+
+publicKeyX :: PublicKey -> Integer
+publicKeyX key =
+  case publicKeyPoint key of
+    ECDSA.Point x _y -> x
+    -- TODO: Does this ever happen?
+    ECDSA.PointO -> error "Got PointO at infinity. We always expect a key with X and Y"
+
+publicKeyY :: PublicKey -> Integer
+publicKeyY key =
+  case publicKeyPoint key of
+    ECDSA.Point _x y -> y
+    -- TODO: Does this ever happen?
+    ECDSA.PointO -> error "Got PointO at infinity. We always expect a key with X and Y"
 
 -- | EC2 signatures are ASN.1 encoded
 --
