@@ -192,10 +192,8 @@ beginLogin :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
 beginLogin db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   userId <- Scotty.jsonData @Fido2.UserId
-  credentialIds <- liftIO $ do
-    tx <- Database.begin db
+  credentialIds <- liftIO $ Database.withTransaction db $ \tx -> do
     cr <- Database.getCredentialIdsByUserId tx userId
-    Database.commit tx
     pure cr
   when (credentialIds == []) $ Scotty.raiseStatus HTTP.status404 "User not found"
   when
@@ -222,10 +220,8 @@ completeLogin db sessions = do
     verifyLogin :: SessionId -> Session -> Fido2.UserId -> Fido2.Challenge -> Scotty.ActionM ()
     verifyLogin sessionId session userId challenge = do
       credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-      credentials <- liftIO $ do
-        tx <- Database.begin db
+      credentials <- liftIO $ Database.withTransaction db $ \tx -> do
         cr <- Database.getCredentialsByUserId tx userId
-        Database.commit tx
         pure cr
       handleError $
         Assertion.verifyAssertionResponse
@@ -260,10 +256,8 @@ beginRegistration db sessions = do
                 name = userName
               }
       Scotty.json $ defaultPkcco user challenge
-      liftIO $ do
-        tx <- Database.begin db
+      liftIO $ Database.withTransaction db $ \tx -> do
         Database.addUser tx user
-        Database.commit tx
         STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
 
 completeRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
@@ -295,19 +289,19 @@ completeRegistration db sessions = do
             response
       -- if the credential was succesfully attested, we will see if the
       -- credential doesn't exist yet, and if it doesn't, insert it.
-      tx <- liftIO $ Database.begin db
-      -- If a credential with this id existed already, it must belong to the
-      -- current user, otherwise it's an error. The spec allows removing the
-      -- credential from the old user instead, but we don't do that.
-      existingUserId <- liftIO $ Database.getUserByCredentialId tx credentialId
-      case existingUserId of
-        Nothing -> pure ()
-        Just existingUserId | userId == existingUserId -> pure ()
-        Just _differentUserId -> handleError $ Left AlreadyRegistered
-      liftIO $ do
-        Database.addAttestedCredentialData tx userId credentialId credentialPublicKey
-        STM.atomically $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
-        Database.commit tx
+      result :: Either RegistrationResult () <- liftIO $ Database.withTransaction db $ \tx -> do
+        -- If a credential with this id existed already, it must belong to the
+        -- current user, otherwise it's an error. The spec allows removing the
+        -- credential from the old user instead, but we don't do that.
+        existingUserId <- Database.getUserByCredentialId tx credentialId
+        case existingUserId of
+          Nothing -> do
+            Database.addAttestedCredentialData tx userId credentialId credentialPublicKey
+            pure $ Right ()
+          Just existingUserId | userId == existingUserId -> pure $ Right ()
+          Just _differentUserId -> pure $ Left AlreadyRegistered
+      handleError result
+      liftIO $ STM.atomically $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
 
 defaultPkcco :: Fido2.PublicKeyCredentialUserEntity -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
 defaultPkcco userEntity challenge =
