@@ -239,12 +239,16 @@ completeLogin db sessions = do
     verifyLogin :: SessionId -> Session -> Fido2.UserId -> Fido2.Challenge -> Scotty.ActionM ()
     verifyLogin sessionId session userId challenge = do
       credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-      theCredentials <- error "TODO(ruuda): Get credentials from db by user id." :: Scotty.ActionM [Assertion.Credential]
+      credentials <- liftIO $ do
+        tx <- Database.begin db
+        cr <- Database.getCredentialsByUserId tx userId
+        Database.commit tx
+        pure cr
       handleError $
         Assertion.verifyAssertionResponse
           relyingPartyConfig
           challenge
-          theCredentials
+          credentials
           -- TODO: Read this from a DB or something?
           Fido2.UserVerificationPreferred
           credential
@@ -267,7 +271,7 @@ beginRegistration db sessions = do
   where
     generateRegistrationChallenge :: SessionId -> Session -> Scotty.ActionM ()
     generateRegistrationChallenge sessionId session = do
-      RegisterBeginReq{userName, displayName} <- Scotty.jsonData @RegisterBeginReq
+      RegisterBeginReq {userName, displayName} <- Scotty.jsonData @RegisterBeginReq
       challenge <- liftIO $ Fido2.newChallenge
       userId <- liftIO $ Fido2.newUserId
       let user =

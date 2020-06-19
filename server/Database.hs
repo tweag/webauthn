@@ -11,12 +11,14 @@ module Database
     connect,
     getUserByCredentialId,
     getCredentialIdsByUserId,
+    getCredentialsByUserId,
     getPublicKeyByCredentialId,
     initialize,
     rollback,
   )
 where
 
+import qualified Crypto.Fido2.Assertion as Assertion
 import Crypto.Fido2.Protocol
   ( CredentialId (CredentialId),
     PublicKey,
@@ -131,6 +133,21 @@ getUserByCredentialId
       [] -> pure Nothing
       [Sqlite.Only userId] -> pure $ Just $ UserId $ URLEncodedBase64 $ userId
       _ -> fail "Unreachable: attested_credential_data.id has a unique index."
+
+getCredentialsByUserId :: Transaction -> Fido2.UserId -> IO [Assertion.Credential]
+getCredentialsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
+  credentialRows <-
+    Sqlite.query
+      conn
+      "select id, public_key_x, public_key_y from attested_credential_data where user_id = ?;"
+      [userId]
+  pure $ fmap (mkCredential) $ credentialRows
+  where
+    mkCredential (id, x, y) =
+      Assertion.Credential
+        { id = CredentialId $ URLEncodedBase64 id,
+          publicKey = Fido2.mkPublicKey x y
+        }
 
 getCredentialIdsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]
 getCredentialIdsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
