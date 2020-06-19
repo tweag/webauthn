@@ -2,3 +2,5 @@ dist-newstyle
 dist
 cabal.project.local
 cabal.project.local~
+*.sqlite3
+*.sqlite3-journal
