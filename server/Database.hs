@@ -10,7 +10,6 @@ module Database
     getUserByCredentialId,
     getCredentialIdsByUserId,
     getCredentialsByUserId,
-    getPublicKeyByCredentialId,
     initialize,
   )
 where
@@ -157,22 +156,3 @@ getCredentialIdsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) =
       "select id from attested_credential_data where user_id = ?;"
       [userId]
   pure $ fmap (CredentialId . URLEncodedBase64 . Sqlite.fromOnly) $ credentialIds
-
-getPublicKeyByCredentialId ::
-  Transaction ->
-  Fido2.CredentialId ->
-  IO (Maybe Fido2.PublicKey)
-getPublicKeyByCredentialId
-  (Transaction conn)
-  (CredentialId (URLEncodedBase64 credentialId)) = do
-    result <-
-      Sqlite.query
-        conn
-        " select (public_key_x, public_key_y) \
-        \ from attested_credential_data                         \
-        \ where id = ?;                                         "
-        [credentialId]
-    case result of
-      [] -> pure Nothing
-      [(x, y)] -> pure $ Fido2.mkEcdsaPublicKey x y
-      _ -> fail "Unreachable: attested_credential_data.id has a unique index."
