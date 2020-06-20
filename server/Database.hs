@@ -6,15 +6,12 @@ module Database
     addAttestedCredentialData,
     addUser,
     withTransaction,
-    begin,
-    commit,
     connect,
     getUserByCredentialId,
     getCredentialIdsByUserId,
     getCredentialsByUserId,
     getPublicKeyByCredentialId,
     initialize,
-    rollback,
   )
 where
 
@@ -80,17 +77,6 @@ initialize conn = do
 -- open when exceptions occur.
 withTransaction :: Sqlite.Connection -> (Transaction -> IO a) -> IO a
 withTransaction conn action = Sqlite.withTransaction conn (action (Transaction conn))
-
-begin :: Sqlite.Connection -> IO Transaction
-begin conn = do
-  Sqlite.execute conn "begin;" ()
-  pure $ Transaction conn
-
-commit :: Transaction -> IO ()
-commit (Transaction conn) = Sqlite.execute conn "commit;" ()
-
-rollback :: Transaction -> IO ()
-rollback (Transaction conn) = Sqlite.execute conn "rollback;" ()
 
 addUser ::
   Transaction ->
