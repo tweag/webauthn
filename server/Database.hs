@@ -26,6 +26,7 @@ import Crypto.Fido2.Protocol
   )
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Data.Binary as Binary
+import qualified Data.Maybe as Maybe
 import qualified Database.SQLite.Simple as Sqlite
 
 type Connection = Sqlite.Connection
@@ -116,7 +117,7 @@ addAttestedCredentialData
   (Transaction conn)
   (UserId (URLEncodedBase64 userId))
   (CredentialId (URLEncodedBase64 credentialId))
-  publicKey =
+  publicKey = do
     Sqlite.execute
       conn
       " insert into attested_credential_data                        \
@@ -150,13 +151,17 @@ getCredentialsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = d
       conn
       "select id, public_key_x, public_key_y from attested_credential_data where user_id = ?;"
       [userId]
-  pure $ fmap (mkCredential) $ credentialRows
+  pure $ Maybe.catMaybes $ fmap (mkCredential) $ credentialRows
   where
-    mkCredential (id, x, y) =
-      Assertion.Credential
-        { id = CredentialId $ URLEncodedBase64 id,
-          publicKey = Fido2.mkPublicKey (Binary.decode x) (Binary.decode y)
-        }
+    mkCredential (id, x, y) = do
+      -- TODO(#22): Convert to the compressed representation so we don't need
+      --  the Maybe.
+      publicKey <- Fido2.mkEcdsaPublicKey (Binary.decode x) (Binary.decode y)
+      pure $
+        Assertion.Credential
+          { id = CredentialId $ URLEncodedBase64 id,
+            publicKey = publicKey
+          }
 
 getCredentialIdsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]
 getCredentialIdsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
@@ -183,5 +188,5 @@ getPublicKeyByCredentialId
         [credentialId]
     case result of
       [] -> pure Nothing
-      [(x, y)] -> pure $ Just $ Fido2.mkPublicKey x y
+      [(x, y)] -> pure $ Fido2.mkEcdsaPublicKey x y
       _ -> fail "Unreachable: attested_credential_data.id has a unique index."

@@ -97,5 +97,5 @@ verifyAssertionResponse
     rawData' <- maybe (Left RawDataUnavailable) pure rawData
     let msg = rawData' <> (BA.convert clientDataHash)
         (Fido2.URLEncodedBase64 sig) = signature
-        verifyResult = Fido2.verifyEC publicKey msg sig
+        verifyResult = Fido2.verifyEcdsa publicKey msg sig
     when (not verifyResult) (Left InvalidSignature)

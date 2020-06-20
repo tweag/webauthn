@@ -40,13 +40,12 @@ module Crypto.Fido2.Protocol
     UserVerificationRequirement (..),
     AuthenticatorAttachment (..),
     EncodingRules (..),
-    PublicKey (..),
-    verifyEC,
-    -- This will definitely change do not depend on it.
-    publicKeyPoint,
+    verifyEcdsa,
+    -- This will probably change. Do not depend on it.
+    PublicKey,
     publicKeyX,
     publicKeyY,
-    mkPublicKey,
+    mkEcdsaPublicKey,
   )
 where
 
@@ -382,44 +381,58 @@ instance Aeson.FromJSON URLEncodedBase64 where
 instance Aeson.ToJSON URLEncodedBase64 where
   toJSON (URLEncodedBase64 bs) = Aeson.toJSON . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
 
-data PublicKey = Ec2Key ECDSA.PublicKey
-  deriving (Show)
+-- TODO(#20): Support other types of keys / signatures.
+data PublicKey = Ecdsa {point :: Point, curveName :: ECDSA.CurveName}
+  deriving stock (Show)
 
-publicKeyPoint :: PublicKey -> ECDSA.Point
-publicKeyPoint (Ec2Key key) =
-  let ECDSA.PublicKey {public_q} = key
-   in public_q
+-- | We have our own type here because we want to avoid partial functions when
+-- getting the X and Y values on the public curve. (Otherwise we'd have to deal
+-- with the infinity point which should never occur in this program -- it's
+-- not allowed by the COSE spec [1]).
+--
+-- You can use convertPointToCryptonite to get the representation that
+-- cryptonite uses. In the future, this should allow us to decouple the
+-- representation used for storage from the representation used to verify
+-- signatures.
+--
+-- TODO(#22): Convert this to just the x value and the sign.
+--
+-- [1]: https://tools.ietf.org/html/draft-ietf-cose-msg-24#section-13.1.1
+data Point = Point {x :: Integer, y :: Integer}
+  deriving stock (Show)
+
+convertKeyToCryptonite :: PublicKey -> ECDSA.PublicKey
+convertKeyToCryptonite Ecdsa {point, curveName} =
+  let curve = ECDSA.getCurveByName curveName
+   in ECDSA.PublicKey {public_curve = curve, public_q = convertPointToCryptonite point}
+
+isPointValid :: ECDSA.Curve -> Point -> Bool
+isPointValid curve point = ECDSA.isPointValid curve (convertPointToCryptonite point)
+
+convertPointToCryptonite :: Point -> ECDSA.Point
+convertPointToCryptonite Point {x, y} = ECDSA.Point x y
 
 publicKeyX :: PublicKey -> Integer
-publicKeyX key =
-  case publicKeyPoint key of
-    ECDSA.Point x _y -> x
-    -- TODO: Does this ever happen?
-    ECDSA.PointO -> error "Got PointO at infinity. We always expect a key with X and Y"
+publicKeyX = x . point
 
 publicKeyY :: PublicKey -> Integer
-publicKeyY key =
-  case publicKeyPoint key of
-    ECDSA.Point _x y -> y
-    -- TODO: Does this ever happen?
-    ECDSA.PointO -> error "Got PointO at infinity. We always expect a key with X and Y"
+publicKeyY = y . point
 
--- Make a public key at the constant curve that we currently only support.
-mkPublicKey :: Integer -> Integer -> PublicKey
-mkPublicKey x y =
-  let curve = ECDSA.getCurveByName ECDSA.SEC_p256r1
-   in Ec2Key
-        ECDSA.PublicKey
-          { public_curve = curve,
-            public_q = ECDSA.Point x y
-          }
+mkEcdsaPublicKey :: Integer -> Integer -> Maybe PublicKey
+mkEcdsaPublicKey x y = do
+  -- TODO(#22): Support other curves.
+  let curveName = ECDSA.SEC_p256r1
+      curve = ECDSA.getCurveByName curveName
+      point = Point {x, y}
+  guard $ isPointValid curve point
+  Just $ Ecdsa {curveName = curveName, point = point}
 
--- | EC2 signatures are ASN.1 encoded
+-- | Ecdsa signatures are ASN.1 encoded
 --
 -- ASN.1 decoding stolen from
 -- https://hackage.haskell.org/package/x509-validation-1.6.11/docs/src/Data.X509.Validation.Signature.html#verifyECDSA
-decodeEC2Signature :: ByteString -> Maybe ECDSA.Signature
-decodeEC2Signature sigbs =
+decodeEcdsaSignature :: ByteString -> Maybe ECDSA.Signature
+decodeEcdsaSignature sigbs =
   case ASN1.decodeASN1' ASN1.BER sigbs of
     Left _ -> Nothing
     Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
@@ -433,7 +446,7 @@ decodeEC2Signature sigbs =
 bsToInteger :: ByteString -> Integer
 bsToInteger = BS.foldl (\acc x -> acc * 256 + toInteger x) 0
 
--- | Verify an EC key. Taken from @hs-jose@.
+-- | Verify an Ecdsa signature. Taken from @hs-jose@.
 --
 -- TODO: Test the crap out of this.
 --
@@ -443,15 +456,15 @@ bsToInteger = BS.foldl (\acc x -> acc * 256 + toInteger x) 0
 -- RSA keys are formatted as PKCS#1
 -- and EdDSA keys are formatted as COSE (though this is unspecified)
 -- https://github.com/w3c/webauthn/issues/1124#issuecomment-644008314
-verifyEC ::
+verifyEcdsa ::
   PublicKey ->
   ByteString ->
   ByteString ->
   Bool
-verifyEC (Ec2Key publicKey) message signature =
-  case decodeEC2Signature signature of
+verifyEcdsa publicKey message signature =
+  case decodeEcdsaSignature signature of
     Nothing -> False
-    Just signature -> ECDSA.verify Hash.SHA256 publicKey signature message
+    Just signature -> ECDSA.verify Hash.SHA256 (convertKeyToCryptonite publicKey) signature message
 
 data WebauthnType = Create | Get
   deriving (Eq, Show)
@@ -610,9 +623,7 @@ decodeAuthenticatorData originalBs x = do
 -- attestedcredentialdataheader knallen we in deze
 decodeAttestedCredentialData :: AttestedCredentialDataHeader -> Decoder s AttestedCredentialData
 decodeAttestedCredentialData (AttestedCredentialDataHeader aaguid credentialId) = do
-  AttestedCredentialData aaguid (CredentialId (URLEncodedBase64 credentialId)) <$> keyDecoder
-
--- error "beetje werk al gedaan. nu nog wat bytjes doen"
+  AttestedCredentialData aaguid (CredentialId (URLEncodedBase64 credentialId)) <$> decodePublicKey
 
 decodeAuthenticatorDataRaw :: Binary.Get AuthenticatorDataRaw
 decodeAuthenticatorDataRaw = do
@@ -650,26 +661,19 @@ decodeAttestationObjectRaw = do
   pure $ AttestationObjectRaw authDataRaw fmt attStmt
 
 -- TODO Make more generic
-keyDecoder :: Decoder s PublicKey
-keyDecoder = do
+decodePublicKey :: Decoder s PublicKey
+decodePublicKey = do
   map :: (IntMap CBOR.Term) <- Serialise.decode
   let key = do
         keyType <- IntMap.lookup 1 map
         guard $ keyType == TInt 2
         alg <- IntMap.lookup 3 map
-        guard $ alg == TInt (-7) -- TODO COSEAlgorithmIdentifier
-        TInt _curve <- IntMap.lookup (-1) map -- TODO based on identifier select curve
-        let curve = ECDSA.getCurveByName ECDSA.SEC_p256r1
+        -- TODO(#20): Add support for multiple curves / key types.
+        guard $ alg == TInt (-7)
+        TInt _curve <- IntMap.lookup (-1) map
         TBytes x <- IntMap.lookup (-2) map
         TBytes y <- IntMap.lookup (-3) map
-        let point = ECDSA.Point (bsToInteger x) (bsToInteger y)
-        guard $ ECDSA.isPointValid curve point
-        pure $
-          Ec2Key
-            ECDSA.PublicKey
-              { public_curve = curve,
-                public_q = point
-              }
+        mkEcdsaPublicKey (bsToInteger x) (bsToInteger y)
   maybe (fail "invalid key") pure key
 
 ----- Encoding utils
