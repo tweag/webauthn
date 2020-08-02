@@ -5,7 +5,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -31,40 +30,28 @@ module Crypto.Fido2.Protocol
     WebauthnType (..),
     UserId (..),
     newUserId,
-    Challenge,
+    Challenge (..),
     newChallenge,
     Timeout (..),
-    COSEAlgorithmIdentifier (..),
     PublicKeyCredentialType (..),
     ResidentKeyRequirement (..),
     UserVerificationRequirement (..),
     AuthenticatorAttachment (..),
     EncodingRules (..),
-    verifyEcdsa,
-    -- This will probably change. Do not depend on it.
-    PublicKey,
-    publicKeyX,
-    publicKeyY,
-    mkEcdsaPublicKey,
+    verify,
   )
 where
 
 import Codec.CBOR.Decoding (Decoder)
 import qualified Codec.CBOR.Read as CBOR
-import qualified Codec.CBOR.Term as CBOR
-import Codec.CBOR.Term (Term (TBytes, TInt, TMap, TString))
+import Codec.CBOR.Term (Term (TBytes, TMap, TString))
 import qualified Codec.Serialise.Class as Serialise
-import Control.Monad (guard)
+import qualified Crypto.Fido2.PublicKey as PublicKey
+import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import qualified Crypto.Hash as Hash
 import Crypto.Hash (Digest, SHA256)
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import qualified Crypto.PubKey.ECC.Prim as ECDSA
-import qualified Crypto.PubKey.ECC.Types as ECDSA
 import qualified Crypto.Random as Random
 import Crypto.Random (MonadRandom)
-import qualified Data.ASN1.BinaryEncoding as ASN1
-import qualified Data.ASN1.Encoding as ASN1
-import qualified Data.ASN1.Prim as ASN1
 import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Internal as Aeson
@@ -74,14 +61,12 @@ import Data.Aeson.Types ((.:), (.:?))
 import Data.Bifunctor (first)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
+import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.HashMap.Strict as HashMap
 import Data.HashMap.Strict (HashMap)
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
@@ -134,12 +119,6 @@ data PublicKeyCredential response
   deriving stock (Generic, Show)
   -- TODO use EncodingRules
   deriving (FromJSON) via (EncodingRules (PublicKeyCredential response))
-
-data COSEAlgorithmIdentifier = ES256
-  deriving stock (Show)
-
-instance ToJSON COSEAlgorithmIdentifier where
-  toJSON ES256 = Aeson.Number (-7)
 
 newtype Timeout = Timeout Word32
   deriving stock (Generic, Show)
@@ -381,10 +360,6 @@ instance Aeson.FromJSON URLEncodedBase64 where
 instance Aeson.ToJSON URLEncodedBase64 where
   toJSON (URLEncodedBase64 bs) = Aeson.toJSON . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
 
--- TODO(#20): Support other types of keys / signatures.
-data PublicKey = Ecdsa {point :: Point, curveName :: ECDSA.CurveName}
-  deriving stock (Show)
-
 -- | We have our own type here because we want to avoid partial functions when
 -- getting the X and Y values on the public curve. (Otherwise we'd have to deal
 -- with the infinity point which should never occur in this program -- it's
@@ -400,71 +375,6 @@ data PublicKey = Ecdsa {point :: Point, curveName :: ECDSA.CurveName}
 -- [1]: https://tools.ietf.org/html/draft-ietf-cose-msg-24#section-13.1.1
 data Point = Point {x :: Integer, y :: Integer}
   deriving stock (Show)
-
-convertKeyToCryptonite :: PublicKey -> ECDSA.PublicKey
-convertKeyToCryptonite Ecdsa {point, curveName} =
-  let curve = ECDSA.getCurveByName curveName
-   in ECDSA.PublicKey {public_curve = curve, public_q = convertPointToCryptonite point}
-
-isPointValid :: ECDSA.Curve -> Point -> Bool
-isPointValid curve point = ECDSA.isPointValid curve (convertPointToCryptonite point)
-
-convertPointToCryptonite :: Point -> ECDSA.Point
-convertPointToCryptonite Point {x, y} = ECDSA.Point x y
-
-publicKeyX :: PublicKey -> Integer
-publicKeyX = x . point
-
-publicKeyY :: PublicKey -> Integer
-publicKeyY = y . point
-
-mkEcdsaPublicKey :: Integer -> Integer -> Maybe PublicKey
-mkEcdsaPublicKey x y = do
-  -- TODO(#22): Support other curves.
-  let curveName = ECDSA.SEC_p256r1
-      curve = ECDSA.getCurveByName curveName
-      point = Point {x, y}
-  guard $ isPointValid curve point
-  Just $ Ecdsa {curveName = curveName, point = point}
-
--- | Ecdsa signatures are ASN.1 encoded
---
--- ASN.1 decoding stolen from
--- https://hackage.haskell.org/package/x509-validation-1.6.11/docs/src/Data.X509.Validation.Signature.html#verifyECDSA
-decodeEcdsaSignature :: ByteString -> Maybe ECDSA.Signature
-decodeEcdsaSignature sigbs =
-  case ASN1.decodeASN1' ASN1.BER sigbs of
-    Left _ -> Nothing
-    Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
-      Just (ECDSA.Signature r s)
-    Right _ -> Nothing
-
--- | Convert an unsigned big endian octet sequence to the integer
--- it represents. Taken from @hs-jose@.
---
--- TODO: Test the crap out of this.
-bsToInteger :: ByteString -> Integer
-bsToInteger = BS.foldl (\acc x -> acc * 256 + toInteger x) 0
-
--- | Verify an Ecdsa signature. Taken from @hs-jose@.
---
--- TODO: Test the crap out of this.
---
--- For backwards compatibility reasons, the "signature" field is NOT
--- formatted as specified in COSE, but formatted as an ASN.1 pair
---
--- RSA keys are formatted as PKCS#1
--- and EdDSA keys are formatted as COSE (though this is unspecified)
--- https://github.com/w3c/webauthn/issues/1124#issuecomment-644008314
-verifyEcdsa ::
-  PublicKey ->
-  ByteString ->
-  ByteString ->
-  Bool
-verifyEcdsa publicKey message signature =
-  case decodeEcdsaSignature signature of
-    Nothing -> False
-    Just signature -> ECDSA.verify Hash.SHA256 (convertKeyToCryptonite publicKey) signature message
 
 data WebauthnType = Create | Get
   deriving (Eq, Show)
@@ -544,7 +454,7 @@ data AuthenticatorData
 
         -- Used for verifying the signature currently. Not used for attestation in
         -- our current implementation which is why this is a maybe.
-        rawData :: Maybe ByteString
+        rawData :: ByteString
       }
   deriving (Show)
 
@@ -588,8 +498,8 @@ decodeAttestationObject bs = do
   -- Pass the remaining bytes to decodeAuthenticatorData
   -- TODO maybe use the incremental API here?
   (_rest, (AttestationObjectRaw {authDataRaw, fmt, attStmt})) <- first CBOR $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
-  (rest, _, authDataRaw) <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData Nothing authDataRaw) rest
+  (rest, _, authDataRaw') <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
+  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw authDataRaw') rest
   pure (AttestationObject authData fmt attStmt)
 
 -- Helper. TODO  come up with more consistent names for all of these things, and allow
@@ -597,13 +507,13 @@ decodeAttestationObject bs = do
 decodeAuthenticatorData' :: ByteString -> Either Error AuthenticatorData
 decodeAuthenticatorData' bs = do
   (rest, _, authDataRaw) <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict bs)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData (Just bs) authDataRaw) rest
+  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData bs authDataRaw) rest
   pure authData
 
 -- The first parameter is a maybe bytestring in case we want to save the raw data
 -- to the authenticatordata struct. This is ugly, but required because we need to
 -- compute a hash based on the raw signature of this crap.
-decodeAuthenticatorData :: Maybe ByteString -> AuthenticatorDataRaw -> Decoder s AuthenticatorData
+decodeAuthenticatorData :: ByteString -> AuthenticatorDataRaw -> Decoder s AuthenticatorData
 decodeAuthenticatorData originalBs x = do
   let userPresent = Bits.testBit (flags' x) 0
   let userVerified = Bits.testBit (flags' x) 2
@@ -623,7 +533,7 @@ decodeAuthenticatorData originalBs x = do
 -- attestedcredentialdataheader knallen we in deze
 decodeAttestedCredentialData :: AttestedCredentialDataHeader -> Decoder s AttestedCredentialData
 decodeAttestedCredentialData (AttestedCredentialDataHeader aaguid credentialId) = do
-  AttestedCredentialData aaguid (CredentialId (URLEncodedBase64 credentialId)) <$> decodePublicKey
+  AttestedCredentialData aaguid (CredentialId (URLEncodedBase64 credentialId)) <$> Serialise.decode
 
 decodeAuthenticatorDataRaw :: Binary.Get AuthenticatorDataRaw
 decodeAuthenticatorDataRaw = do
@@ -660,22 +570,6 @@ decodeAttestationObjectRaw = do
   TBytes authDataRaw <- maybe (fail "no authData") pure (HashMap.lookup "authData" map)
   pure $ AttestationObjectRaw authDataRaw fmt attStmt
 
--- TODO Make more generic
-decodePublicKey :: Decoder s PublicKey
-decodePublicKey = do
-  map :: (IntMap CBOR.Term) <- Serialise.decode
-  let key = do
-        keyType <- IntMap.lookup 1 map
-        guard $ keyType == TInt 2
-        alg <- IntMap.lookup 3 map
-        -- TODO(#20): Add support for multiple curves / key types.
-        guard $ alg == TInt (-7)
-        TInt _curve <- IntMap.lookup (-1) map
-        TBytes x <- IntMap.lookup (-2) map
-        TBytes y <- IntMap.lookup (-3) map
-        mkEcdsaPublicKey (bsToInteger x) (bsToInteger y)
-  maybe (fail "invalid key") pure key
-
 ----- Encoding utils
 
 newtype EncodingRules a = EncodingRules a
@@ -695,3 +589,7 @@ instance (Aeson.GToJSON Aeson.Zero (Rep a), Generic a) => ToJSON (EncodingRules 
 
 instance (Aeson.GFromJSON Aeson.Zero (Rep a), Generic a) => FromJSON (EncodingRules a) where
   parseJSON o = EncodingRules <$> Aeson.genericParseJSON options o
+
+verify :: PublicKey -> AuthenticatorData -> ClientData -> ByteString -> Bool
+verify pub AuthenticatorData {rawData} ClientData {clientDataHash} =
+  PublicKey.verify pub (rawData <> convert clientDataHash)

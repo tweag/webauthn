@@ -14,6 +14,9 @@ module Database
   )
 where
 
+import qualified Codec.CBOR.Read as CBOR
+import qualified Codec.CBOR.Write as CBOR
+import qualified Codec.Serialise as Serialise
 import qualified Crypto.Fido2.Assertion as Assertion
 import Crypto.Fido2.Protocol
   ( CredentialId (CredentialId),
@@ -21,7 +24,7 @@ import Crypto.Fido2.Protocol
     UserId (UserId),
   )
 import qualified Crypto.Fido2.Protocol as Fido2
-import qualified Data.Binary as Binary
+import qualified Crypto.Fido2.PublicKey as Fido2
 import qualified Data.Maybe as Maybe
 import qualified Database.SQLite.Simple as Sqlite
 
@@ -52,8 +55,7 @@ initialize conn = do
     " create table if not exists attested_credential_data                      \
     \ ( id               blob    primary key                                   \
     \ , user_id          blob    not null                                      \
-    \ , public_key_x     blob    not null                                      \
-    \ , public_key_y     blob    not null                                      \
+    \ , public_key       blob    not null                                      \
     \ , created          text    not null                                      \
     \                    default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))       \
     \ , foreign key (user_id) references users (id)                            \
@@ -106,13 +108,12 @@ addAttestedCredentialData
     Sqlite.execute
       conn
       " insert into attested_credential_data                        \
-      \ (id, user_id, public_key_x, public_key_y)                   \
+      \ (id, user_id, public_key)                                   \
       \ values                                                      \
       \ (?, ?, ?, ?);                                               "
       ( credentialId,
         userId,
-        Binary.encode $ Fido2.publicKeyX publicKey,
-        Binary.encode $ Fido2.publicKeyY publicKey
+        CBOR.toStrictByteString (Serialise.encode publicKey)
       )
 
 getUserByCredentialId :: Transaction -> Fido2.CredentialId -> IO (Maybe Fido2.UserId)
@@ -134,19 +135,21 @@ getCredentialsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = d
   credentialRows <-
     Sqlite.query
       conn
-      "select id, public_key_x, public_key_y from attested_credential_data where user_id = ?;"
+      "select id, public_key from attested_credential_data where user_id = ?;"
       [userId]
   pure $ Maybe.catMaybes $ fmap (mkCredential) $ credentialRows
   where
-    mkCredential (id, x, y) = do
+    mkCredential (id, publicKey) = do
       -- TODO(#22): Convert to the compressed representation so we don't need
       --  the Maybe.
-      publicKey <- Fido2.mkEcdsaPublicKey (Binary.decode x) (Binary.decode y)
-      pure $
-        Assertion.Credential
-          { id = CredentialId $ URLEncodedBase64 id,
-            publicKey = publicKey
-          }
+      case snd <$> CBOR.deserialiseFromBytes Serialise.decode publicKey of
+        Left _ -> Nothing
+        Right publicKey ->
+          pure $
+            Assertion.Credential
+              { id = CredentialId $ URLEncodedBase64 id,
+                publicKey = publicKey
+              }
 
 getCredentialIdsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]
 getCredentialIdsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do

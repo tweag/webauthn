@@ -104,6 +104,7 @@ verifyAttestationResponse
     --
     -- --> This is implied in the decoder of 'AuthenticatorAttestationResponse'
     --
+    -- TODO(arianvp): We could lift this one to parsing phase; I suppose? Make invalid states unrepresentable
     -- 3. Verify that the value of C.type is webauthn.create.
     let ClientData {typ} = clientData
     when (typ /= Create) $ Left InvalidWebauthnType

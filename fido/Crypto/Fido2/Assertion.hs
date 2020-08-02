@@ -10,8 +10,8 @@ where
 
 import Control.Monad (when)
 import qualified Crypto.Fido2.Protocol as Fido2
+import Crypto.Fido2.PublicKey (PublicKey)
 import qualified Crypto.Hash as Hash
-import qualified Data.ByteArray as BA
 import qualified Data.List as List
 import qualified Data.Text.Encoding as Text
 
@@ -30,7 +30,7 @@ data Error
 
 -- | Domain type: combination of a user's ID and publickey. This should be eventually
 -- extracted into some opinionated module that builds on top of the actual protocol types.
-data Credential = Credential {id :: Fido2.CredentialId, publicKey :: Fido2.PublicKey}
+data Credential = Credential {id :: Fido2.CredentialId, publicKey :: PublicKey}
 
 -- | Domain type: configuration for our relying party. Should eventually be moved to
 -- some other opinionated module.
@@ -72,7 +72,7 @@ verifyAssertionResponse
     -- credential’s response's clientDataJSON, authenticatorData, and signature
     -- respectively.
     let Fido2.AuthenticatorAssertionResponse {clientData, authenticatorData, signature, userHandle = _userHandle} = response
-    let Fido2.ClientData {typ, challenge = clientChallenge, origin = clientOrigin, clientDataHash} = clientData
+    let Fido2.ClientData {typ, challenge = clientChallenge, origin = clientOrigin} = clientData
     -- 7. Verify that the value of C.type is the string webauthn.get.
     when (typ /= Fido2.Get) (Left UnsupportedClientDataType)
     -- 8. Verify that the value of C.challenge matches the challenge that was sent to
@@ -82,7 +82,7 @@ verifyAssertionResponse
     when (challenge /= clientChallenge) (Left ChallengeMismatch)
     -- 9. Verify that the value of C.origin matches the Relying Party's origin.
     when (origin /= clientOrigin) (Left OriginMismatch)
-    let Fido2.AuthenticatorData {userPresent, rpIdHash, userVerified, rawData} = authenticatorData
+    let Fido2.AuthenticatorData {userPresent, rpIdHash, userVerified} = authenticatorData
     -- 11. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
     -- expected by the Relying Party.
     when (Hash.hash (Text.encodeUtf8 . Fido2.unRpId $ rpId) /= rpIdHash) $ Left RpIdMismatch
@@ -94,8 +94,6 @@ verifyAssertionResponse
     -- 15. Let hash be the result of computing a hash over the clientData using SHA-256.
     -- 16. Using the credential public key looked up in step 3, verify that sig is a
     -- valid signature over the binary concatenation of authData and hash.
-    rawData' <- maybe (Left RawDataUnavailable) pure rawData
-    let msg = rawData' <> (BA.convert clientDataHash)
-        (Fido2.URLEncodedBase64 sig) = signature
-        verifyResult = Fido2.verifyEcdsa publicKey msg sig
+    let Fido2.URLEncodedBase64 sig = signature
+    let verifyResult = Fido2.verify publicKey authenticatorData clientData sig
     when (not verifyResult) (Left InvalidSignature)

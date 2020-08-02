@@ -18,6 +18,7 @@ import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import qualified Crypto.Fido2.Assertion as Assertion
 import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
 import qualified Crypto.Fido2.Protocol as Fido2
+import qualified Crypto.Fido2.PublicKey as Fido2
 import Data.Aeson (FromJSON)
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
@@ -310,7 +311,7 @@ defaultPkcco userEntity challenge =
       user = userEntity,
       challenge = challenge,
       -- Empty credentialparameters are not supported.
-      pubKeyCredParams = [Fido2.PublicKeyCredentialParameters {typ = Fido2.PublicKey, alg = Fido2.ES256}],
+      pubKeyCredParams = [Fido2.PublicKeyCredentialParameters {typ = Fido2.PublicKey, alg = Fido2.ECDSAIdentifier Fido2.ES256}],
       timeout = Nothing,
       excludeCredentials = Nothing,
       authenticatorSelection =

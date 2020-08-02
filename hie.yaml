@@ -1,3 +1,17 @@
 cradle:
-  cabal:
-    component: lib:fido2
+  multi:
+  - path: "./fido"
+    config:
+      cradle:
+        cabal:
+          component: lib:fido2
+  - path: "./server"
+    config:
+      cradle:
+        cabal:
+          component: exe:server
+  - path: "./tests"
+    config:
+      cradle:
+        cabal:
+          component: test:tests

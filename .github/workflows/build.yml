@@ -30,3 +30,8 @@ jobs:
         git diff --no-index fido2.nix /tmp/fido2.nix.new
 
     - run: nix-build
+    - uses: actions/upload-artifact@v2
+      with:
+        name: Coverage
+        path: "result/share/hpc/vanilla/html/**/*"
+
