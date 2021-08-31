@@ -110,7 +110,7 @@ addAttestedCredentialData
       " insert into attested_credential_data                        \
       \ (id, user_id, public_key)                                   \
       \ values                                                      \
-      \ (?, ?, ?, ?);                                               "
+      \ (?, ?, ?);                                                  "
       ( credentialId,
         userId,
         CBOR.toStrictByteString (Serialise.encode publicKey)
