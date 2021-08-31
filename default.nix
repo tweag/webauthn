@@ -1,42 +1,26 @@
 let
-  pkgs = (import (import ./nix/sources.nix).nixpkgs) {};
-  haskellPackages = pkgs.haskellPackages.override {
-    overrides = self: super: {
-      fido2 = pkgs.haskell.lib.overrideCabal (super.callPackage ./fido2.nix {}) {
-        doCoverage = true;
-      };
-      cborg = pkgs.haskell.lib.overrideCabal super.cborg {
-        version = "0.2.3.0";
-        # sha256 = pkgs.lib.fakeSha256;
-        sha256 = "14y7yckj1xzldadyq8g84dgsdaygf9ss0gd38vjfw62smdjq1in8";
-      };
-      base64-bytestring = pkgs.haskell.lib.overrideCabal super.base64-bytestring {
-        version = "1.1.0.0";
-        # sha256 = pkgs.lib.fakeSha256;
-        sha256 = "1adcnkcx4nh3d59k94bkndj0wkgbvchz576qwlpaa7148a86q391";
-      };
-      scotty = pkgs.haskell.lib.overrideCabal super.scotty {
-        version = "0.12";
-        # sha256 = pkgs.lib.fakeSha256;
-        sha256 = "1lpggpdzgjk23mq7aa64yylds5dbm4ynhcvbarqihjxabvh7xmz1";
-      };
-    };
-  };
+  # Read in the Niv sources
+  sources = import ./nix/sources.nix {};
+
+  # Fetch the haskell.nix commit we have pinned with Niv
+  haskellNix = import sources.haskellNix {};
+
+  # Import nixpkgs and pass the haskell.nix provided nixpkgsArgs
+  pkgs = import
+    # haskell.nix provides access to the nixpkgs pins which are used by our CI,
+    # hence you will be more likely to get cache hits when using these.
+    # But you can also just use your own, e.g. '<nixpkgs>'.
+    haskellNix.sources.nixpkgs-2009
+    # These arguments passed to nixpkgs, include some patches and also
+    # the haskell.nix functionality itself as an overlay.
+    haskellNix.nixpkgsArgs;
 in
-if pkgs.lib.inNixShell
-then haskellPackages.fido2.env.overrideAttrs (
-  x: {
-    buildInputs = x.buildInputs ++ [
-      pkgs.entr
-      pkgs.yarn
-      pkgs.cabal-install
-      pkgs.cabal2nix
-      pkgs.fd
-      pkgs.ormolu
-      pkgs.ghcid
-      pkgs.hlint
-      haskellPackages.ghcide
-    ];
-  }
-)
-else haskellPackages.fido2
+pkgs.haskell-nix.project {
+  # 'cleanGit' cleans a source directory based on the files known by git
+  src = pkgs.haskell-nix.haskellLib.cleanGit {
+    name = "fido2";
+    src = ./.;
+  };
+  # Specify the GHC version to use.
+  compiler-nix-name = "ghc8106";
+}
