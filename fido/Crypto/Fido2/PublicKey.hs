@@ -18,10 +18,10 @@ module Crypto.Fido2.PublicKey
   )
 where
 
-import qualified Codec.CBOR.Decoding as CBOR
 import Codec.CBOR.Decoding (Decoder)
-import qualified Codec.CBOR.Encoding as CBOR
+import qualified Codec.CBOR.Decoding as CBOR
 import Codec.CBOR.Encoding (Encoding)
+import qualified Codec.CBOR.Encoding as CBOR
 import Codec.Serialise.Class (Serialise, decode, encode)
 import Control.Monad (when)
 import Crypto.Error (CryptoFailable (CryptoFailed, CryptoPassed))
