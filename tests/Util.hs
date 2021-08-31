@@ -10,9 +10,12 @@ import Test.QuickCheck (Arbitrary, property)
 
 roundtrips :: forall a. (Eq a, Show a, Serialise.Serialise a, Arbitrary a) => SpecWith ()
 roundtrips = do
-  it "serialiseIdentity" $ property $ \(key :: a) ->
-    Serialise.Properties.serialiseIdentity key
-  it "flatTermIdentity" $ property $ \(key :: a) ->
-    Serialise.Properties.flatTermIdentity key
-  it "hasValidFlatTerm" $ property $ \(key :: a) ->
-    Serialise.Properties.hasValidFlatTerm key
+  it "serialiseIdentity" $
+    property $ \(key :: a) ->
+      Serialise.Properties.serialiseIdentity key
+  it "flatTermIdentity" $
+    property $ \(key :: a) ->
+      Serialise.Properties.flatTermIdentity key
+  it "hasValidFlatTerm" $
+    property $ \(key :: a) ->
+      Serialise.Properties.hasValidFlatTerm key

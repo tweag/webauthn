@@ -21,8 +21,8 @@ import Crypto.Fido2.Protocol
     UserVerificationRequirement (UserVerificationRequired),
     WebauthnType (Create),
   )
-import qualified Crypto.Hash as Hash
 import Crypto.Hash (Digest, SHA256)
+import qualified Crypto.Hash as Hash
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 
