@@ -1,3 +1,4 @@
+{ isShell ? false }:
 let
   # Read in the Niv sources
   sources = import ./nix/sources.nix {};
@@ -14,13 +15,28 @@ let
     # These arguments passed to nixpkgs, include some patches and also
     # the haskell.nix functionality itself as an overlay.
     haskellNix.nixpkgsArgs;
-in
-pkgs.haskell-nix.project {
-  # 'cleanGit' cleans a source directory based on the files known by git
-  src = pkgs.haskell-nix.haskellLib.cleanGit {
-    name = "fido2";
-    src = ./.;
+
+  build = pkgs.haskell-nix.project {
+    # 'cleanGit' cleans a source directory based on the files known by git
+    src = pkgs.haskell-nix.haskellLib.cleanGit {
+      name = "fido2";
+      src = ./.;
+    };
+    # Specify the GHC version to use.
+    compiler-nix-name = "ghc8106";
   };
-  # Specify the GHC version to use.
-  compiler-nix-name = "ghc8106";
-}
+
+  shell = build.shellFor {
+    tools = {
+      cabal = "3.4.0.0";
+      hlint = "latest";
+      haskell-language-server = "latest";
+      ormolu = "latest";
+    };
+
+    nativeBuildInputs = [
+      pkgs.niv
+    ];
+  };
+
+in if isShell then shell else build
