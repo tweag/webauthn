@@ -34,8 +34,12 @@ let
       ormolu = "latest";
     };
 
-    nativeBuildInputs = [
-      pkgs.niv
+    nativeBuildInputs = with pkgs; [
+      entr
+      fd
+      niv
+      python310
+      yarn
     ];
   };
 
