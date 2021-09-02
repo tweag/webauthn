@@ -43,12 +43,18 @@ library
     x509,
     scientific,
     vector,
-    QuickCheck
+    QuickCheck,
+    jwt,
+    http-client,
+    http-types,
+    http-client-tls,
+    time
   exposed-modules:
     Crypto.Fido2.Assertion,
     Crypto.Fido2.Attestation,
     Crypto.Fido2.Protocol,
-    Crypto.Fido2.PublicKey
+    Crypto.Fido2.PublicKey,
+    Crypto.Fido2.MDS
 
 executable server
   import: sanity
