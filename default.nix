@@ -40,6 +40,7 @@ let
       niv
       python310
       yarn
+      nodejs
     ];
   };
 
