@@ -108,6 +108,26 @@ newtype Challenge = Challenge URLEncodedBase64
 newChallenge :: MonadRandom m => m Challenge
 newChallenge = Challenge . URLEncodedBase64 <$> Random.getRandomBytes 16
 
+{-
+This is the top-level received from the JavaScript side of the Webauthn client.
+The corresponding object in JavaScript is https://w3c.github.io/webauthn/#iface-pkcredential
+However it has been transformed into JSON using https://github.com/github/webauthn-json,
+whose schema uses base64url encoding for raw bytes, indicated by `"convert"`.
+The current JSON schema version defined by webauthn-json is 0.5.7
+TODO: Ensure that the Haskell datatype is always lined up with the version from webauthn-json
+
+This type is used for both registration (attestation) and login (assertion), and differs in these ways depending on that:
+- Registration:
+  - Used for https://w3c.github.io/webauthn/#sctn-registering-a-new-credential
+  - JavaScript client method called is https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create
+  - The response type corresponds to https://w3c.github.io/webauthn/#authenticatorattestationresponse
+  - webauthn-json's JSON schema for it can be gotten with `npx @github/webauthn-json schema | jq '.publicKeyCredentialWithAttestation'`
+- Login:
+  - Used for https://w3c.github.io/webauthn/#sctn-verifying-assertion
+  - JavaScript client method called is https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get
+  - The response type corresponds to https://w3c.github.io/webauthn/#authenticatorassertionresponse
+  - webauthn-json's JSON schema for it can be gotten with `npx @github/webauthn-json schema | jq '.publicKeyCredentialWithAssertion'`
+-}
 data PublicKeyCredential response = PublicKeyCredential
   { id :: Text,
     rawId :: CredentialId,
