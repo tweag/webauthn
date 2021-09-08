@@ -1,16 +1,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
 -- | Implements steps 1 to 16 of <https://www.w3.org/TR/webauthn/#registering-a-new-credential "7.1.  Registering a New Credential">
-module Crypto.Fido2.Attestation
-  ( verifyAttestationResponse,
-    Error (..),
-  )
-where
+module Crypto.Fido2.Attestation (verifyAttestationResponse) where
 
 import Codec.CBOR.Term (Term)
-import Control.Monad (when)
+import Control.Monad (unless, when)
+import Crypto.Fido2.Attestation.Error (Error (InvalidWebauthnType, ChallengeDidNotMatch, OriginDidNotMatch, RpIdMismatch, UserNotPresent, UserNotVerified, NoAttestedCredentialDataFound, InvalidAttestationStatement, UnsupportedAttestationFormat))
 import Crypto.Fido2.Protocol
-  ( AttestationObject (AttestationObject, attStmt, authData, fmt),
+  ( AttestationObject (AttestationObject, authData, format),
     AttestedCredentialData,
     AuthenticatorAttestationResponse (AuthenticatorAttestationResponse, attestationObject, clientData),
     AuthenticatorData (AuthenticatorData, attestedCredentialData, rpIdHash, userPresent, userVerified),
@@ -19,25 +16,12 @@ import Crypto.Fido2.Protocol
     Origin,
     RpId (unRpId),
     UserVerificationRequirement (UserVerificationRequired),
-    WebauthnType (Create),
+    WebauthnType (Create), AttestationFormat (FormatNone)
   )
 import Crypto.Hash (Digest, SHA256)
 import qualified Crypto.Hash as Hash
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
-
-data Error
-  = InvalidWebauthnType
-  | ChallengeDidNotMatch
-  | OriginDidNotMatch
-  | RpIdMismatch
-  | UserNotPresent
-  | UserNotVerified
-  | UnsupportedAttestationFormat
-  | InvalidAttestationStatement
-  | NoAttestedCredentialDataFound
-  | NotTrustworthy
-  deriving (Show, Eq)
 
 -- | Use this result to implement step 17, 18 and 19 of
 -- <https://www.w3.org/TR/webauthn/#registering-a-new-credential "7.1.
@@ -112,7 +96,6 @@ verifyAttestationResponse
     -- sent to the authenticator in the create() call.
     let ClientData {challenge = challenge'} = clientData
     when (challenge /= challenge') $ Left ChallengeDidNotMatch
-    -- 5. Verify that the value of C.origin matches the Relying Party's origin.
     let ClientData {origin = origin'} = clientData
     when (origin /= origin') $ Left OriginDidNotMatch
     -- 6. Verify that the value of C.tokenBinding.status matches the state of
@@ -130,18 +113,18 @@ verifyAttestationResponse
     -- AuthenticatorAttestationResponse structure to obtain the attestation
     -- statement format fmt, the authenticator data authData, and the attestation
     -- statement attStmt.
-    let AttestationObject {fmt, authData, attStmt} = attestationObject
+    let AttestationObject {format, authData} = attestationObject
     -- 9. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
     -- expected by the Relying Party.
     let AuthenticatorData {rpIdHash} = authData
     when (Hash.hash (Text.encodeUtf8 . unRpId $ rpId) /= rpIdHash) $ Left RpIdMismatch
     -- 10. Verify that the User Present bit of the flags in authData is set.
     let AuthenticatorData {userPresent} = authData
-    when (not userPresent) $ Left UserNotPresent
+    unless userPresent $ Left UserNotPresent
     -- 11. If user verification is required for this registration, verify that
     -- the User Verified bit of the flags in authData is set.
     let AuthenticatorData {userVerified} = authData
-    when (userVerificationRequirement == UserVerificationRequired && (not userVerified)) $ Left UserNotVerified
+    when (userVerificationRequirement == UserVerificationRequired && not userVerified) $ Left UserNotVerified
     -- 12. Verify that the values of the client extension outputs in
     -- clientExtensionResults and the authenticator extension outputs in the
     -- extensions in authData are as expected, considering the client extension
@@ -160,6 +143,7 @@ verifyAttestationResponse
     -- registered WebAuthn Attestation Statement Format Identifier values is
     -- maintained in the IANA registry of the same name [WebAuthn-Registries].
     -- NOTE: We currently only support the '"none"' attestation format
+    --
     -- 14. Verify that attStmt is a correct attestation statement, conveying a valid
     -- attestation signature, by using the attestation statement format fmt’s
     -- verification procedure given attStmt, authData and the hash of the
@@ -183,12 +167,10 @@ verifyAttestationResponse
     -- procedure to verify that the attestation public key correctly chains up
     -- to an acceptable root certificate.
     -- --> TODO: This is a no-op as we only support "none"
-    validateAttStmt fmt attStmt authData clientDataHash
+    validateAttStmt format authData clientDataHash
 
-validateAttStmt :: Text -> [(Term, Term)] -> AuthenticatorData -> Digest SHA256 -> Either Error AttestedCredentialData
-validateAttStmt "none" [] AuthenticatorData {attestedCredentialData} _ =
+validateAttStmt :: AttestationFormat -> AuthenticatorData -> Digest SHA256 -> Either Error AttestedCredentialData
+validateAttStmt FormatNone AuthenticatorData {attestedCredentialData} _ =
   case attestedCredentialData of
-    Just attestedCredentialData -> pure $ attestedCredentialData
+    Just attestedCredentialData -> pure attestedCredentialData
     Nothing -> Left NoAttestedCredentialDataFound
-validateAttStmt "none" _ _ _ = Left InvalidAttestationStatement
-validateAttStmt _ _ _ _ = Left UnsupportedAttestationFormat

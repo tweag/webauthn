@@ -1,7 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Util where
+module Util (roundtrips) where
 
 import qualified Codec.Serialise as Serialise
 import qualified Codec.Serialise.Properties as Serialise.Properties

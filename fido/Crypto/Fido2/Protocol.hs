@@ -12,6 +12,7 @@ module Crypto.Fido2.Protocol
   ( AuthenticatorAttestationResponse (..),
     AuthenticatorAssertionResponse (..),
     AttestedCredentialData (..),
+    AttestationFormat (..),
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),
     PublicKeyCredentialRpEntity (..),
@@ -46,6 +47,7 @@ import Codec.CBOR.Decoding (Decoder)
 import qualified Codec.CBOR.Read as CBOR
 import Codec.CBOR.Term (Term (TBytes, TMap, TString))
 import qualified Codec.Serialise.Class as Serialise
+import qualified Crypto.Fido2.Attestation.Error as AttestationError
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256)
@@ -212,7 +214,7 @@ instance ToJSON PublicKeyCredentialType where
 instance FromJSON PublicKeyCredentialType where
   parseJSON = Aeson.withText "type" $ \case
     "public-key" -> pure PublicKey
-    x -> fail $ "unsupported type: " ++ (show x)
+    x -> fail $ "unsupported type: " ++ show x
 
 data AuthenticatorTransport
   = Usb
@@ -369,7 +371,7 @@ newtype URLEncodedBase64 = URLEncodedBase64 ByteString
   deriving newtype (Show, Eq, Ord)
 
 instance Aeson.FromJSON URLEncodedBase64 where
-  parseJSON = Aeson.withText "base64url" $ \t -> do
+  parseJSON = Aeson.withText "base64url" $ \t ->
     either fail (pure . URLEncodedBase64) (Base64.decode $ Text.encodeUtf8 t)
 
 instance Aeson.ToJSON URLEncodedBase64 where
@@ -488,16 +490,18 @@ data AttestationObjectRaw = AttestationObjectRaw
   }
   deriving (Show)
 
-data AttestationFormat = FormatNone deriving (Show)
+-- | Represents both the format and the parsed attestation statement. This is different from the protocol that
+--  implies storing the format and statement seperately.
+data AttestationFormat = FormatNone
+  deriving (Show)
 
 data AttestationObject = AttestationObject
   { authData :: AuthenticatorData,
-    fmt :: Text,
-    attStmt :: [(Term, Term)]
+    format :: AttestationFormat
   }
   deriving (Show)
 
-data Error = CBOR CBOR.DeserialiseFailure | Binary (LBS.ByteString, Binary.ByteOffset, String)
+data Error = CBOR CBOR.DeserialiseFailure | Binary (LBS.ByteString, Binary.ByteOffset, String) | AttestationError AttestationError.Error
   deriving (Show)
 
 decodeAttestationObject :: ByteString -> Either Error AttestationObject
@@ -505,11 +509,16 @@ decodeAttestationObject bs = do
   -- First decode the high level structure with decodeAttestationObjectRaw.
   -- Pass the remaining bytes to decodeAuthenticatorData
   -- TODO maybe use the incremental API here?
-  (_rest, (AttestationObjectRaw {authDataRaw, fmt, attStmt})) <- first CBOR $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
+  (_rest, AttestationObjectRaw {authDataRaw, fmt, attStmt}) <- first CBOR $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
   (rest, _, authDataRaw') <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
   (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw authDataRaw') rest
-  pure (AttestationObject authData fmt attStmt)
+  format <- decodeAttestationFormat fmt attStmt
+  pure (AttestationObject authData format)
 
+decodeAttestationFormat :: Text -> [(Term, Term)] -> Either Error AttestationFormat
+decodeAttestationFormat "none" [] = Right FormatNone
+decodeAttestationFormat "none" _ = Left (AttestationError AttestationError.InvalidAttestationStatement)
+decodeAttestationFormat _ _ = Left (AttestationError AttestationError.UnsupportedAttestationFormat)
 -- Helper. TODO  come up with more consistent names for all of these things, and allow
 -- for some code re-use?
 decodeAuthenticatorData' :: ByteString -> Either Error AuthenticatorData
@@ -540,12 +549,12 @@ decodeAuthenticatorData originalBs x = do
 -- Effe voor de duidelijkheid. De bytes die overblijven van parsen van
 -- attestedcredentialdataheader knallen we in deze
 decodeAttestedCredentialData :: AttestedCredentialDataHeader -> Decoder s AttestedCredentialData
-decodeAttestedCredentialData (AttestedCredentialDataHeader aaguid credentialId) = do
+decodeAttestedCredentialData (AttestedCredentialDataHeader aaguid credentialId) =
   AttestedCredentialData aaguid (CredentialId (URLEncodedBase64 credentialId)) <$> Serialise.decode
 
 decodeAuthenticatorDataRaw :: Binary.Get AuthenticatorDataRaw
 decodeAuthenticatorDataRaw = do
-  rpIdHash <- maybe (fail "invalid digest") pure =<< (Hash.digestFromByteString <$> Binary.getByteString 32)
+  rpIdHash <- maybe (fail "invalid digest") pure . Hash.digestFromByteString =<< Binary.getByteString 32
   flags <- Binary.getWord8
   counter <- Binary.getWord32be
   -- If bit 6 is set, attested credential data is included.

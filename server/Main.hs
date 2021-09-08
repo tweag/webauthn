@@ -14,11 +14,12 @@ where
 
 import Control.Concurrent.STM (TVar)
 import qualified Control.Concurrent.STM as STM
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import qualified Crypto.Fido2.Assertion as Assertion
-import Crypto.Fido2.Attestation (Error, verifyAttestationResponse)
+import Crypto.Fido2.Attestation (verifyAttestationResponse)
+import Crypto.Fido2.Attestation.Error (Error)
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Crypto.Fido2.PublicKey as Fido2
 import Data.Aeson (FromJSON)
@@ -51,7 +52,7 @@ newSession sessions = do
   STM.atomically $ do
     contents <- STM.readTVar sessions
     STM.writeTVar sessions $ Map.insert sessionId session contents
-  pure $
+  pure
     ( sessionId,
       session,
       Cookie.defaultSetCookie
@@ -84,7 +85,7 @@ getSession :: TVar Sessions -> SessionId -> MaybeT Scotty.ActionM (SessionId, Se
 getSession sessions sessionId = do
   contents <- liftIO $ STM.atomically $ STM.readTVar sessions
   session <- MaybeT . pure $ Map.lookup sessionId contents
-  pure $ (sessionId, session)
+  pure (sessionId, session)
 
 readSessionId :: MaybeT Scotty.ActionM UUID
 readSessionId = do
@@ -171,7 +172,7 @@ app origin rpId db sessions = do
   Scotty.post "/login/complete" $ completeLogin origin rpId db sessions
   Scotty.get "/requires-auth" $ do
     (_sessionId, session) <- getSessionScotty sessions
-    when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
+    unless (isAuthenticated session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
     Scotty.json @Text $ "This should only be visible when authenticated"
 
 mkCredentialDescriptor :: Fido2.CredentialId -> Fido2.PublicKeyCredentialDescriptor
@@ -198,13 +199,12 @@ beginLogin db sessions = do
   userId <- Scotty.jsonData @Fido2.UserId
   credentialIds <- liftIO $
     Database.withTransaction db $ \tx -> do
-      cr <- Database.getCredentialIdsByUserId tx userId
-      pure cr
-  when (credentialIds == []) $ Scotty.raiseStatus HTTP.status404 "User not found"
-  when
-    (not . isUnauthenticated $ session)
+      Database.getCredentialIdsByUserId tx userId
+  when (null credentialIds) $ Scotty.raiseStatus HTTP.status404 "User not found"
+  unless
+    (isUnauthenticated session)
     (Scotty.raiseStatus HTTP.status400 "You need to be unauthenticated to begin login")
-  challenge <- liftIO $ Fido2.newChallenge
+  challenge <- liftIO Fido2.newChallenge
   liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating userId challenge)
   Scotty.json $
     Fido2.PublicKeyCredentialRequestOptions
@@ -226,9 +226,7 @@ completeLogin origin rpId db sessions = do
     verifyLogin sessionId session userId challenge = do
       credential <- Scotty.jsonData @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
       credentials <- liftIO $
-        Database.withTransaction db $ \tx -> do
-          cr <- Database.getCredentialsByUserId tx userId
-          pure cr
+        Database.withTransaction db $ \tx -> Database.getCredentialsByUserId tx userId
       handleError $
         Assertion.verifyAssertionResponse
           Assertion.RelyingPartyConfig {origin = origin, rpId = rpId}
@@ -253,8 +251,8 @@ beginRegistration rpId db sessions = do
     generateRegistrationChallenge :: SessionId -> Session -> Scotty.ActionM ()
     generateRegistrationChallenge sessionId session = do
       RegisterBeginReq {userName, displayName} <- Scotty.jsonData @RegisterBeginReq
-      challenge <- liftIO $ Fido2.newChallenge
-      userId <- liftIO $ Fido2.newUserId
+      challenge <- liftIO Fido2.newChallenge
+      userId <- liftIO Fido2.newUserId
       let user =
             Fido2.PublicKeyCredentialUserEntity
               { id = userId,

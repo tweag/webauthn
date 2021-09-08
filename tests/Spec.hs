@@ -15,7 +15,8 @@ import qualified AttestationSpec
 import Codec.CBOR.Term (Term (TInt))
 import qualified Crypto.Fido2.Assertion as Fido2
 import qualified Crypto.Fido2.Attestation as Fido2
-import qualified Crypto.Fido2.Attestation as Fido2Attestation
+import qualified Crypto.Fido2.Attestation.Error as Fido2
+import qualified Crypto.Fido2.Attestation.Error as Fido2AttestationError
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Crypto.Hash as Hash
 import Data.Aeson (FromJSON)
@@ -26,7 +27,7 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Coerce (coerce)
 import Data.Either (isRight)
 import Data.Foldable (for_)
-import Data.Maybe (isNothing)
+import Data.Maybe (isNothing, isJust)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import GHC.Stack (HasCallStack)
@@ -47,7 +48,7 @@ import Test.QuickCheck.Property (property, total, (===), (==>))
 canDecodeAll :: forall a. (FromJSON a, HasCallStack) => FilePath -> (a -> IO ()) -> Spec
 canDecodeAll path inspect = do
   files <- Hspec.runIO $ Directory.listDirectory path
-  for_ files $ \fname -> do
+  for_ files $ \fname ->
     it ("can decode " <> (path </> fname)) $ do
       bytes <- ByteString.readFile $ path </> fname
       case Aeson.eitherDecode' $ LazyByteString.fromStrict bytes of
@@ -73,22 +74,20 @@ instance Arbitrary Fido2.AttestationObject where
 
 instance Arbitrary Fido2.AuthenticatorData where
   arbitrary =
-    Fido2.AuthenticatorData
-      <$> pure undefined
-        <*> arbitrary
-        <*> arbitrary
-        <*> arbitrary
-        <*> arbitrary
-        <*> arbitrary
+    Fido2.AuthenticatorData undefined <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+      <*> arbitrary
 
-instance Arbitrary Fido2Attestation.Error where
+instance Arbitrary Fido2AttestationError.Error where
   arbitrary =
     elements
       [ Fido2.InvalidWebauthnType,
         Fido2.ChallengeDidNotMatch,
-        Fido2Attestation.RpIdMismatch,
-        Fido2Attestation.UserNotPresent,
-        Fido2Attestation.UserNotVerified,
+        Fido2AttestationError.RpIdMismatch,
+        Fido2AttestationError.UserNotPresent,
+        Fido2AttestationError.UserNotVerified,
         Fido2.UnsupportedAttestationFormat,
         Fido2.InvalidAttestationStatement,
         Fido2.NoAttestedCredentialDataFound,
@@ -133,7 +132,7 @@ main = Hspec.hspec $ do
       @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
       "tests/fixtures/login-complete"
       ignoreDecodedValue
-  describe "PublicKey" $ PublicKeySpec.spec
+  describe "PublicKey" PublicKeySpec.spec
   describe "Attestation" $ do
     it "fails if type is wrong" $
       property $
@@ -208,12 +207,12 @@ main = Hspec.hspec $ do
                               attestationObject
                                 { Fido2.authData =
                                     authData
-                                      { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 $ (coerce @_ @Text rp2))
+                                      { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 (coerce @_ @Text rp2))
                                       }
                                 }
                           }
                    in case Fido2.verifyAttestationResponse origin rp1 challenge undefined resp of
-                        Left x -> x === Fido2Attestation.RpIdMismatch
+                        Left x -> x === Fido2AttestationError.RpIdMismatch
     it "fails if user not present" $
       property $
         \( coerce @Text -> rp,
@@ -236,13 +235,13 @@ main = Hspec.hspec $ do
                         attestationObject
                           { Fido2.authData =
                               authData
-                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 $ (coerce @_ @Text rp)),
+                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 (coerce @_ @Text rp)),
                                   Fido2.userPresent = False
                                 }
                           }
                     }
              in case Fido2.verifyAttestationResponse origin rp challenge undefined resp of
-                  Left x -> x === Fido2Attestation.UserNotPresent
+                  Left x -> x === Fido2AttestationError.UserNotPresent
     it "fails if userverification requirement doesnt match" $
       property $
         \( coerce @Text -> rp,
@@ -265,14 +264,14 @@ main = Hspec.hspec $ do
                         attestationObject
                           { Fido2.authData =
                               authData
-                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 $ (coerce @_ @Text rp)),
+                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 (coerce @_ @Text rp)),
                                   Fido2.userPresent = True,
                                   Fido2.userVerified = False
                                 }
                           }
                     }
              in case Fido2.verifyAttestationResponse origin rp challenge Fido2.UserVerificationRequired resp of
-                  Left x -> x === Fido2Attestation.UserNotVerified
+                  Left x -> x === Fido2AttestationError.UserNotVerified
     it "fails if no attested credential data" $
       property $
         \( coerce @Text -> rp,
@@ -295,14 +294,14 @@ main = Hspec.hspec $ do
                         attestationObject
                           { Fido2.authData =
                               authData
-                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 $ (coerce @_ @Text rp)),
+                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 (coerce @_ @Text rp)),
                                   Fido2.userPresent = True,
                                   Fido2.attestedCredentialData = Nothing
                                 }
                           }
                     }
              in case Fido2.verifyAttestationResponse origin rp challenge Fido2.UserVerificationPreferred resp of
-                  Left x -> x === Fido2Attestation.NoAttestedCredentialDataFound
+                  Left x -> x === Fido2AttestationError.NoAttestedCredentialDataFound
     it "fails on unsupported attestation format" $
       property $
         \( coerce @Text -> rp,
@@ -325,7 +324,7 @@ main = Hspec.hspec $ do
                         attestationObject
                           { Fido2.authData =
                               authData
-                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 $ (coerce @_ @Text rp)),
+                                { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 (coerce @_ @Text rp)),
                                   Fido2.userPresent = True,
                                   Fido2.attestedCredentialData = Nothing
                                 },
@@ -333,7 +332,7 @@ main = Hspec.hspec $ do
                           }
                     }
              in case Fido2.verifyAttestationResponse origin rp challenge Fido2.UserVerificationPreferred resp of
-                  Left x -> x === Fido2Attestation.UnsupportedAttestationFormat
+                  Left x -> x === Fido2AttestationError.UnsupportedAttestationFormat
     it "fails on non-empty attStmt for none format" $
       property $
         \( coerce @Text -> rp,
@@ -346,7 +345,7 @@ main = Hspec.hspec $ do
            coerce @RandomAttStmt -> attStmt,
            attData
            ) ->
-            length attStmt >= 1 && not (isNothing attData)
+            not (null attStmt) && isJust attData
               ==> let resp =
                         (resp' :: Fido2.AuthenticatorAttestationResponse)
                           { Fido2.clientData =
@@ -359,7 +358,7 @@ main = Hspec.hspec $ do
                               attestationObject
                                 { Fido2.authData =
                                     authData
-                                      { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 $ (coerce @_ @Text rp)),
+                                      { Fido2.rpIdHash = Hash.hash (Text.encodeUtf8 (coerce @_ @Text rp)),
                                         Fido2.userPresent = True,
                                         Fido2.attestedCredentialData = attData
                                       },
@@ -368,9 +367,9 @@ main = Hspec.hspec $ do
                                 }
                           }
                    in case Fido2.verifyAttestationResponse origin rp challenge Fido2.UserVerificationPreferred resp of
-                        Left x -> x === Fido2Attestation.InvalidAttestationStatement
+                        Left x -> x === Fido2AttestationError.InvalidAttestationStatement
     -- Kinda lame. We know that show is total as it's derived
-    it "Can show Error" $ property $ \(err :: Fido2Attestation.Error) -> total . show $ err
+    it "Can show Error" $ property $ \(err :: Fido2AttestationError.Error) -> total . show $ err
   describe "RegisterAndLogin" $
     it "tests whether the fixed register and login responses are matching" $
       do
