@@ -16,7 +16,7 @@ import qualified Codec.CBOR.JSON as JSON
 import qualified Codec.CBOR.Read as Read
 import qualified Codec.CBOR.Write as Write
 import qualified Codec.Serialise as Serialise
-import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (ECDSAIdentifier, EdDSA), CurveIdentifier (P256, P384, P521), ECDSAIdentifier (ES256, ES384, ES512), ECDSAKey (ECDSAKey), EdDSAKey (Ed25519), PublicKey (ECDSAPublicKey, EdDSAPublicKey), alg, curveForAlg, toCurve, verify)
+import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (ECDSAIdentifier, EdDSA), CurveIdentifier (P256, P384, P521), ECDSAIdentifier (ES256, ES384, ES512), ECDSAKey (ECDSAKey), EdDSAKey (Ed25519), PublicKey (ECDSAPublicKey, EdDSAPublicKey), curveForAlg, toCurve, verify)
 import Crypto.Hash (SHA384 (SHA384))
 import Crypto.Hash.Algorithms (SHA256 (SHA256), SHA512 (SHA512))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
@@ -97,10 +97,10 @@ spec = do
         property $
           \(keyPair :: ECDSAKeyPair, bytes :: ByteString, seed :: Integer) ->
             let drg = Random.drgNewSeed . Random.seedFromInteger $ seed
-                (ECDSA.Signature r s, _) = case alg (getPublicKey keyPair) of
-                  ES256 -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA256 bytes
-                  ES384 -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA384 bytes
-                  ES512 -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA512 bytes
+                (ECDSA.Signature r s, _) = case getPublicKey keyPair of
+                  ECDSAKey ES256 _ -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA256 bytes
+                  ECDSAKey ES384 _ -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA384 bytes
+                  ECDSAKey ES512 _ -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA512 bytes
              in verify (ECDSAPublicKey $ getPublicKey keyPair) bytes (ASN1.encodeASN1' ASN1.DER [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence])
       it "rejects invalid signatures" $
         property $

@@ -48,6 +48,7 @@ import qualified Codec.CBOR.Read as CBOR
 import Codec.CBOR.Term (Term (TBytes, TMap, TString))
 import qualified Codec.Serialise.Class as Serialise
 import qualified Crypto.Fido2.Attestation.Error as AttestationError
+import qualified Crypto.Fido2.Attestation.Packed.Statement as Packed
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256)
@@ -465,8 +466,7 @@ data AuthenticatorData = AuthenticatorData
     -- TODO, better type?
     -- We don't support extensions. so we don't check the ED flag
 
-    -- Used for verifying the signature currently. Not used for attestation in
-    -- our current implementation which is why this is a maybe.
+    -- Used for verifying the signature currently..
     rawData :: ByteString
   }
   deriving (Show)
@@ -492,7 +492,7 @@ data AttestationObjectRaw = AttestationObjectRaw
 
 -- | Represents both the format and the parsed attestation statement. This is different from the protocol that
 --  implies storing the format and statement seperately.
-data AttestationFormat = FormatNone
+data AttestationFormat = FormatNone | FormatPacked Packed.Stmt
   deriving (Show)
 
 data AttestationObject = AttestationObject
@@ -511,14 +511,18 @@ decodeAttestationObject bs = do
   -- TODO maybe use the incremental API here?
   (_rest, AttestationObjectRaw {authDataRaw, fmt, attStmt}) <- first CBOR $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
   (rest, _, authDataRaw') <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw authDataRaw') rest
-  format <- decodeAttestationFormat fmt attStmt
+  (rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw authDataRaw') rest
+  format <- decodeAttestationFormat fmt attStmt rest
   pure (AttestationObject authData format)
 
-decodeAttestationFormat :: Text -> [(Term, Term)] -> Either Error AttestationFormat
-decodeAttestationFormat "none" [] = Right FormatNone
-decodeAttestationFormat "none" _ = Left (AttestationError AttestationError.InvalidAttestationStatement)
-decodeAttestationFormat _ _ = Left (AttestationError AttestationError.UnsupportedAttestationFormat)
+decodeAttestationFormat :: Text -> [(Term, Term)] -> LBS.ByteString -> Either Error AttestationFormat
+decodeAttestationFormat "none" [] _ = Right FormatNone
+decodeAttestationFormat "none" _ _ = Left (AttestationError AttestationError.InvalidAttestationStatement)
+decodeAttestationFormat "packed" stmt bytes = do
+  (_rest, statement) <- first CBOR $ CBOR.deserialiseFromBytes (Packed.decode stmt) bytes
+  pure (FormatPacked statement)
+decodeAttestationFormat _ _ _ = Left (AttestationError AttestationError.UnsupportedAttestationFormat)
+
 -- Helper. TODO  come up with more consistent names for all of these things, and allow
 -- for some code re-use?
 decodeAuthenticatorData' :: ByteString -> Either Error AuthenticatorData

@@ -31,6 +31,7 @@ library
     binary,
     aeson,
     asn1-encoding,
+    asn1-types,
     bytestring,
     base64-bytestring,
     containers,
@@ -41,6 +42,7 @@ library
     text,
     unordered-containers,
     x509,
+    x509-validation,
     scientific,
     vector,
     QuickCheck
@@ -48,8 +50,11 @@ library
     Crypto.Fido2.Assertion,
     Crypto.Fido2.Attestation,
     Crypto.Fido2.Attestation.Error,
+    Crypto.Fido2.Attestation.Packed,
+    Crypto.Fido2.Attestation.Packed.Statement,
     Crypto.Fido2.Protocol,
-    Crypto.Fido2.PublicKey
+    Crypto.Fido2.PublicKey,
+    Crypto.Fido2.Signature
 
 executable server
   import: sanity

@@ -3,11 +3,12 @@
 -- | Implements steps 1 to 16 of <https://www.w3.org/TR/webauthn/#registering-a-new-credential "7.1.  Registering a New Credential">
 module Crypto.Fido2.Attestation (verifyAttestationResponse) where
 
-import Codec.CBOR.Term (Term)
 import Control.Monad (unless, when)
-import Crypto.Fido2.Attestation.Error (Error (InvalidWebauthnType, ChallengeDidNotMatch, OriginDidNotMatch, RpIdMismatch, UserNotPresent, UserNotVerified, NoAttestedCredentialDataFound, InvalidAttestationStatement, UnsupportedAttestationFormat))
+import Crypto.Fido2.Attestation.Error (Error (ChallengeDidNotMatch, InvalidWebauthnType, NoAttestedCredentialDataFound, OriginDidNotMatch, RpIdMismatch, UserNotPresent, UserNotVerified))
+import Crypto.Fido2.Attestation.Packed as Packed (verify)
 import Crypto.Fido2.Protocol
-  ( AttestationObject (AttestationObject, authData, format),
+  ( AttestationFormat (FormatNone, FormatPacked),
+    AttestationObject (AttestationObject, authData, format),
     AttestedCredentialData,
     AuthenticatorAttestationResponse (AuthenticatorAttestationResponse, attestationObject, clientData),
     AuthenticatorData (AuthenticatorData, attestedCredentialData, rpIdHash, userPresent, userVerified),
@@ -16,11 +17,10 @@ import Crypto.Fido2.Protocol
     Origin,
     RpId (unRpId),
     UserVerificationRequirement (UserVerificationRequired),
-    WebauthnType (Create), AttestationFormat (FormatNone)
+    WebauthnType (Create),
   )
 import Crypto.Hash (Digest, SHA256)
 import qualified Crypto.Hash as Hash
-import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 
 -- | Use this result to implement step 17, 18 and 19 of
@@ -174,3 +174,4 @@ validateAttStmt FormatNone AuthenticatorData {attestedCredentialData} _ =
   case attestedCredentialData of
     Just attestedCredentialData -> pure attestedCredentialData
     Nothing -> Left NoAttestedCredentialDataFound
+validateAttStmt (FormatPacked stmt) authData clientDataHash = Packed.verify stmt authData clientDataHash

@@ -11,4 +11,8 @@ data Error
   | InvalidAttestationStatement
   | NoAttestedCredentialDataFound
   | NotTrustworthy
+  | InvalidAlgorithm
+  | InvalidCertificate
+  | DecodingError
+  | InvalidSignature
   deriving (Show, Eq)

@@ -13,9 +13,9 @@ module Crypto.Fido2.PublicKey
     PublicKey (..),
     toCurve,
     verify,
-    alg,
     curveForAlg,
     toAlg,
+    keyAlgorithm,
   )
 where
 
@@ -78,7 +78,7 @@ instance ToJSON COSEAlgorithmIdentifier where
   toJSON (ECDSAIdentifier ES512) = Aeson.Number (-36)
   toJSON EdDSA = Aeson.Number (-8)
 
-data EdDSAKey = Ed25519 Ed25519.PublicKey
+newtype EdDSAKey = Ed25519 Ed25519.PublicKey
   deriving (Eq, Show)
 
 -- Curves supported by us
@@ -96,8 +96,9 @@ data PublicKey
   | ECDSAPublicKey ECDSAKey
   deriving (Show, Eq)
 
-alg :: ECDSAKey -> ECDSAIdentifier
-alg (ECDSAKey alg _) = alg
+keyAlgorithm :: PublicKey -> COSEAlgorithmIdentifier
+keyAlgorithm (ECDSAPublicKey (ECDSAKey alg _)) = ECDSAIdentifier alg
+keyAlgorithm (EdDSAPublicKey (Ed25519 _)) = EdDSA
 
 data KeyType = OKP | ECC
 
