@@ -6,12 +6,14 @@ let
   # Fetch the haskell.nix commit we have pinned with Niv
   haskellNix = import sources.haskellNix {};
 
+  # haskell.nix provides access to the nixpkgs pins which are used by our CI,
+  # hence you will be more likely to get cache hits when using these.
+  # But you can also just use your own, e.g. '<nixpkgs>'.
+  nixpkgs = haskellNix.sources.nixpkgs-2105;
+
   # Import nixpkgs and pass the haskell.nix provided nixpkgsArgs
   pkgs = import
-    # haskell.nix provides access to the nixpkgs pins which are used by our CI,
-    # hence you will be more likely to get cache hits when using these.
-    # But you can also just use your own, e.g. '<nixpkgs>'.
-    haskellNix.sources.nixpkgs-2105
+    nixpkgs
     # These arguments passed to nixpkgs, include some patches and also
     # the haskell.nix functionality itself as an overlay.
     haskellNix.nixpkgsArgs;
@@ -25,6 +27,13 @@ let
     # Specify the GHC version to use.
     compiler-nix-name = "ghc8106";
   };
+
+  deploy = pkgs.writeShellScriptBin "deploy" ''
+    ${pkgs.nixos-rebuild}/bin/nixos-rebuild switch --build-host localhost --target-host webauthn.dev.tweag.io \
+      --use-remote-sudo --no-build-nix \
+      -I nixpkgs=${toString nixpkgs} \
+      -I nixos-config=${toString infra/configuration.nix}
+  '';
 
   shell = build.shellFor {
     tools = {
@@ -41,6 +50,8 @@ let
       python310
       yarn
       nodejs
+      deploy
+      jq
     ];
   };
 

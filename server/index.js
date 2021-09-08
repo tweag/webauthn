@@ -1,6 +1,6 @@
 import {supported, get, create} from  "@github/webauthn-json";
 
-const SERVER = "http://localhost:8080";
+const SERVER = self.location.origin;
 var userHandle = null;
 window.addEventListener("load", () => {
   const registerForm = document.getElementById("registerForm");
@@ -80,6 +80,6 @@ window.addEventListener("load", () => {
     const response = await fetch(`${SERVER}/requires-auth`, {
       credentials: "include"
     });
-    console.log(await response.text());
+    alert(await response.text());
   });
 });

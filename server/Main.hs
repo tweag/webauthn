@@ -2,8 +2,10 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Main
   ( main,
@@ -26,6 +28,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.Encoding as LText
 import Data.UUID (UUID)
@@ -35,6 +38,7 @@ import qualified Database
 import GHC.Generics (Generic)
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (addBase, staticPolicy)
+import System.Environment (getArgs)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
@@ -158,13 +162,13 @@ data RegisterBeginReq = RegisterBeginReq
   deriving (FromJSON) via (Fido2.EncodingRules RegisterBeginReq)
   deriving stock (Generic)
 
-app :: Database.Connection -> TVar Sessions -> ScottyM ()
-app db sessions = do
+app :: Fido2.Origin -> Fido2.RpId -> Database.Connection -> TVar Sessions -> ScottyM ()
+app origin rpId db sessions = do
   Scotty.middleware (staticPolicy (addBase "dist"))
-  Scotty.post "/register/begin" $ beginRegistration db sessions
-  Scotty.post "/register/complete" $ completeRegistration db sessions
+  Scotty.post "/register/begin" $ beginRegistration rpId db sessions
+  Scotty.post "/register/complete" $ completeRegistration origin rpId db sessions
   Scotty.post "/login/begin" $ beginLogin db sessions
-  Scotty.post "/login/complete" $ completeLogin db sessions
+  Scotty.post "/login/complete" $ completeLogin origin rpId db sessions
   Scotty.get "/requires-auth" $ do
     (_sessionId, session) <- getSessionScotty sessions
     when (not . isAuthenticated $ session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
@@ -211,8 +215,8 @@ beginLogin db sessions = do
         userVerification = Nothing
       }
 
-completeLogin :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
-completeLogin db sessions = do
+completeLogin :: Fido2.Origin -> Fido2.RpId -> Database.Connection -> TVar Sessions -> Scotty.ActionM ()
+completeLogin origin rpId db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
     Authenticating userId challenge -> verifyLogin sessionId session userId challenge
@@ -227,7 +231,7 @@ completeLogin db sessions = do
           pure cr
       handleError $
         Assertion.verifyAssertionResponse
-          relyingPartyConfig
+          Assertion.RelyingPartyConfig {origin = origin, rpId = rpId}
           challenge
           credentials
           -- TODO: Read this from a DB or something?
@@ -238,8 +242,8 @@ completeLogin db sessions = do
           casSession sessions sessionId session (Authenticated userId)
       Scotty.json @Text "Welcome."
 
-beginRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
-beginRegistration db sessions = do
+beginRegistration :: Fido2.RpId -> Database.Connection -> TVar Sessions -> Scotty.ActionM ()
+beginRegistration rpId db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   -- NOTE: We currently do not support multiple credentials per user.
   case session of
@@ -257,14 +261,14 @@ beginRegistration db sessions = do
                 displayName = displayName,
                 name = userName
               }
-      Scotty.json $ defaultPkcco user challenge
+      Scotty.json $ defaultPkcco rpId user challenge
       liftIO $
         Database.withTransaction db $ \tx -> do
           Database.addUser tx user
           STM.atomically $ casSession sessions sessionId session (Registering userId challenge)
 
-completeRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
-completeRegistration db sessions = do
+completeRegistration :: Fido2.Origin -> Fido2.RpId -> Database.Connection -> TVar Sessions -> Scotty.ActionM ()
+completeRegistration origin rpId db sessions = do
   (sessionId, session) <- getSessionScotty sessions
   case session of
     Registering userId challenge ->
@@ -285,8 +289,8 @@ completeRegistration db sessions = do
         } <-
         handleError $
           verifyAttestationResponse
-            serverOrigin
-            (Fido2.RpId domain)
+            origin
+            rpId
             challenge
             Fido2.UserVerificationPreferred
             response
@@ -307,10 +311,10 @@ completeRegistration db sessions = do
       handleError result
       liftIO $ STM.atomically $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userId)
 
-defaultPkcco :: Fido2.PublicKeyCredentialUserEntity -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
-defaultPkcco userEntity challenge =
+defaultPkcco :: Fido2.RpId -> Fido2.PublicKeyCredentialUserEntity -> Fido2.Challenge -> Fido2.PublicKeyCredentialCreationOptions
+defaultPkcco rpId userEntity challenge =
   Fido2.PublicKeyCredentialCreationOptions
-    { rp = rpEntity,
+    { rp = Fido2.PublicKeyCredentialRpEntity {id = Just rpId, name = "ACME"},
       user = userEntity,
       challenge = challenge,
       -- Empty credentialparameters are not supported.
@@ -327,27 +331,11 @@ defaultPkcco userEntity challenge =
       attestation = Nothing
     }
 
-port :: Int
-port = 8080
-
-domain :: Text
-domain = "localhost"
-
-serverOrigin :: Fido2.Origin
-serverOrigin = Fido2.Origin $ "http://" <> domain <> ":" <> (Text.pack $ show port)
-
--- This type is very very close to the PublicKeyCredentialRpEntity. Should those be the
--- same thing? Origin and ID are very similar things.
-relyingPartyConfig :: Assertion.RelyingPartyConfig
-relyingPartyConfig = Assertion.RelyingPartyConfig {origin = serverOrigin, rpId = Fido2.RpId domain}
-
-rpEntity :: Fido2.PublicKeyCredentialRpEntity
-rpEntity = Fido2.PublicKeyCredentialRpEntity {id = Just (Fido2.RpId domain), name = "ACME"}
-
 main :: IO ()
 main = do
+  [Text.pack -> origin, Text.pack -> domain, read -> port] <- getArgs
   db <- Database.connect
   Database.initialize db
   sessions <- STM.newTVarIO Map.empty
-  putStrLn "You can view the web-app at: http://localhost:8080/index.html"
-  Scotty.scotty port $ app db sessions
+  Text.putStrLn $ "You can view the web-app at: " <> origin <> "/index.html"
+  Scotty.scotty port $ app (Fido2.Origin origin) (Fido2.RpId domain) db sessions
