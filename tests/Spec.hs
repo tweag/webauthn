@@ -11,7 +11,6 @@ module Main
   )
 where
 
-import qualified AttestationSpec
 import Codec.CBOR.Term (Term (TInt))
 import qualified Crypto.Fido2.Assertion as Fido2
 import qualified Crypto.Fido2.Attestation as Fido2
@@ -28,17 +27,17 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Coerce (coerce)
 import Data.Either (isRight)
 import Data.Foldable (for_)
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import GHC.Stack (HasCallStack)
 import qualified PublicKeySpec
 import qualified System.Directory as Directory
 import System.FilePath ((</>))
-import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+import Test.Hspec (Spec, describe, it, shouldSatisfy)
 import qualified Test.Hspec as Hspec
 import Test.QuickCheck.Arbitrary (Arbitrary (arbitrary))
-import Test.QuickCheck.Gen (elements, listOf, oneof)
+import Test.QuickCheck.Gen (elements, listOf)
 import Test.QuickCheck.Instances.Text ()
 import Test.QuickCheck.Property (property, total, (===), (==>))
 
@@ -405,8 +404,45 @@ main = Hspec.hspec $ do
                 Fido2.UserVerificationPreferred
                 loginReq
         signInResult `shouldSatisfy` isRight
+  describe "Packed register and login" $
+    it "tests whether the fixed packed register and login responses are matching" $
+      do
+        Fido2.PublicKeyCredential {response} <-
+          decodeFile
+            @(Fido2.PublicKeyCredential Fido2.AuthenticatorAttestationResponse)
+            -- Test data used from fido2-net-lib (C) .NET Foundation and Contributors (MIT License)
+            "tests/fixtures/register-complete/02.json"
+        let Fido2.AuthenticatorAttestationResponse {clientData} = response
+            Fido2.ClientData {challenge} = clientData
+        let registerResult =
+              Fido2.verifyAttestationResponse
+                (Fido2.Origin "http://localhost:8080")
+                (Fido2.RpId "psteniusubi.github.io")
+                challenge
+                Fido2.UserVerificationPreferred
+                response
+        registerResult `shouldSatisfy` isRight
 
-decodeFile :: FromJSON a => FilePath -> IO a
+{- Disabled because this is not implemented
+  let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
+  loginReq <-
+    decodeFile
+      @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
+      "tests/fixtures/login-complete/02.json"
+  let Fido2.PublicKeyCredential {response} = loginReq
+  let Fido2.AuthenticatorAssertionResponse {clientData} = response
+  let Fido2.ClientData {challenge} = clientData
+  let signInResult =
+        Fido2.verifyAssertionResponse
+          Fido2.RelyingPartyConfig {origin = Fido2.Origin "https://localhost:44329", rpId = Fido2.RpId "localhost"}
+          challenge
+          [Fido2.Credential {id = credentialId, publicKey = credentialPublicKey}]
+          Fido2.UserVerificationPreferred
+          loginReq
+  signInResult `shouldSatisfy` isRight
+-}
+
+decodeFile :: (FromJSON a, Show a) => FilePath -> IO a
 decodeFile filePath = do
   loginBytes <- ByteString.readFile filePath
   case Aeson.eitherDecode' $ LazyByteString.fromStrict loginBytes of
