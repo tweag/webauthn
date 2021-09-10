@@ -9,7 +9,7 @@ import qualified Data.Aeson as Aeson
 import Data.Aeson.Types
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.Char (toLower)
+import Data.Char (toLower, toUpper)
 import Data.List
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
@@ -22,7 +22,7 @@ import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Time
 import Data.Time.Format.ISO8601
-import Data.Word (Word16, Word32)
+import Data.Word (Word16, Word32, Word64, Word8)
 import GHC.Generics
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS
@@ -31,7 +31,8 @@ import qualified Web.JWT as JWT
 
 data MDSSource = Prefetched Text | Fetched Request
 
-data MDS = MDS
+-- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-dictionary
+data MetadataBlobPayload = MetadataBlobPayload
   { mdsNumber :: Int,
     mdsNextUpdate :: Day,
     mdsLegalHeader :: Text,
@@ -62,6 +63,7 @@ newtype KeyIdentifier = KeyIdentifier Text
   deriving newtype (FromJSON)
 
 lowerFirst :: String -> String
+lowerFirst [] = []
 lowerFirst (x : xs) = toLower x : xs
 
 modifyTypeField :: String -> String -> String
@@ -74,13 +76,14 @@ data MDSEntry = MDSEntry
   { -- | The AAID of the authenticator, This field MUST be set if the authenticator implements FIDO UAF.
     entryAaid :: Maybe AAID,
     entryAaguid :: Maybe AAGUID,
-    entryAttestationCertificateKeyIdentifiers :: Maybe [KeyIdentifier], -- TODO: Type
+    entryAttestationCertificateKeyIdentifiers :: Maybe [KeyIdentifier],
     entryMetadataStatement :: MetadataStatement,
-    -- , entryBiometricStatusReports, Seemingly unused?
     entryStatusReports :: [StatusReport],
-    entryTimeOfLastStatusChange :: Day,
-    entryRogueListURL :: Text, -- TODO: Type
-    entryRogueListHash :: Text -- TODO: Type
+    entryTimeOfLastStatusChange :: Day
+    -- Fields not used in blob
+    -- entryBiometricStatusReports
+    -- entryRogueListURL
+    -- entryRogueListHash
   }
   deriving (Show, Generic)
 
@@ -94,35 +97,42 @@ instance FromJSON MDSEntry where
 -- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#statusreport-dictionary
 data StatusReport = StatusReport
   { status :: AuthenticatorStatus,
-    effectiveDate :: Day,
-    authenticatorVersion :: Word32,
+    effectiveDate :: Maybe Day,
+    authenticatorVersion :: Maybe Word32,
     -- , certificate, Seemingly unused
-    url :: Text,
-    certificateDescriptor :: Text,
-    certificateNumber :: Text,
-    certificationPolicyVersion :: Text,
-    certificationRequirementsVersion :: Text
+    url :: Maybe Text,
+    certificateDescriptor :: Maybe Text,
+    certificateNumber :: Maybe Text,
+    certificationPolicyVersion :: Maybe Text,
+    certificationRequirementsVersion :: Maybe Text
   }
   deriving (Show, Generic, FromJSON)
 
 -- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#authenticatorstatus-enum
 data AuthenticatorStatus
-  = NotFidoCertified
-  | FidoCertified
-  | UserVerificationBypass
-  | AttestationKeyCompromise
-  | UserKeyRemoteCompromise
-  | UserKeyPhysicalCompromise
-  | UpdateAvailable
-  | Revoked
-  | SelfAssertionSubmitted
-  | FidoCertifiedL1
-  | FidoCertifiedL1plus
-  | FidoCertifiedL2
-  | FidoCertifiedL2plus
-  | FidoCertifiedL3
-  | FidoCertifiedL3plus
-  deriving (Show, Generic, FromJSON)
+  = AuthenticatorStatusNotFidoCertified
+  | AuthenticatorStatusFidoCertified
+  | AuthenticatorStatusUserVerificationBypass
+  | AuthenticatorStatusAttestationKeyCompromise
+  | AuthenticatorStatusUserKeyRemoteCompromise
+  | AuthenticatorStatusUserKeyPhysicalCompromise
+  | AuthenticatorStatusUpdateAvailable
+  | AuthenticatorStatusRevoked
+  | AuthenticatorStatusSelfAssertionSubmitted
+  | AuthenticatorStatusFidoCertifiedL1
+  | AuthenticatorStatusFidoCertifiedL1plus
+  | AuthenticatorStatusFidoCertifiedL2
+  | AuthenticatorStatusFidoCertifiedL2plus
+  | AuthenticatorStatusFidoCertifiedL3
+  | AuthenticatorStatusFidoCertifiedL3plus
+  deriving (Show, Generic)
+
+instance FromJSON AuthenticatorStatus where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { constructorTagModifier = map toUpper . camelTo2 '_' . modifyTypeField "AuthenticatorStatus"
+        }
 
 data FIDOProtocol
   = UAF
@@ -151,7 +161,7 @@ data AssertionScheme
   | FIDOV2
   deriving (Show, Generic, FromJSON)
 
--- https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-registry-v2.0-id-20180227.html#authentication-algorithms
+-- https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#authentication-algorithms
 data AuthenticationAlgorithms
   = SECP256R1_ECDSA_SHA256_RAW
   | SECP256R1_ECDSA_SHA256_DER
@@ -162,6 +172,15 @@ data AuthenticationAlgorithms
   | SM2_SM3_RAW
   | RSA_EMSA_PKCS1_SHA256_RAW
   | RSA_EMSA_PKCS1_SHA256_DER
+  | RSASSA_PSS_SHA384_RAW
+  | RSASSA_PSS_SHA512_RAW
+  | RSASSA_PKCSV15_SHA256_RAW
+  | RSASSA_PKCSV15_SHA384_RAW
+  | RSASSA_PKCSV15_SHA512_RAW
+  | RSASSA_PKCSV15_SHA1_RAW
+  | SECP384R1_ECDSA_SHA384_RAW
+  | SECP512R1_ECDSA_SHA512_RAW
+  | ED25519_EDDSA_SHA512_RAW
   deriving (Show, Generic)
 
 instance FromJSON AuthenticationAlgorithms where
@@ -252,11 +271,12 @@ instance FromJSON BiometricAccuracyDescriptor where
   parseJSON =
     genericParseJSON
       defaultOptions
-        { fieldLabelModifier = modifyTypeField "biometricAccuraryDescriptor"
+        { fieldLabelModifier = modifyTypeField "biometricAccuracyDescriptor"
         }
 
 data PatternAccuracyDescriptor = PatternAccuracyDescriptor
-  { patternAccuracyDescriptorMinComplexity :: Maybe Word32,
+  { -- Should be Word32, but the blob countains 34359738368, which is bigger than the maximum Word32
+    patternAccuracyDescriptorMinComplexity :: Maybe Word64,
     patternAccuracyDescriptorMaxRetries :: Maybe Word16,
     patternAccuracyDescriptorBlockSlowdown :: Maybe Word16
   }
@@ -266,7 +286,7 @@ instance FromJSON PatternAccuracyDescriptor where
   parseJSON =
     genericParseJSON
       defaultOptions
-        { fieldLabelModifier = modifyTypeField "patternAccuraryDescriptor"
+        { fieldLabelModifier = modifyTypeField "patternAccuracyDescriptor"
         }
 
 -- https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-metadata-statement-v2.0-id-20180227.html#verificationmethoddescriptor-dictionary
@@ -285,15 +305,78 @@ instance FromJSON VerificationMethodDescriptor where
         { fieldLabelModifier = modifyTypeField "verificationMethodDescriptor"
         }
 
+data KeyProtection
+  = KeyProtectionSoftware
+  | KeyProtectionHardware
+  | KeyProtectionTee
+  | KeyProtectionSecureElement
+  | KeyProtectionRemoteHandle
+  deriving (Show, Generic)
+
+instance FromJSON KeyProtection where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { constructorTagModifier = camelTo2 '_' . modifyTypeField "KeyProtection"
+        }
+
+data MatcherProtection
+  = MatcherProtectionSoftware
+  | MatcherProtectionTee
+  | MatcherProtectionOnChip
+  deriving (Show, Generic)
+
+instance FromJSON MatcherProtection where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { constructorTagModifier = camelTo2 '_' . modifyTypeField "MatcherProtection"
+        }
+
+data AttachmentHint
+  = AttachmentHintInternal
+  | AttachmentHintExternal
+  | AttachmentHintWired
+  | AttachmentHintWireless
+  | AttachmentHintNfc
+  | AttachmentHintBluetooth
+  | AttachmentHintNetwork
+  | AttachmentHintReady
+  | AttachmentHintWifiDirect
+  deriving (Show, Generic)
+
+instance FromJSON AttachmentHint where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { constructorTagModifier = camelTo2 '_' . modifyTypeField "AttachmentHint"
+        }
+
+data TransactionConfirmationDisplay
+  = TransactionConfirmationDisplayAny
+  | TransactionConfirmationDisplayPrivilegedSoftware
+  | TransactionConfirmationDisplayTee
+  | TransactionConfirmationDisplayHardware
+  | TransactionConfirmationDisplayRemote
+  deriving (Show, Generic)
+
+instance FromJSON TransactionConfirmationDisplay where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { constructorTagModifier = camelTo2 '_' . modifyTypeField "TransactionConfirmationDisplay"
+        }
+
 -- https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-metadata-statement-v2.0-id-20180227.html#metadata-keys
 data MetadataStatement = MetadataStatement
   { metadataStatementLegalHeader :: Text,
     metadataStatementAaid :: Maybe AAID,
     metadataStatementAaguid :: Maybe AAGUID,
-    metadataStatementAttestationCertificateKeyIdentifiers :: [KeyIdentifier],
+    metadataStatementAttestationCertificateKeyIdentifiers :: Maybe [KeyIdentifier],
     metadataStatementDescription :: Text,
     metadataStatementAlternativeDescriptions :: Maybe (Map Text Text),
-    metadataStatementAuthenticatorVersion :: Word16,
+    -- Should be Word16 according to the spec, but there's values higher than 65535 in the blob
+    metadataStatementAuthenticatorVersion :: Word32,
     metadataStatementProtocolFamily :: FIDOProtocol,
     metadataStatementUpv :: [Version],
     -- NOTE: This should be required, but the field is never set in the blob
@@ -306,21 +389,21 @@ data MetadataStatement = MetadataStatement
     metadataStatementPublicKeyAlgAndEncodings :: [PublicKeyRepresentationFormats],
     metadataStatementAttestationTypes :: [AttestationType],
     metadataStatementUserVerificationDetails :: [NonEmpty VerificationMethodDescriptor],
-    metadataStatementKeyProtection :: Word16,
-    metadataStatementIsKeyRestricted :: Bool,
-    metadataStatementIsFreshUserVerificationRequired :: Bool,
-    metadataStatementMatcherProtection :: Word16,
+    metadataStatementKeyProtection :: NonEmpty KeyProtection,
+    metadataStatementIsKeyRestricted :: Maybe Bool,
+    metadataStatementIsFreshUserVerificationRequired :: Maybe Bool,
+    metadataStatementMatcherProtection :: NonEmpty MatcherProtection,
     metadataStatementCryptoStrength :: Maybe Word16,
-    metadataStatementOperatingEnv :: Text,
-    metadataStatementAttachmentHint :: Word32,
-    metadataStatementIsSecondFactorOnly :: Bool,
-    metadataStatementTcDisplay :: Word16,
+    -- metadataStatementOperatingEnv :: Maybe Text,
+    metadataStatementAttachmentHint :: NonEmpty AttachmentHint,
+    -- metadataStatementIsSecondFactorOnly :: Bool,
+    metadataStatementTcDisplay :: [TransactionConfirmationDisplay],
     metadataStatementTcDisplayContentType :: Maybe Text,
     metadataStatementTcDisplayPNGCharacteristics :: Maybe [DisplayPNGCharacteristicsDescriptor],
     metadataStatementAttestationRootCertificates :: [Text],
     --metadataStatementEcdaaTrustAnchors :: Maybe [EcdaaTrustAnchor],
     metadataStatementIcon :: Text,
-    metadataStatementSupportedExtensions :: [ExtensionDescriptor]
+    metadataStatementSupportedExtensions :: Maybe [ExtensionDescriptor]
   }
   deriving (Show, Generic)
 
@@ -334,16 +417,51 @@ instance FromJSON MetadataStatement where
 data ExtensionDescriptor = ExtensionDescriptor
   { extensionDescriptorId :: Text,
     --, extensionDescriptorTag ::
-    extensionDescriptorData :: Text,
+    extensionDescriptorData :: Maybe Text,
     extensionDescriptorFail_if_unknown :: Bool
   }
-  deriving (Show, Generic, FromJSON)
+  deriving (Show, Generic)
+
+instance FromJSON ExtensionDescriptor where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = modifyTypeField "extensionDescriptor"
+        }
+
+data RgbPaletteEntry = RgbPaletteEntry
+  { rgbPaletteEntryR :: Word16,
+    rgbPaletteEntryG :: Word16,
+    rgbPaletteEntryB :: Word16
+  }
+  deriving (Show, Generic)
+
+instance FromJSON RgbPaletteEntry where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = modifyTypeField "rgbPaletteEntry"
+        }
 
 -- https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-metadata-statement-v2.0-id-20180227.html#idl-def-DisplayPNGCharacteristicsDescriptor
 data DisplayPNGCharacteristicsDescriptor = DisplayPNGCharacteristicsDescriptor
-  {
+  { displayPNGCharacteristicsDescriptorWidth :: Word32,
+    displayPNGCharacteristicsDescriptorHeight :: Word32,
+    displayPNGCharacteristicsDescriptorBitDepth :: Word8,
+    displayPNGCharacteristicsDescriptorColorType :: Word8,
+    displayPNGCharacteristicsDescriptorCompression :: Word8,
+    displayPNGCharacteristicsDescriptorFilter :: Word8,
+    displayPNGCharacteristicsDescriptorInterlace :: Word8,
+    displayPNGCharacteristicsDescriptorPlte :: Maybe (NonEmpty RgbPaletteEntry)
   }
-  deriving (Show, Generic, FromJSON)
+  deriving (Show, Generic)
+
+instance FromJSON DisplayPNGCharacteristicsDescriptor where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = modifyTypeField "displayPNGCharacteristicsDescriptor"
+        }
 
 -- Stolen from https://hackage.haskell.org/package/either
 maybeToRight :: a -> Maybe b -> Either a b
@@ -367,27 +485,34 @@ parseBoundedIntegralFromScientific s =
 newtype PublicKeyIdentifier = PublicKeyIdentifier BS.ByteString
 
 -- TODO: Use Either
-decodeMDS :: Text -> Either MDSError MDS
+decodeMDS :: Text -> Either MDSError MetadataBlobPayload
 decodeMDS body = do
-  jwt <- maybeToRight MDSErrorJWTDecodingFailed $ JWT.decode body
+  jwt <- maybeToRight MDSErrorJWTDecodingFailed $ JWT.decodeAndVerifySignature undefined body
   let claims = JWT.unregisteredClaims $ JWT.claims jwt
   number <- getClaim "no" claims (withScientific "no" parseBoundedIntegralFromScientific)
   nextUpdate <- getClaim "nextUpdate" claims (withText "nextUpdate" $ iso8601ParseM . Text.unpack)
   legalHeader <- getClaim "legalHeader" claims (withText "legalHeader" pure)
   entries <- getClaim "entries" claims parseJSON
   return
-    MDS
+    MetadataBlobPayload
       { mdsNumber = number,
         mdsNextUpdate = nextUpdate,
         mdsLegalHeader = legalHeader,
         mdsEntries = entries
       }
 
-prefetchedTest :: IO (Either MDSError MDS)
+--
+-- TODO: Follow this:
+-- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules
+--prefetchedTest :: IO (Either MDSError MetadataBlobPayload)
+-- FIXME: The jwt library isn't very compliant and doesn't implement everything we need.
+-- Use the jose library instead, and specifically Crypto.JOSE.JWK.fromX509Certificate to generate the JWK needed to verify the signature
 prefetchedTest = do
   contents <- BS.readFile "mds.jwt"
   let body = decodeUtf8 contents
-  return $ decodeMDS body
+  return $ JWT.decode body
+
+--return $ decodeMDS body
 
 newtype EncodingRules a = EncodingRules a
 
