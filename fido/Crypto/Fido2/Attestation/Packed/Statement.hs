@@ -8,6 +8,7 @@ import Data.ByteString (ByteString)
 import qualified Data.Map as Map
 import qualified Data.X509 as X509
 
+-- packedStmtFormat (https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation)
 data Stmt = Stmt
   { alg :: COSEAlgorithmIdentifier,
     sig :: ByteString,
@@ -22,6 +23,7 @@ decode xs = do
   alg <- toAlg algId
   TBytes sig <- maybe (fail "no sig") pure $ Map.lookup (TString "sig") m
   x5c <- case Map.lookup (TString "x5c") m of
+    -- TODO: Can we discard the rest?
     Just (TList (TBytes certBytes : _)) ->
       either fail (pure . pure) $ X509.decodeSignedCertificate certBytes
     _ -> pure Nothing

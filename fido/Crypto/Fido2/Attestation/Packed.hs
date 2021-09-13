@@ -20,11 +20,13 @@ import Data.Foldable (find)
 import Data.Maybe (isJust)
 import qualified Data.X509 as X509
 
+-- https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation
 verify :: Stmt -> AuthenticatorData -> Digest SHA256 -> Either Error AttestedCredentialData
 verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@AuthenticatorData {rawData = rawAuthData} clientDataHash = do
   let signedData = rawAuthData <> convert clientDataHash
   credData <- maybe (Left NoAttestedCredentialDataFound) pure $ attestedCredentialData authData
   case stmtx5c of
+    -- Self attestation
     Nothing -> do
       -- Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
       let key = credentialPublicKey credData
@@ -34,6 +36,7 @@ verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@Authenticator
       unless (PublicKey.verify key signedData stmtSig) $ Left InvalidAttestationStatement
 
       pure credData
+    -- Basic, AttCA
     Just x5c -> do
       let cert = X509.getCertificate x5c
           pubKey = X509.certPubKey cert
@@ -63,6 +66,13 @@ verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@Authenticator
           certAAGUID <- decodeAAGUID (X509.extRawContent ext)
           unless (adAAGUID == certAAGUID) (Left InvalidAttestationStatement)
 
+      -- Optionally, inspect x5c and consult externally provided knowledge to
+      -- determine whether attStmt conveys a Basic or AttCA attestation. Blocked
+      -- by https://github.com/tweag/haskell-fido2/pull/11
+
+      -- TODO: If successful, return implementation-specific values representing
+      -- attestation type Basic, AttCA or uncertainty, and attestation trust
+      -- path x5c.
       pure credData
   where
     hasDnElement :: X509.DnElement -> [(OID.OID, X509.ASN1CharacterString)] -> Bool

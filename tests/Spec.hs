@@ -423,7 +423,7 @@ main = Hspec.hspec $ do
                 response
         registerResult `shouldSatisfy` isRight
 
-{- Disabled because this is not implemented
+{- Disabled because we can't yet reproduce a login response for the register-complete/02.json
   let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
   loginReq <-
     decodeFile

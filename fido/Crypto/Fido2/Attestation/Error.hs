@@ -1,5 +1,6 @@
 module Crypto.Fido2.Attestation.Error (Error (..)) where
 
+-- TODO: Add supplementary fields giving more error info
 data Error
   = InvalidWebauthnType
   | ChallengeDidNotMatch
