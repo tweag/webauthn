@@ -37,6 +37,7 @@ library
     cryptonite,
     memory,
     cborg,
+    mtl,
     serialise,
     text,
     unordered-containers,
@@ -44,7 +45,7 @@ library
     scientific,
     vector,
     QuickCheck,
-    jwt,
+    jose,
     http-client,
     http-types,
     http-client-tls,
@@ -53,8 +54,41 @@ library
     Crypto.Fido2.Assertion,
     Crypto.Fido2.Attestation,
     Crypto.Fido2.Protocol,
-    Crypto.Fido2.PublicKey,
-    Crypto.Fido2.MDS
+    Crypto.Fido2.PublicKey
+    --Crypto.Fido2.MDS
+
+executable mds-test
+  import: sanity
+  hs-source-dirs: fido
+  main-is: Main.hs
+  build-depends:
+    lens,
+    binary,
+    aeson,
+    asn1-encoding,
+    bytestring,
+    base64-bytestring,
+    pem,
+    containers,
+    x509-validation,
+    asn1-types,
+    x509-store,
+    cryptonite,
+    memory,
+    cborg,
+    mtl,
+    serialise,
+    text,
+    unordered-containers,
+    x509,
+    scientific,
+    vector,
+    QuickCheck,
+    jose,
+    http-client,
+    http-types,
+    http-client-tls,
+    time
 
 executable server
   import: sanity

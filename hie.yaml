@@ -5,6 +5,11 @@ cradle:
       cradle:
         cabal:
           component: lib:fido2
+  - path: "./fido/Main.hs"
+    config:
+      cradle:
+        cabal:
+          component: exe:mds-test
   - path: "./server"
     config:
       cradle:

@@ -1,33 +1,54 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
-module Crypto.Fido2.MDS where
+module Main where
 
+import Control.Lens
+import Control.Monad.Except (ExceptT, MonadError (throwError), MonadIO (liftIO), runExceptT, withExceptT)
+import qualified Crypto.JOSE.Compact as Compact
+import qualified Crypto.JOSE.JWK as JWK
+import qualified Crypto.JOSE.JWS as JWS
+import qualified Crypto.JOSE.Types as JWT
+import qualified Crypto.JWT as JWT
+import Data.ASN1.Types (asn1CharacterToString)
 import qualified Data.Aeson as Aeson
 import Data.Aeson.Types
+import Data.Bifunctor (first)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Char (toLower, toUpper)
+import Data.Functor.Identity (Identity)
+import qualified Data.HashMap.Strict as HM
 import Data.List
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.PEM as PEM
 import Data.Scientific
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding
+import qualified Data.Text.Encoding as Text
 import Data.Time
 import Data.Time.Format.ISO8601
 import Data.Word (Word16, Word32, Word64, Word8)
+import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
+import qualified Data.X509.Validation as X509
+import Debug.Trace
 import GHC.Generics
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 import Network.HTTP.Types.Status (statusCode)
-import qualified Web.JWT as JWT
+
+--import qualified Web.JWT as JWT
 
 data MDSSource = Prefetched Text | Fetched Request
 
@@ -41,9 +62,9 @@ data MetadataBlobPayload = MetadataBlobPayload
   deriving (Show)
 
 data MDSError
-  = MDSErrorJWTDecodingFailed
-  | MDSErrorClaimMissing Text
+  = MDSErrorJWT JWT.JWTError
   | MDSErrorClaimDecoding Text Value String
+  | MDSErrorClaimMissing Text
   deriving (Show)
 
 -- https://fidoalliance.org/specs/fido-uaf-v1.2-ps-20201020/fido-uaf-protocol-v1.2-ps-20201020.html#authenticator-attestation-id-aaid-typedef
@@ -468,8 +489,8 @@ maybeToRight :: a -> Maybe b -> Either a b
 maybeToRight _ (Just x) = Right x
 maybeToRight y Nothing = Left y
 
-getClaim :: Text -> JWT.ClaimsMap -> (Value -> Parser a) -> Either MDSError a
-getClaim field (JWT.ClaimsMap claims) parser = case Map.lookup field claims of
+getClaim :: Text -> HM.HashMap Text Value -> (Value -> Parser a) -> Either MDSError a
+getClaim field claims parser = case HM.lookup field claims of
   Nothing -> Left $ MDSErrorClaimMissing field
   Just value -> case parse parser value of
     Error err -> Left $ MDSErrorClaimDecoding field value err
@@ -484,22 +505,72 @@ parseBoundedIntegralFromScientific s =
 
 newtype PublicKeyIdentifier = PublicKeyIdentifier BS.ByteString
 
+-- TODO: Make this contain the root certificate
+newtype Chain = Chain X509.SignedCertificate
+
+getNames :: X509.Certificate -> (Maybe String, [String])
+getNames cert = (commonName >>= asn1CharacterToString, altNames)
+  where
+    commonName = X509.getDnElement X509.DnCommonName $ X509.certSubjectDN cert
+    altNames = maybe [] toAltName $ X509.extensionGet $ X509.certExtensions cert
+    toAltName (X509.ExtSubjectAltName names) = catMaybes $ map unAltName names
+      where
+        unAltName (X509.AltNameDNS s) = Just s
+        unAltName _ = Nothing
+
+instance JWT.VerificationKeyStore (ExceptT JWT.JWTError IO) (JWT.JWSHeader ()) LBS.ByteString Chain where
+  getVerificationKeys header bytes (Chain rootCert) = do
+    -- TODO Handle pattern mismatch, and the spec says to also check x5u
+    let Just (NE.toList -> x) = preview (JWT.x5c . _Just . JWT.param) header
+
+    let hooks =
+          X509.defaultHooks
+            { X509.hookValidateName = \host cert -> trace ("Host is " ++ host ++ ", names are " ++ show (getNames cert)) $ X509.hookValidateName X509.defaultHooks host cert
+            }
+        store = X509.makeCertificateStore [rootCert]
+        cache = X509.exceptionValidationCache []
+    -- TODO: Does the SHA256 choice matter here?
+    result <- liftIO $ X509.validate X509.HashSHA256 hooks X509.defaultChecks store cache ("mds.fidoalliance.org", "") (X509.CertificateChain x)
+    case result of
+      [] -> do
+        --let pem = PEM.PEM "CERTIFICATE" [] (X509.encodeSignedObject $ head x)
+        -- TODO: Verify chain
+        res <- JWT.fromX509Certificate (head x)
+        return [res]
+      --trace ("Got result: " ++ show result) $ trace (Text.unpack $ Text.decodeUtf8 $ LBS.toStrict $ PEM.pemWriteLBS pem) $
+      errors ->
+        trace (show errors) $ throwError $ JWT.JWSError JWT.JWSInvalidSignature
+
+decodeJWTPayload :: LBS.ByteString -> JWT.SignedCertificate -> ExceptT JWT.JWTError IO LBS.ByteString
+decodeJWTPayload bytes rootCert = do
+  jws :: JWT.CompactJWS JWT.JWSHeader <- JWT.decodeCompact bytes
+  JWS.verifyJWS' (Chain rootCert) jws
+
+--let x = jws ^. JWT.jwsHeader ^. JWT.x5c
+--key <- JWT.fromX509Certificate cert
+
 -- TODO: Use Either
-decodeMDS :: Text -> Either MDSError MetadataBlobPayload
-decodeMDS body = do
-  jwt <- maybeToRight MDSErrorJWTDecodingFailed $ JWT.decodeAndVerifySignature undefined body
-  let claims = JWT.unregisteredClaims $ JWT.claims jwt
-  number <- getClaim "no" claims (withScientific "no" parseBoundedIntegralFromScientific)
-  nextUpdate <- getClaim "nextUpdate" claims (withText "nextUpdate" $ iso8601ParseM . Text.unpack)
-  legalHeader <- getClaim "legalHeader" claims (withText "legalHeader" pure)
-  entries <- getClaim "entries" claims parseJSON
-  return
-    MetadataBlobPayload
-      { mdsNumber = number,
-        mdsNextUpdate = nextUpdate,
-        mdsLegalHeader = legalHeader,
-        mdsEntries = entries
-      }
+decodeMDS :: LBS.ByteString -> X509.SignedCertificate -> ExceptT MDSError IO LBS.ByteString
+decodeMDS body cert = do
+  --first MDSErrorJWT <$>
+  withExceptT MDSErrorJWT $ decodeJWTPayload body cert
+
+--undefined <- JWT.decodeCompact body
+
+--jwt <- maybeToRight MDSErrorJWTDecodingFailed $ JWT.decodeAndVerifySignature undefined body
+--let claims = JWT.unregisteredClaims $ JWT.claims jwt
+--let claims = undefined
+--number <- getClaim "no" claims (withScientific "no" parseBoundedIntegralFromScientific)
+--nextUpdate <- getClaim "nextUpdate" claims (withText "nextUpdate" $ iso8601ParseM . Text.unpack)
+--legalHeader <- getClaim "legalHeader" claims (withText "legalHeader" pure)
+--entries <- getClaim "entries" claims parseJSON
+--return
+--  MetadataBlobPayload
+--    { mdsNumber = number,
+--      mdsNextUpdate = nextUpdate,
+--      mdsLegalHeader = legalHeader,
+--      mdsEntries = entries
+--    }
 
 --
 -- TODO: Follow this:
@@ -507,12 +578,20 @@ decodeMDS body = do
 --prefetchedTest :: IO (Either MDSError MetadataBlobPayload)
 -- FIXME: The jwt library isn't very compliant and doesn't implement everything we need.
 -- Use the jose library instead, and specifically Crypto.JOSE.JWK.fromX509Certificate to generate the JWK needed to verify the signature
-prefetchedTest = do
-  contents <- BS.readFile "mds.jwt"
-  let body = decodeUtf8 contents
-  return $ JWT.decode body
-
---return $ decodeMDS body
+main = do
+  putStrLn "Reading contents"
+  contents <- LBS.readFile "mds.jwt"
+  putStrLn "Reading cert"
+  certBytes <- LBS.readFile "root-cert.crt"
+  let Right [PEM.pemContent -> pem] = PEM.pemParseLBS certBytes
+  let Right cert = X509.decodeSignedCertificate pem
+  putStrLn $ "Cert decoding successful"
+  res <- runExceptT $ decodeMDS contents cert
+  case res of
+    Left err -> putStrLn $ show err
+    Right payload -> do
+      putStrLn "Successfully got payload, writing to output.json"
+      LBS.writeFile "output.json" payload
 
 newtype EncodingRules a = EncodingRules a
 
