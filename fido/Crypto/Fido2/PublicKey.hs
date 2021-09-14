@@ -13,8 +13,9 @@ module Crypto.Fido2.PublicKey
     PublicKey (..),
     toCurve,
     verify,
-    alg,
     curveForAlg,
+    toAlg,
+    keyAlgorithm,
   )
 where
 
@@ -23,7 +24,7 @@ import qualified Codec.CBOR.Decoding as CBOR
 import Codec.CBOR.Encoding (Encoding)
 import qualified Codec.CBOR.Encoding as CBOR
 import Codec.Serialise.Class (Serialise, decode, encode)
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Crypto.Error (CryptoFailable (CryptoFailed, CryptoPassed))
 import qualified Crypto.Hash.Algorithms as Hash
 import Crypto.Number.Serialize (i2osp, os2ip)
@@ -63,12 +64,13 @@ instance Serialise COSEAlgorithmIdentifier where
 decodeCOSEAlgorithmIdentifier :: Decoder s COSEAlgorithmIdentifier
 decodeCOSEAlgorithmIdentifier =
   toAlg =<< CBOR.decodeIntCanonical
-  where
-    toAlg (-7) = pure $ ECDSAIdentifier ES256
-    toAlg (-35) = pure $ ECDSAIdentifier ES384
-    toAlg (-36) = pure $ ECDSAIdentifier ES512
-    toAlg (-8) = pure EdDSA
-    toAlg _ = fail "Unsupported `alg`"
+
+toAlg :: (Eq a, Num a, MonadFail f) => a -> f COSEAlgorithmIdentifier
+toAlg (-7) = pure $ ECDSAIdentifier ES256
+toAlg (-35) = pure $ ECDSAIdentifier ES384
+toAlg (-36) = pure $ ECDSAIdentifier ES512
+toAlg (-8) = pure EdDSA
+toAlg _ = fail "Unsupported `alg`"
 
 instance ToJSON COSEAlgorithmIdentifier where
   toJSON (ECDSAIdentifier ES256) = Aeson.Number (-7)
@@ -76,7 +78,7 @@ instance ToJSON COSEAlgorithmIdentifier where
   toJSON (ECDSAIdentifier ES512) = Aeson.Number (-36)
   toJSON EdDSA = Aeson.Number (-8)
 
-data EdDSAKey = Ed25519 Ed25519.PublicKey
+newtype EdDSAKey = Ed25519 Ed25519.PublicKey
   deriving (Eq, Show)
 
 -- Curves supported by us
@@ -94,8 +96,9 @@ data PublicKey
   | ECDSAPublicKey ECDSAKey
   deriving (Show, Eq)
 
-alg :: ECDSAKey -> ECDSAIdentifier
-alg (ECDSAKey alg _) = alg
+keyAlgorithm :: PublicKey -> COSEAlgorithmIdentifier
+keyAlgorithm (ECDSAPublicKey (ECDSAKey alg _)) = ECDSAIdentifier alg
+keyAlgorithm (EdDSAPublicKey (Ed25519 _)) = EdDSA
 
 data KeyType = OKP | ECC
 
@@ -166,9 +169,9 @@ decodeCurveIdentifier :: Decoder s CurveIdentifier
 decodeCurveIdentifier = do
   crv <- CBOR.decodeIntCanonical
   case crv of
-    1 -> pure $ P256
-    2 -> pure $ P384
-    3 -> pure $ P521
+    1 -> pure P256
+    2 -> pure P384
+    3 -> pure P521
     _ -> fail "Unsupported `crv`"
 
 instance Serialise CurveIdentifier where
@@ -197,7 +200,7 @@ decodeECDSAPublicKey = do
     CBOR.TypeBytes -> os2ip <$> CBOR.decodeBytesCanonical
     _ -> fail "Unexpected token type"
   let point = ECC.Point x y
-  when (not (ECC.isPointValid (toCurve curve) point)) $ fail "point not on curve"
+  unless (ECC.isPointValid (toCurve curve) point) $ fail "point not on curve"
   pure $ ECDSAKey alg' (ECC.Point x y)
 
 data MapKey = Kty | Alg | Crv | X | Y deriving (Show, Eq)

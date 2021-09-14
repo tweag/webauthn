@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -15,7 +16,7 @@ import qualified Codec.CBOR.JSON as JSON
 import qualified Codec.CBOR.Read as Read
 import qualified Codec.CBOR.Write as Write
 import qualified Codec.Serialise as Serialise
-import Crypto.Fido2.PublicKey
+import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (ECDSAIdentifier, EdDSA), CurveIdentifier (P256, P384, P521), ECDSAIdentifier (ES256, ES384, ES512), ECDSAKey (ECDSAKey), EdDSAKey (Ed25519), PublicKey (ECDSAPublicKey, EdDSAPublicKey), curveForAlg, toCurve, verify)
 import Crypto.Hash (SHA384 (SHA384))
 import Crypto.Hash.Algorithms (SHA256 (SHA256), SHA512 (SHA512))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
@@ -29,9 +30,8 @@ import qualified Data.ASN1.Prim as ASN1
 import qualified Data.Aeson as Aeson
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
-import Data.Either (isLeft)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
-import Test.QuickCheck (Arbitrary, Gen, arbitrary, counterexample, elements, frequency, oneof, property, total, (.&&.), (===), (==>))
+import Test.QuickCheck (Arbitrary, Gen, arbitrary, elements, frequency, oneof, property, total, (==>))
 import Test.QuickCheck.Instances.ByteString ()
 import Util (roundtrips)
 
@@ -70,9 +70,6 @@ privateKey (ECDSAKeyPair (_, (_, priv))) = priv
 getPublicKey :: ECDSAKeyPair -> ECDSAKey
 getPublicKey (ECDSAKeyPair (alg, (pub, _))) = ECDSAKey alg (ECDSA.public_q pub)
 
-getPoint :: ECDSAKeyPair -> ECC.Point
-getPoint (ECDSAKeyPair (ident, (pub, _))) = ECDSA.public_q pub
-
 instance Arbitrary ECDSAKeyPair where
   arbitrary = ECDSAKeyPair <$> randomECDSAKey
 
@@ -100,10 +97,10 @@ spec = do
         property $
           \(keyPair :: ECDSAKeyPair, bytes :: ByteString, seed :: Integer) ->
             let drg = Random.drgNewSeed . Random.seedFromInteger $ seed
-                (ECDSA.Signature r s, _) = case alg (getPublicKey keyPair) of
-                  ES256 -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA256 bytes
-                  ES384 -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA384 bytes
-                  ES512 -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA512 bytes
+                (ECDSA.Signature r s, _) = case getPublicKey keyPair of
+                  ECDSAKey ES256 _ -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA256 bytes
+                  ECDSAKey ES384 _ -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA384 bytes
+                  ECDSAKey ES512 _ -> Random.withDRG drg $ ECDSA.sign (privateKey keyPair) SHA512 bytes
              in verify (ECDSAPublicKey $ getPublicKey keyPair) bytes (ASN1.encodeASN1' ASN1.DER [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence])
       it "rejects invalid signatures" $
         property $
@@ -122,7 +119,7 @@ spec = do
       it "`alg` implies `crv`" $
         property $ \(key :: ECDSAKey, FlatTerm.toFlatTerm . Serialise.encode @CurveIdentifier -> [crv]) -> do
           -- in order to test this, we encode a public key where the alg and the crv do not match
-          case (FlatTerm.toFlatTerm . Serialise.encode . ECDSAPublicKey $ key) of
+          case FlatTerm.toFlatTerm . Serialise.encode . ECDSAPublicKey $ key of
             (map : ktyKey : ktyVal : algKey : algVal : crvKey : crvVal : xs) ->
               crvVal /= crv
                 ==> let key' = map : ktyKey : ktyVal : algKey : algVal : crvKey : crv : xs
@@ -134,10 +131,9 @@ spec = do
     roundtrips @COSEAlgorithmIdentifier
     it "fails to decode unspported COSEAlgorithmIdentifiers" $ do
       let bs = Write.toLazyByteString (CBOR.encodeInt (-300))
-      Serialise.deserialiseOrFail @COSEAlgorithmIdentifier bs `shouldSatisfy` \x ->
-        case x of
-          Left (Read.DeserialiseFailure _ "Unsupported `alg`") -> True
-          _ -> False
+      Serialise.deserialiseOrFail @COSEAlgorithmIdentifier bs `shouldSatisfy` \case
+        Left (Read.DeserialiseFailure _ "Unsupported `alg`") -> True
+        _ -> False
     it "can encode COSEAlgorithmIdentifier as JSON" $ do
       property $ \(alg :: COSEAlgorithmIdentifier) ->
         let bs = Serialise.serialise alg
