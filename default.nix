@@ -24,6 +24,13 @@ let
     };
     # Specify the GHC version to use.
     compiler-nix-name = "ghc8106";
+
+    modules = [
+      {
+        enableLibraryProfiling = true;
+        packages.fido2.enableExecutableProfiling = true;
+      }
+    ];
   };
 
   shell = build.shellFor {

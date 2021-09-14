@@ -1,1 +1,10 @@
 packages: .
+
+--source-repository-package
+--  type: git
+--  location: https://github.com/tweag/hs-jose
+--  tag: 0ac4a331c36cfaaed3a80d83d5704edceee6fa5e
+--  --sha256: 0vgpl4wzr0rnybzrgabdc78i75rbaifwk0dga0mdirj82pjhk7gq
+
+--package fido2
+--  profiling: True
