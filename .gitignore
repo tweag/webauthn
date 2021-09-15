@@ -1,3 +1,4 @@
 dist-newstyle
 .direnv
 output.json
+.stack-work

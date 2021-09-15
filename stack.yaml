@@ -1,0 +1,8 @@
+resolver: lts-18.10
+
+packages:
+- .
+
+nix:
+  enable: true
+  shell-file: shell.nix
