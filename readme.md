@@ -2,7 +2,7 @@
 
 Verifying the JWT blob `big.jwt` (800kB) ([source](https://fidoalliance.org/metadata/)) is very slow using the [jose](https://hackage.haskell.org/package/jose) library (~4 minutes), but if profiling is turned on, it becomes very fast (<1 second).
 
-Not as extreme, but the same happens with a smaller `small.jwt` blob (17kB) ([source](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#examples)), which takes
+Not as extreme, but the same happens with a smaller `small.jwt` blob (17kB) ([source](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#examples)), which is almost 3 times as fast with profiling enabled.
 
 
 To reproduce slowness:
