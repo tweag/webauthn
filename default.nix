@@ -25,7 +25,7 @@ let
       src = ./.;
     };
     # Specify the GHC version to use.
-    compiler-nix-name = "ghc8106";
+    compiler-nix-name = "ghc8107";
   };
 
   deploy = pkgs.writeShellScriptBin "deploy" ''
