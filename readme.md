@@ -1,6 +1,8 @@
 # Slow JWT blob verification using jose library
 
-Verifying the JWT blob `big.jwt` (800kB) ([source](https://fidoalliance.org/metadata/)) is very slow using the [jose](https://hackage.haskell.org/package/jose) library (~4 minutes)
+Verifying the JWT blob `big.jwt` (800kB) ([source](https://fidoalliance.org/metadata/)) is very slow using the [jose](https://hackage.haskell.org/package/jose) library (~4 minutes).
+
+A possible fix is https://github.com/frasertweedale/hs-jose/pull/103
 
 To reproduce slowness:
 ```

@@ -11,5 +11,7 @@ in pkgs.mkShell {
   nativeBuildInputs = with pkgs.haskellPackages; [
     ghc
     cabal-install
+    haskell-language-server
+    stack
   ];
 }
