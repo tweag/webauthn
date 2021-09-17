@@ -1,8 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
 module Crypto.Fido2.Assertion
-  ( Error (..),
-    verifyAssertionResponse,
+  ( verifyAssertionResponse,
     RelyingPartyConfig (..),
     Credential (..),
   )

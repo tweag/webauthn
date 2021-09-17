@@ -2,8 +2,8 @@
 module Crypto.Fido2.Attestation.Packed (verify) where
 
 import Control.Monad (unless, when)
-import Crypto.Fido2.Attestation.Error (Error (DecodingError, InvalidAlgorithm, InvalidAttestationStatement, NoAttestedCredentialDataFound))
 import Crypto.Fido2.Attestation.Packed.Statement (Stmt (Stmt, alg, sig, x5c))
+import Crypto.Fido2.Error (AttestationError (ASN1Error, AttestationCredentialAAGUIDMissing, AttestationCredentialDataMissing, CertificateAAGUIDMismatch, CertificateRequirementsUnmet, CertiticatePublicKeyInvalid, StatementAlgorithmMismatch, StatementInvalidSignature))
 import Crypto.Fido2.Protocol (AttestedCredentialData (credentialPublicKey), AuthenticatorData (AuthenticatorData, attestedCredentialData, rawData), aaguid)
 import Crypto.Fido2.PublicKey (keyAlgorithm)
 import qualified Crypto.Fido2.PublicKey as PublicKey
@@ -21,19 +21,19 @@ import Data.Maybe (isJust)
 import qualified Data.X509 as X509
 
 -- https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation
-verify :: Stmt -> AuthenticatorData -> Digest SHA256 -> Either Error AttestedCredentialData
+verify :: Stmt -> AuthenticatorData -> Digest SHA256 -> Either AttestationError AttestedCredentialData
 verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@AuthenticatorData {rawData = rawAuthData} clientDataHash = do
   let signedData = rawAuthData <> convert clientDataHash
-  credData <- maybe (Left NoAttestedCredentialDataFound) pure $ attestedCredentialData authData
+  credData <- maybe (Left AttestationCredentialDataMissing) pure $ attestedCredentialData authData
   case stmtx5c of
     -- Self attestation
     Nothing -> do
       -- Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
       let key = credentialPublicKey credData
-      when (stmtAlg /= keyAlgorithm key) $ Left InvalidAlgorithm
+      when (stmtAlg /= keyAlgorithm key) $ Left StatementAlgorithmMismatch
 
       -- Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
-      unless (PublicKey.verify key signedData stmtSig) $ Left InvalidAttestationStatement
+      unless (PublicKey.verify key signedData stmtSig) $ Left StatementInvalidSignature
 
       pure credData
     -- Basic, AttCA
@@ -53,18 +53,18 @@ verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@Authenticator
             && hasDnElement X509.DnCommonName dnElements
             && findDnElement X509.DnOrganizationUnit dnElements == Just "Authenticator Attestation"
         )
-        $ Left DecodingError
+        $ Left CertificateRequirementsUnmet
 
       -- If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that
       -- the value of this extension matches the aaguid in authenticatorData.
       let (X509.Extensions mX509Exts) = X509.certExtensions cert
           mX509Ext = mX509Exts >>= findProperExtension [1, 3, 6, 1, 4, 1, 45724, 1, 1, 4]
-      adAAGUID <- maybe (Left InvalidAttestationStatement) (pure . aaguid) $ attestedCredentialData authData
+      adAAGUID <- maybe (Left AttestationCredentialAAGUIDMissing) (pure . aaguid) $ attestedCredentialData authData
       case mX509Ext of
         Nothing -> pure ()
         Just ext -> do
           certAAGUID <- decodeAAGUID (X509.extRawContent ext)
-          unless (adAAGUID == certAAGUID) (Left InvalidAttestationStatement)
+          unless (adAAGUID == certAAGUID) (Left CertificateAAGUIDMismatch)
 
       -- Optionally, inspect x5c and consult externally provided knowledge to
       -- determine whether attStmt conveys a Basic or AttCA attestation. Blocked
@@ -84,9 +84,9 @@ verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@Authenticator
     findProperExtension :: OID.OID -> [X509.ExtensionRaw] -> Maybe X509.ExtensionRaw
     findProperExtension extensionOID = find ((==) extensionOID . X509.extRawOID)
 
-    decodeAAGUID :: ByteString -> Either Error ByteString
+    decodeAAGUID :: ByteString -> Either AttestationError ByteString
     decodeAAGUID bs = do
-      asn1 <- either (const . Left $ DecodingError) pure . decodeASN1 DER $ fromStrict bs
+      asn1 <- either (Left . ASN1Error) pure . decodeASN1 DER $ fromStrict bs
       case asn1 of
         [OctetString s] -> Right s
-        _ -> Left DecodingError
+        _ -> Left CertiticatePublicKeyInvalid

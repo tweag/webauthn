@@ -14,6 +14,8 @@ where
 import qualified AttestationSpec
 import qualified Crypto.Fido2.Assertion as Fido2
 import qualified Crypto.Fido2.Attestation as Fido2
+import qualified Crypto.Fido2.Error as Fido2
+import Crypto.Fido2.Protocol (AttestationFormat (FormatNone))
 import qualified Crypto.Fido2.Protocol as Fido2
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
@@ -138,11 +140,3 @@ main = Hspec.hspec $ do
           loginReq
   signInResult `shouldSatisfy` isRight
 -}
-
--- TODO: Restore this test.
--- tests :: TestTree
--- tests = Tasty.testGroup "Some tests"
---   [ Tasty.testCase "can decode request.json" $ do
---       x <- BS.readFile "./fixtures/request.json"
---       _
---   ]

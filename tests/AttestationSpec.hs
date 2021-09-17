@@ -9,8 +9,7 @@
 module AttestationSpec (spec) where
 
 import qualified Crypto.Fido2.Attestation as Fido2
-import qualified Crypto.Fido2.Attestation.Error as Fido2
-import qualified Crypto.Fido2.Attestation.Error as Fido2AttestationError
+import qualified Crypto.Fido2.Error as Fido2
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Crypto.Hash as Hash
 import Data.ByteString (ByteString)
@@ -52,7 +51,7 @@ spec = do
                             { Fido2.clientData = clientData {Fido2.typ = Fido2.Create, Fido2.challenge = c1}
                             }
                      in case Fido2.verifyAttestationResponse origin rp c2 req resp of
-                          Left x -> x === Fido2.ChallengeDidNotMatch
+                          Left x -> x === Fido2.ChallengeMismatch
       it "fails if origins do not match" $
         property $
           \( c1 :: ByteString,
@@ -74,7 +73,7 @@ spec = do
                                   }
                             }
                      in case Fido2.verifyAttestationResponse origin2 rp (coerce c1) req resp of
-                          Left x -> x === Fido2.OriginDidNotMatch
+                          Left x -> x === Fido2.RpOriginMismatch
       it "fails if rpIds do not match" $
         property $
           \( coerce @Text -> rp1,
@@ -104,7 +103,7 @@ spec = do
                                   }
                             }
                      in case Fido2.verifyAttestationResponse origin rp1 challenge undefined resp of
-                          Left x -> x === Fido2AttestationError.RpIdMismatch
+                          Left x -> x === Fido2.RpIdHashMismatch
       it "fails if user not present" $
         property $
           \( coerce @Text -> rp,
@@ -133,7 +132,7 @@ spec = do
                             }
                       }
                in case Fido2.verifyAttestationResponse origin rp challenge undefined resp of
-                    Left x -> x === Fido2AttestationError.UserNotPresent
+                    Left x -> x === Fido2.UserNotPresent
       it "fails if userverification requirement doesnt match" $
         property $
           \( coerce @Text -> rp,
@@ -163,7 +162,7 @@ spec = do
                             }
                       }
                in case Fido2.verifyAttestationResponse origin rp challenge Fido2.UserVerificationRequired resp of
-                    Left x -> x === Fido2AttestationError.UserNotVerified
+                    Left x -> x === Fido2.UserNotVerified
       it "fails if no attested credential data" $
         property $
           \( coerce @Text -> rp,
@@ -193,8 +192,8 @@ spec = do
                             }
                       }
                in case Fido2.verifyAttestationResponse origin rp challenge Fido2.UserVerificationPreferred resp of
-                    Left x -> x === Fido2AttestationError.NoAttestedCredentialDataFound
+                    Left x -> x === Fido2.AttestationError Fido2.AttestationCredentialDataMissing
       -- Kinda lame. We know that show is total as it's derived
       it
         "Can show Error"
-        $ property $ \(err :: Fido2AttestationError.Error) -> total . show $ err
+        $ property $ \(err :: Fido2.Error) -> total . show $ err

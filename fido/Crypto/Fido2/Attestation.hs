@@ -4,8 +4,8 @@
 module Crypto.Fido2.Attestation (verifyAttestationResponse) where
 
 import Control.Monad (unless, when)
-import Crypto.Fido2.Attestation.Error (Error (ChallengeDidNotMatch, InvalidWebauthnType, NoAttestedCredentialDataFound, OriginDidNotMatch, RpIdMismatch, UserNotPresent, UserNotVerified))
 import Crypto.Fido2.Attestation.Packed as Packed (verify)
+import Crypto.Fido2.Error (AttestationError (AttestationCredentialDataMissing), Error (AttestationError, ChallengeMismatch, InvalidWebauthnType, RpIdHashMismatch, RpOriginMismatch, UserNotPresent, UserNotVerified))
 import Crypto.Fido2.Protocol
   ( AttestationFormat (FormatNone, FormatPacked),
     AttestationObject (AttestationObject, authData, format),
@@ -21,6 +21,7 @@ import Crypto.Fido2.Protocol
   )
 import Crypto.Hash (Digest, SHA256)
 import qualified Crypto.Hash as Hash
+import Data.Bifunctor (Bifunctor (first))
 import qualified Data.Text.Encoding as Text
 
 -- | Use this result to implement step 17, 18 and 19 of
@@ -95,9 +96,9 @@ verifyAttestationResponse
     -- 4. Verify that the value of C.challenge matches the challenge that was
     -- sent to the authenticator in the create() call.
     let ClientData {challenge = challenge'} = clientData
-    when (challenge /= challenge') $ Left ChallengeDidNotMatch
+    when (challenge /= challenge') $ Left ChallengeMismatch
     let ClientData {origin = origin'} = clientData
-    when (origin /= origin') $ Left OriginDidNotMatch
+    when (origin /= origin') $ Left RpOriginMismatch
     -- 6. Verify that the value of C.tokenBinding.status matches the state of
     -- Token Binding for the TLS connection over which the assertion was
     -- obtained. If Token Binding was used on that TLS connection, also verify
@@ -117,7 +118,7 @@ verifyAttestationResponse
     -- 9. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
     -- expected by the Relying Party.
     let AuthenticatorData {rpIdHash} = authData
-    when (Hash.hash (Text.encodeUtf8 . unRpId $ rpId) /= rpIdHash) $ Left RpIdMismatch
+    when (Hash.hash (Text.encodeUtf8 . unRpId $ rpId) /= rpIdHash) $ Left RpIdHashMismatch
     -- 10. Verify that the User Present bit of the flags in authData is set.
     let AuthenticatorData {userPresent} = authData
     unless userPresent $ Left UserNotPresent
@@ -167,11 +168,11 @@ verifyAttestationResponse
     -- procedure to verify that the attestation public key correctly chains up
     -- to an acceptable root certificate.
     -- --> TODO: This is a no-op as we only support "none"
-    validateAttStmt format authData clientDataHash
+    first AttestationError $ validateAttStmt format authData clientDataHash
 
-validateAttStmt :: AttestationFormat -> AuthenticatorData -> Digest SHA256 -> Either Error AttestedCredentialData
+validateAttStmt :: AttestationFormat -> AuthenticatorData -> Digest SHA256 -> Either AttestationError AttestedCredentialData
 validateAttStmt FormatNone AuthenticatorData {attestedCredentialData} _ =
   case attestedCredentialData of
     Just attestedCredentialData -> pure attestedCredentialData
-    Nothing -> Left NoAttestedCredentialDataFound
+    Nothing -> Left AttestationCredentialDataMissing
 validateAttStmt (FormatPacked stmt) authData clientDataHash = Packed.verify stmt authData clientDataHash

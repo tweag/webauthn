@@ -19,7 +19,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import qualified Crypto.Fido2.Assertion as Assertion
 import Crypto.Fido2.Attestation (verifyAttestationResponse)
-import Crypto.Fido2.Attestation.Error (Error)
+import Crypto.Fido2.Error (Error)
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Crypto.Fido2.PublicKey as Fido2
 import Data.Aeson (FromJSON)

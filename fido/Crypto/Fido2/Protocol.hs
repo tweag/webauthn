@@ -47,8 +47,8 @@ import Codec.CBOR.Decoding (Decoder)
 import qualified Codec.CBOR.Read as CBOR
 import Codec.CBOR.Term (Term (TBytes, TMap, TString))
 import qualified Codec.Serialise.Class as Serialise
-import qualified Crypto.Fido2.Attestation.Error as AttestationError
 import qualified Crypto.Fido2.Attestation.Packed.Statement as Packed
+import Crypto.Fido2.Error (DecodingError (BinaryFailure, CBORFailure, FormatUnsupported))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256)
@@ -501,34 +501,30 @@ data AttestationObject = AttestationObject
   }
   deriving (Show)
 
-data Error = CBOR CBOR.DeserialiseFailure | Binary (LBS.ByteString, Binary.ByteOffset, String) | AttestationError AttestationError.Error
-  deriving (Show)
-
-decodeAttestationObject :: ByteString -> Either Error AttestationObject
+decodeAttestationObject :: ByteString -> Either DecodingError AttestationObject
 decodeAttestationObject bs = do
   -- First decode the high level structure with decodeAttestationObjectRaw.
   -- Pass the remaining bytes to decodeAuthenticatorData
   -- TODO maybe use the incremental API here?
-  (_rest, AttestationObjectRaw {authDataRaw, fmt, attStmt}) <- first CBOR $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
-  (rest, _, authDataRaw') <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
-  (rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw authDataRaw') rest
+  (_rest, AttestationObjectRaw {authDataRaw, fmt, attStmt}) <- first CBORFailure $ CBOR.deserialiseFromBytes decodeAttestationObjectRaw (LBS.fromStrict bs)
+  (rest, _, authDataRaw') <- first BinaryFailure $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
+  (rest, authData) <- first CBORFailure $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw authDataRaw') rest
   format <- decodeAttestationFormat fmt attStmt rest
   pure (AttestationObject authData format)
 
-decodeAttestationFormat :: Text -> [(Term, Term)] -> LBS.ByteString -> Either Error AttestationFormat
-decodeAttestationFormat "none" [] _ = Right FormatNone
-decodeAttestationFormat "none" _ _ = Left (AttestationError AttestationError.InvalidAttestationStatement)
+decodeAttestationFormat :: Text -> [(Term, Term)] -> LBS.ByteString -> Either DecodingError AttestationFormat
+decodeAttestationFormat "none" _ _ = Right FormatNone
 decodeAttestationFormat "packed" stmt bytes = do
-  (_rest, statement) <- first CBOR $ CBOR.deserialiseFromBytes (Packed.decode stmt) bytes
+  (_rest, statement) <- first CBORFailure $ CBOR.deserialiseFromBytes (Packed.decode stmt) bytes
   pure (FormatPacked statement)
-decodeAttestationFormat _ _ _ = Left (AttestationError AttestationError.UnsupportedAttestationFormat)
+decodeAttestationFormat fmt _ _ = Left $ FormatUnsupported fmt
 
 -- Helper. TODO  come up with more consistent names for all of these things, and allow
 -- for some code re-use?
-decodeAuthenticatorData' :: ByteString -> Either Error AuthenticatorData
+decodeAuthenticatorData' :: ByteString -> Either DecodingError AuthenticatorData
 decodeAuthenticatorData' bs = do
-  (rest, _, authDataRaw) <- first Binary $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict bs)
-  (_rest, authData) <- first CBOR $ CBOR.deserialiseFromBytes (decodeAuthenticatorData bs authDataRaw) rest
+  (rest, _, authDataRaw) <- first BinaryFailure $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict bs)
+  (_rest, authData) <- first CBORFailure $ CBOR.deserialiseFromBytes (decodeAuthenticatorData bs authDataRaw) rest
   pure authData
 
 -- The first parameter is a maybe bytestring in case we want to save the raw data
