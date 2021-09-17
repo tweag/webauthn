@@ -102,6 +102,7 @@ test-suite tests
   other-modules:
     AttestationSpec,
     PublicKeySpec,
+    MetadataSpec,
     Spec.Types,
     Spec.Util,
     Util
@@ -113,6 +114,7 @@ test-suite tests
     filepath,
     QuickCheck,
     hspec,
+    hspec-expectations-json,
     cborg,
     cborg-json,
     cryptonite,
@@ -120,4 +122,7 @@ test-suite tests
     quickcheck-instances,
     asn1-encoding,
     text,
-    memory
+    memory,
+    mtl,
+    x509,
+    pem

@@ -22,6 +22,7 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Either (isRight)
 import Data.Foldable (for_)
 import GHC.Stack (HasCallStack)
+import qualified MetadataSpec
 import qualified PublicKeySpec
 import Spec.Util (decodeFile)
 import qualified System.Directory as Directory
@@ -68,6 +69,9 @@ main = Hspec.hspec $ do
   describe
     "Attestation"
     AttestationSpec.spec
+  describe
+    "Metadata"
+    MetadataSpec.spec
   describe "RegisterAndLogin" $
     it "tests whether the fixed register and login responses are matching" $
       do
