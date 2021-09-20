@@ -9,7 +9,6 @@ jobs:
       matrix:
         os:
         - ubuntu-latest
-        - macos-latest
     steps:
     - uses: actions/checkout@v2
     - uses: cachix/install-nix-action@v14
