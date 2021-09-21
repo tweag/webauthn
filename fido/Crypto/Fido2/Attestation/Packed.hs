@@ -7,10 +7,9 @@ import Crypto.Fido2.Error
   ( AttestationError
       ( ASN1Error,
         AttestationCommonError,
-        AttestationCredentialAAGUIDMissing,
         CertificateAAGUIDMismatch,
         CertificateRequirementsUnmet,
-        CertiticatePublicKeyInvalid,
+        CredentialAAGUIDMissing,
         CredentialDataMissing,
         StatementAlgorithmMismatch
       ),
@@ -23,8 +22,8 @@ import Crypto.Fido2.Signature (verifyX509Sig)
 import Crypto.Hash (Digest, SHA256)
 import Data.ASN1.BinaryEncoding (DER (DER))
 import Data.ASN1.Encoding (ASN1Decoding (decodeASN1))
-import qualified Data.ASN1.OID as OID (OID, getObjectID)
-import Data.ASN1.Prim (ASN1 (OctetString))
+import qualified Data.ASN1.OID as OID
+import Data.ASN1.Types (ASN1 (OctetString))
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (fromStrict)
@@ -71,7 +70,7 @@ verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@Authenticator
       -- the value of this extension matches the aaguid in authenticatorData.
       let (X509.Extensions mX509Exts) = X509.certExtensions cert
           mX509Ext = mX509Exts >>= findProperExtension [1, 3, 6, 1, 4, 1, 45724, 1, 1, 4]
-      adAAGUID <- maybe (Left AttestationCredentialAAGUIDMissing) (pure . aaguid) $ attestedCredentialData authData
+      adAAGUID <- maybe (Left CredentialAAGUIDMissing) (pure . aaguid) $ attestedCredentialData authData
       case mX509Ext of
         Nothing -> pure ()
         Just ext -> do
@@ -101,4 +100,4 @@ verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@Authenticator
       asn1 <- either (Left . ASN1Error) pure . decodeASN1 DER $ fromStrict bs
       case asn1 of
         [OctetString s] -> Right s
-        _ -> Left CertiticatePublicKeyInvalid
+        _ -> Left CredentialAAGUIDMissing

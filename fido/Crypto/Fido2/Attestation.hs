@@ -4,6 +4,7 @@
 module Crypto.Fido2.Attestation (verifyAttestationResponse) where
 
 import Control.Monad (unless, when)
+import qualified Crypto.Fido2.Attestation.AndroidKey as AndroidKey
 import Crypto.Fido2.Attestation.Packed as Packed (verify)
 import Crypto.Fido2.Error
   ( AttestationError
@@ -20,7 +21,7 @@ import Crypto.Fido2.Error
       ),
   )
 import Crypto.Fido2.Protocol
-  ( AttestationFormat (FormatNone, FormatPacked),
+  ( AttestationFormat (FormatAndroidKey, FormatNone, FormatPacked),
     AttestationObject (AttestationObject, authData, format),
     AttestedCredentialData,
     AuthenticatorAttestationResponse (AuthenticatorAttestationResponse, attestationObject, clientData),
@@ -188,3 +189,4 @@ validateAttStmt FormatNone AuthenticatorData {attestedCredentialData} _ =
     Just attestedCredentialData -> pure attestedCredentialData
     Nothing -> Left CredentialDataMissing
 validateAttStmt (FormatPacked stmt) authData clientDataHash = Packed.verify stmt authData clientDataHash
+validateAttStmt (FormatAndroidKey stmt) authData clientDataHash = AndroidKey.verify stmt authData clientDataHash
