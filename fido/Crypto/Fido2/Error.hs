@@ -12,10 +12,12 @@ data Error
   = InvalidWebauthnType
   | ChallengeMismatch
   | ChallengeMissing
+  | CredentialMismatch
   | RpOriginMismatch
   | RpIdHashMismatch
   | UserNotPresent
   | UserNotVerified
+  | InvalidSignature
   | ExtensionsInvalid
   | CryptoFailure CryptoError
   | CryptoCurveUnsupported

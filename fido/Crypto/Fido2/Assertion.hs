@@ -7,25 +7,24 @@ module Crypto.Fido2.Assertion
   )
 where
 
-import Control.Monad (when)
+import Control.Monad (unless, when)
+import Crypto.Fido2.Error
+  ( Error
+      ( ChallengeMismatch,
+        CredentialMismatch,
+        InvalidSignature,
+        InvalidWebauthnType,
+        RpIdHashMismatch,
+        RpOriginMismatch,
+        UserNotPresent,
+        UserNotVerified
+      ),
+  )
 import qualified Crypto.Fido2.Protocol as Fido2
 import Crypto.Fido2.PublicKey (PublicKey)
 import qualified Crypto.Hash as Hash
 import qualified Data.List as List
 import qualified Data.Text.Encoding as Text
-
-data Error
-  = CredentialDoesNotMatch
-  | UnsupportedClientDataType
-  | ChallengeMismatch
-  | OriginMismatch
-  | RpIdMismatch
-  | UserNotPresent
-  | UserNotVerified
-  | InvalidSignature
-  | -- TODO: Get rid of this constructor as it signals a bug in our lib.
-    RawDataUnavailable
-  deriving (Show, Eq)
 
 -- | Domain type: combination of a user's ID and publickey. This should be eventually
 -- extracted into some opinionated module that builds on top of the actual protocol types.
@@ -65,7 +64,7 @@ verifyAssertionResponse
     -- Verify that the given credential is within the list of userCredentials.
     -- Spec 7.2 steps 1 and 3. (Step 2 has already been implemented by the caller).
     Credential {publicKey} <-
-      maybe (Left CredentialDoesNotMatch) pure $
+      maybe (Left CredentialMismatch) pure $
         List.find (\Credential {id} -> id == rawId) userCredentials
     -- 4. Let clientData, authenticatorData and signature denote the value of
     -- credential’s response's clientDataJSON, authenticatorData, and signature
@@ -73,26 +72,29 @@ verifyAssertionResponse
     let Fido2.AuthenticatorAssertionResponse {clientData, authenticatorData, signature, userHandle = _userHandle} = response
     let Fido2.ClientData {typ, challenge = clientChallenge, origin = clientOrigin} = clientData
     -- 7. Verify that the value of C.type is the string webauthn.get.
-    when (typ /= Fido2.Get) (Left UnsupportedClientDataType)
+    when (typ /= Fido2.Get) (Left InvalidWebauthnType)
     -- 8. Verify that the value of C.challenge matches the challenge that was sent to
     -- the authenticator in the PublicKeyCredentialRequestOptions passed to the
     -- get() call.
     -- TODO(duijf): Is this constant time? Should it be?
+    -- NOTE(Erin): I took look at the .NET implementation that does not perform
+    -- this check in O(1), but rather O(n). Nor does the specification mention
+    -- constant time cryptography anywhere.
     when (challenge /= clientChallenge) (Left ChallengeMismatch)
     -- 9. Verify that the value of C.origin matches the Relying Party's origin.
-    when (origin /= clientOrigin) (Left OriginMismatch)
+    when (origin /= clientOrigin) (Left RpOriginMismatch)
     let Fido2.AuthenticatorData {userPresent, rpIdHash, userVerified} = authenticatorData
     -- 11. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
     -- expected by the Relying Party.
-    when (Hash.hash (Text.encodeUtf8 . Fido2.unRpId $ rpId) /= rpIdHash) $ Left RpIdMismatch
+    when (Hash.hash (Text.encodeUtf8 . Fido2.unRpId $ rpId) /= rpIdHash) $ Left RpIdHashMismatch
     -- 12. Verify that the User Present bit of the flags in authData is set.
-    when (not userPresent) $ Left UserNotPresent
+    unless userPresent $ Left UserNotPresent
     -- 13. If user verification is required for this assertion, verify that the User
     -- Verified bit of the flags in authData is set.
-    when (userVerificationRequirement == Fido2.UserVerificationRequired && (not userVerified)) $ Left UserNotVerified
+    when (userVerificationRequirement == Fido2.UserVerificationRequired && not userVerified) $ Left UserNotVerified
     -- 15. Let hash be the result of computing a hash over the clientData using SHA-256.
     -- 16. Using the credential public key looked up in step 3, verify that sig is a
     -- valid signature over the binary concatenation of authData and hash.
     let Fido2.URLEncodedBase64 sig = signature
     let verifyResult = Fido2.verify publicKey authenticatorData clientData sig
-    when (not verifyResult) (Left InvalidSignature)
+    unless verifyResult (Left InvalidSignature)
