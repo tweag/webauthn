@@ -114,7 +114,7 @@ main = Hspec.hspec $ do
         let registerResult =
               Fido2.verifyAttestationResponse
                 (Fido2.Origin "https://localhost:44329")
-                (Fido2.RpId "psteniusubi.github.io")
+                (Fido2.RpId "localhost")
                 challenge
                 Fido2.UserVerificationPreferred
                 response
