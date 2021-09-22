@@ -5,3 +5,4 @@ cabal.project.local~
 *.sqlite3
 *.sqlite3-journal
 result*
+.direnv

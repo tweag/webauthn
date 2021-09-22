@@ -45,8 +45,16 @@ library
     x509-validation,
     scientific,
     vector,
-    QuickCheck
+    time,
+    x509,
+    x509-validation,
+    x509-store,
+    -- https://github.com/frasertweedale/hs-jose/pull/103#issuecomment-923624548
+    jose >= 0.8.5,
+    lens,
+    mtl,
   exposed-modules:
+    Crypto.Fido2.EncodingUtils,
     Crypto.Fido2.Assertion,
     Crypto.Fido2.Attestation,
     Crypto.Fido2.Attestation.Packed,
@@ -54,7 +62,9 @@ library
     Crypto.Fido2.Error,
     Crypto.Fido2.Protocol,
     Crypto.Fido2.PublicKey,
-    Crypto.Fido2.Signature
+    Crypto.Fido2.Signature,
+    Crypto.Fido2.Metadata.Model,
+    Crypto.Fido2.Metadata.Blob
 
 executable server
   import: sanity
@@ -93,6 +103,7 @@ test-suite tests
   other-modules:
     AttestationSpec,
     PublicKeySpec,
+    MetadataSpec,
     Spec.Types,
     Spec.Util,
     Util
@@ -104,6 +115,7 @@ test-suite tests
     filepath,
     QuickCheck,
     hspec,
+    hspec-expectations-json,
     cborg,
     cborg-json,
     cryptonite,
@@ -111,4 +123,7 @@ test-suite tests
     quickcheck-instances,
     asn1-encoding,
     text,
-    memory
+    memory,
+    mtl,
+    x509,
+    pem
