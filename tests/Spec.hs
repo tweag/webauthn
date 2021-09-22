@@ -138,11 +138,3 @@ main = Hspec.hspec $ do
           loginReq
   signInResult `shouldSatisfy` isRight
 -}
-
--- TODO: Restore this test.
--- tests :: TestTree
--- tests = Tasty.testGroup "Some tests"
---   [ Tasty.testCase "can decode request.json" $ do
---       x <- BS.readFile "./fixtures/request.json"
---       _
---   ]

@@ -2,8 +2,7 @@
 
 module Spec.Types () where
 
-import qualified Crypto.Fido2.Attestation.Error as Fido2
-import qualified Crypto.Fido2.Attestation.Error as Fido2AttestationError
+import qualified Crypto.Fido2.Error as Fido2
 import Crypto.Fido2.Protocol (AttestationFormat (FormatNone))
 import qualified Crypto.Fido2.Protocol as Fido2
 import Data.ByteString (ByteString)
@@ -36,18 +35,20 @@ instance Arbitrary Fido2.AuthenticatorData where
       <*> arbitrary
       <*> arbitrary
 
-instance Arbitrary Fido2AttestationError.Error where
+instance Arbitrary Fido2.CommonError where
   arbitrary =
     elements
       [ Fido2.InvalidWebauthnType,
-        Fido2.ChallengeDidNotMatch,
-        Fido2AttestationError.RpIdMismatch,
-        Fido2AttestationError.UserNotPresent,
-        Fido2AttestationError.UserNotVerified,
-        Fido2.UnsupportedAttestationFormat,
-        Fido2.InvalidAttestationStatement,
-        Fido2.NoAttestedCredentialDataFound,
-        Fido2.NotTrustworthy
+        Fido2.ChallengeMismatch,
+        Fido2.ChallengeMissing,
+        Fido2.RpOriginMismatch,
+        Fido2.RpIdHashMismatch,
+        Fido2.UserNotPresent,
+        Fido2.UserNotVerified,
+        Fido2.ExtensionsInvalid,
+        Fido2.CryptoCurveUnsupported,
+        Fido2.CryptoAlgorithmUnsupported,
+        Fido2.CryptoKeyTypeUnsupported
       ]
 
 instance Arbitrary Fido2.CredentialId where

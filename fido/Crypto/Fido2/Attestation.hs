@@ -4,8 +4,21 @@
 module Crypto.Fido2.Attestation (verifyAttestationResponse) where
 
 import Control.Monad (unless, when)
-import Crypto.Fido2.Attestation.Error (Error (ChallengeDidNotMatch, InvalidWebauthnType, NoAttestedCredentialDataFound, OriginDidNotMatch, RpIdMismatch, UserNotPresent, UserNotVerified))
 import Crypto.Fido2.Attestation.Packed as Packed (verify)
+import Crypto.Fido2.Error
+  ( AttestationError
+      ( AttestationCommonError,
+        AttestationCredentialDataMissing
+      ),
+    CommonError
+      ( ChallengeMismatch,
+        InvalidWebauthnType,
+        RpIdHashMismatch,
+        RpOriginMismatch,
+        UserNotPresent,
+        UserNotVerified
+      ),
+  )
 import Crypto.Fido2.Protocol
   ( AttestationFormat (FormatNone, FormatPacked),
     AttestationObject (AttestationObject, authData, format),
@@ -69,7 +82,7 @@ verifyAttestationResponse ::
   Challenge ->
   UserVerificationRequirement ->
   AuthenticatorAttestationResponse ->
-  Either Error AttestedCredentialData
+  Either AttestationError AttestedCredentialData
 verifyAttestationResponse
   origin
   rpId
@@ -91,13 +104,13 @@ verifyAttestationResponse
     -- TODO(arianvp): We could lift this one to parsing phase; I suppose? Make invalid states unrepresentable
     -- 3. Verify that the value of C.type is webauthn.create.
     let ClientData {typ} = clientData
-    when (typ /= Create) $ Left InvalidWebauthnType
+    when (typ /= Create) . Left $ AttestationCommonError InvalidWebauthnType
     -- 4. Verify that the value of C.challenge matches the challenge that was
     -- sent to the authenticator in the create() call.
     let ClientData {challenge = challenge'} = clientData
-    when (challenge /= challenge') $ Left ChallengeDidNotMatch
+    when (challenge /= challenge') . Left $ AttestationCommonError ChallengeMismatch
     let ClientData {origin = origin'} = clientData
-    when (origin /= origin') $ Left OriginDidNotMatch
+    when (origin /= origin') . Left $ AttestationCommonError RpOriginMismatch
     -- 6. Verify that the value of C.tokenBinding.status matches the state of
     -- Token Binding for the TLS connection over which the assertion was
     -- obtained. If Token Binding was used on that TLS connection, also verify
@@ -117,14 +130,14 @@ verifyAttestationResponse
     -- 9. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
     -- expected by the Relying Party.
     let AuthenticatorData {rpIdHash} = authData
-    when (Hash.hash (Text.encodeUtf8 . unRpId $ rpId) /= rpIdHash) $ Left RpIdMismatch
+    when (Hash.hash (Text.encodeUtf8 . unRpId $ rpId) /= rpIdHash) . Left $ AttestationCommonError RpIdHashMismatch
     -- 10. Verify that the User Present bit of the flags in authData is set.
     let AuthenticatorData {userPresent} = authData
-    unless userPresent $ Left UserNotPresent
+    unless userPresent . Left $ AttestationCommonError UserNotPresent
     -- 11. If user verification is required for this registration, verify that
     -- the User Verified bit of the flags in authData is set.
     let AuthenticatorData {userVerified} = authData
-    when (userVerificationRequirement == UserVerificationRequired && not userVerified) $ Left UserNotVerified
+    when (userVerificationRequirement == UserVerificationRequired && not userVerified) . Left $ AttestationCommonError UserNotVerified
     -- 12. Verify that the values of the client extension outputs in
     -- clientExtensionResults and the authenticator extension outputs in the
     -- extensions in authData are as expected, considering the client extension
@@ -169,9 +182,9 @@ verifyAttestationResponse
     -- --> TODO: This is a no-op as we only support "none"
     validateAttStmt format authData clientDataHash
 
-validateAttStmt :: AttestationFormat -> AuthenticatorData -> Digest SHA256 -> Either Error AttestedCredentialData
+validateAttStmt :: AttestationFormat -> AuthenticatorData -> Digest SHA256 -> Either AttestationError AttestedCredentialData
 validateAttStmt FormatNone AuthenticatorData {attestedCredentialData} _ =
   case attestedCredentialData of
     Just attestedCredentialData -> pure attestedCredentialData
-    Nothing -> Left NoAttestedCredentialDataFound
+    Nothing -> Left AttestationCredentialDataMissing
 validateAttStmt (FormatPacked stmt) authData clientDataHash = Packed.verify stmt authData clientDataHash
