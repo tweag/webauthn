@@ -21,7 +21,6 @@ import Crypto.Hash (SHA384 (SHA384))
 import Crypto.Hash.Algorithms (SHA256 (SHA256), SHA512 (SHA512))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Generate as ECC
-import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.Random as Random
 import qualified Data.ASN1.BinaryEncoding as ASN1

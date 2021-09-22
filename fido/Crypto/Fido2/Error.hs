@@ -1,4 +1,4 @@
-module Crypto.Fido2.Error (Error (..), DecodingError (..), AttestationError (..)) where
+module Crypto.Fido2.Error (CommonError (..), DecodingError (..), AttestationError (..), AssertionError (..)) where
 
 import qualified Codec.CBOR.Read as CBOR
 import Crypto.Error (CryptoError)
@@ -8,7 +8,7 @@ import Data.Binary.Get (ByteOffset)
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 
-data Error
+data CommonError
   = InvalidWebauthnType
   | ChallengeMismatch
   | ChallengeMissing
@@ -23,7 +23,6 @@ data Error
   | CryptoCurveUnsupported
   | CryptoAlgorithmUnsupported
   | CryptoKeyTypeUnsupported
-  | AttestationError AttestationError
   | DecodingError DecodingError
   deriving (Show, Eq)
 
@@ -33,6 +32,10 @@ data DecodingError
   | JSONFailure Aeson.JSONPath String
   | BinaryFailure (ByteString, ByteOffset, String)
   | FormatUnsupported Text
+  deriving (Show, Eq)
+
+newtype AssertionError
+  = AssertionCommonError CommonError
   deriving (Show, Eq)
 
 data AttestationError
@@ -56,4 +59,5 @@ data AttestationError
     CertificateRequirementsUnmet
   | CertiticatePublicKeyInvalid
   | ASN1Error ASN1Error
+  | AttestationCommonError CommonError
   deriving (Show, Eq)

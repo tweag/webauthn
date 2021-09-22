@@ -35,7 +35,7 @@ instance Arbitrary Fido2.AuthenticatorData where
       <*> arbitrary
       <*> arbitrary
 
-instance Arbitrary Fido2.Error where
+instance Arbitrary Fido2.CommonError where
   arbitrary =
     elements
       [ Fido2.InvalidWebauthnType,

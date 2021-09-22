@@ -14,8 +14,6 @@ where
 import qualified AttestationSpec
 import qualified Crypto.Fido2.Assertion as Fido2
 import qualified Crypto.Fido2.Attestation as Fido2
-import qualified Crypto.Fido2.Error as Fido2
-import Crypto.Fido2.Protocol (AttestationFormat (FormatNone))
 import qualified Crypto.Fido2.Protocol as Fido2
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
