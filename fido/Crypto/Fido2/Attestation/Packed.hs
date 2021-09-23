@@ -3,7 +3,19 @@ module Crypto.Fido2.Attestation.Packed (verify) where
 
 import Control.Monad (unless, when)
 import Crypto.Fido2.Attestation.Packed.Statement (Stmt (Stmt, alg, sig, x5c))
-import Crypto.Fido2.Error (AttestationError (ASN1Error, AttestationCredentialAAGUIDMissing, AttestationCredentialDataMissing, CertificateAAGUIDMismatch, CertificateRequirementsUnmet, CertiticatePublicKeyInvalid, StatementAlgorithmMismatch, StatementInvalidSignature))
+import Crypto.Fido2.Error
+  ( AttestationError
+      ( ASN1Error,
+        AttestationCommonError,
+        AttestationCredentialAAGUIDMissing,
+        CertificateAAGUIDMismatch,
+        CertificateRequirementsUnmet,
+        CertiticatePublicKeyInvalid,
+        CredentialDataMissing,
+        StatementAlgorithmMismatch
+      ),
+    CommonError (InvalidSignature),
+  )
 import Crypto.Fido2.Protocol (AttestedCredentialData (credentialPublicKey), AuthenticatorData (AuthenticatorData, attestedCredentialData, rawData), aaguid)
 import Crypto.Fido2.PublicKey (keyAlgorithm)
 import qualified Crypto.Fido2.PublicKey as PublicKey
@@ -24,7 +36,7 @@ import qualified Data.X509 as X509
 verify :: Stmt -> AuthenticatorData -> Digest SHA256 -> Either AttestationError AttestedCredentialData
 verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@AuthenticatorData {rawData = rawAuthData} clientDataHash = do
   let signedData = rawAuthData <> convert clientDataHash
-  credData <- maybe (Left AttestationCredentialDataMissing) pure $ attestedCredentialData authData
+  credData <- maybe (Left CredentialDataMissing) pure $ attestedCredentialData authData
   case stmtx5c of
     -- Self attestation
     Nothing -> do
@@ -33,7 +45,7 @@ verify Stmt {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c} authData@Authenticator
       when (stmtAlg /= keyAlgorithm key) $ Left StatementAlgorithmMismatch
 
       -- Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
-      unless (PublicKey.verify key signedData stmtSig) $ Left StatementInvalidSignature
+      unless (PublicKey.verify key signedData stmtSig) . Left $ AttestationCommonError InvalidSignature
 
       pure credData
     -- Basic, AttCA

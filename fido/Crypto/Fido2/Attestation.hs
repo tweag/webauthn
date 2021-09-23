@@ -8,7 +8,7 @@ import Crypto.Fido2.Attestation.Packed as Packed (verify)
 import Crypto.Fido2.Error
   ( AttestationError
       ( AttestationCommonError,
-        AttestationCredentialDataMissing
+        CredentialDataMissing
       ),
     CommonError
       ( ChallengeMismatch,
@@ -186,5 +186,5 @@ validateAttStmt :: AttestationFormat -> AuthenticatorData -> Digest SHA256 -> Ei
 validateAttStmt FormatNone AuthenticatorData {attestedCredentialData} _ =
   case attestedCredentialData of
     Just attestedCredentialData -> pure attestedCredentialData
-    Nothing -> Left AttestationCredentialDataMissing
+    Nothing -> Left CredentialDataMissing
 validateAttStmt (FormatPacked stmt) authData clientDataHash = Packed.verify stmt authData clientDataHash
