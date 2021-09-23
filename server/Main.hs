@@ -19,7 +19,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import qualified Crypto.Fido2.Assertion as Assertion
 import Crypto.Fido2.Attestation (verifyAttestationResponse)
-import Crypto.Fido2.Error (Error)
+import Crypto.Fido2.Error (AttestationError)
 import qualified Crypto.Fido2.Protocol as Fido2
 import qualified Crypto.Fido2.PublicKey as Fido2
 import Data.Aeson (FromJSON)
@@ -186,7 +186,7 @@ mkCredentialDescriptor credentialId =
 data RegistrationResult
   = Success
   | AlreadyRegistered
-  | AttestationError Error
+  | AttestationError AttestationError
   deriving (Eq, Show)
 
 handleError :: Show e => Either e a -> Scotty.ActionM a

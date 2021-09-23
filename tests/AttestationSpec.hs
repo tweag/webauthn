@@ -192,7 +192,7 @@ spec = do
                             }
                       }
                in case Fido2.verifyAttestationResponse origin rp challenge Fido2.UserVerificationPreferred resp of
-                    Left x -> x === Fido2.AttestationCredentialDataMissing
+                    Left x -> x === Fido2.CredentialDataMissing
       -- Kinda lame. We know that show is total as it's derived
       it
         "Can show Error"

@@ -40,12 +40,10 @@ instance Arbitrary Fido2.CommonError where
     elements
       [ Fido2.InvalidWebauthnType,
         Fido2.ChallengeMismatch,
-        Fido2.ChallengeMissing,
         Fido2.RpOriginMismatch,
         Fido2.RpIdHashMismatch,
         Fido2.UserNotPresent,
         Fido2.UserNotVerified,
-        Fido2.ExtensionsInvalid,
         Fido2.CryptoCurveUnsupported,
         Fido2.CryptoAlgorithmUnsupported,
         Fido2.CryptoKeyTypeUnsupported
