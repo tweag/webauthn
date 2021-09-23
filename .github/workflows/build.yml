@@ -1,7 +1,11 @@
 name: "Build"
 on:
-  pull_request:
   push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -17,6 +21,10 @@ jobs:
           trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
           substituters = https://hydra.iohk.io https://cache.nixos.org/
 
+    - uses: cachix/cachix-action@v10
+      with:
+        name: tweag-haskell-fido2
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - name: "Stylecheck"
       run: |
         nix-shell --pure --command ./bin/autoformat.sh
