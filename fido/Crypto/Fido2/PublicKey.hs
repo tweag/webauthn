@@ -16,6 +16,7 @@ module Crypto.Fido2.PublicKey
     curveForAlg,
     toAlg,
     keyAlgorithm,
+    toPublicKey,
   )
 where
 
@@ -30,6 +31,7 @@ import qualified Crypto.Hash.Algorithms as Hash
 import Crypto.Number.Serialize (i2osp, os2ip)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Prim as ECC
+import Crypto.PubKey.ECC.Types (getCurveByName)
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Data.ASN1.BinaryEncoding as ASN1
@@ -39,6 +41,8 @@ import Data.Aeson.Types (ToJSON (toJSON))
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteArray as ByteArray
 import Data.ByteString (ByteString)
+import Data.X509 (PubKey (PubKeyEC, PubKeyEd25519), PubKeyEC (pubkeyEC_pub))
+import Data.X509.EC (ecPubKeyCurveName, unserializePoint)
 
 data ECDSAIdentifier
   = ES256
@@ -88,6 +92,12 @@ toCurve :: CurveIdentifier -> ECC.Curve
 toCurve P256 = ECC.getCurveByName ECC.SEC_p256r1
 toCurve P384 = ECC.getCurveByName ECC.SEC_p384r1
 toCurve P521 = ECC.getCurveByName ECC.SEC_p521r1
+
+fromCurveName :: ECC.CurveName -> CurveIdentifier
+fromCurveName ECC.SEC_p256r1 = P256
+fromCurveName ECC.SEC_p384r1 = P384
+fromCurveName ECC.SEC_p521r1 = P521
+fromCurveName _ = error "Unknown curve name"
 
 data ECDSAKey = ECDSAKey ECDSAIdentifier ECC.Point deriving (Eq, Show)
 
@@ -290,3 +300,18 @@ curveForAlg :: ECDSAIdentifier -> CurveIdentifier
 curveForAlg ES256 = P256
 curveForAlg ES384 = P384
 curveForAlg ES512 = P521
+
+algForCurve :: CurveIdentifier -> ECDSAIdentifier
+algForCurve P256 = ES256
+algForCurve P384 = ES384
+algForCurve P521 = ES512
+
+toPublicKey :: PubKey -> Maybe PublicKey
+toPublicKey (PubKeyEd25519 key) = Just . EdDSAPublicKey $ Ed25519 key
+toPublicKey (PubKeyEC key) = do
+  curveName <- ecPubKeyCurveName key
+  let ident = algForCurve $ fromCurveName curveName
+      curve = getCurveByName curveName
+  point <- unserializePoint curve (pubkeyEC_pub key)
+  pure . ECDSAPublicKey $ ECDSAKey ident point
+toPublicKey _ = Nothing

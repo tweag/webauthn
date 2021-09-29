@@ -47,6 +47,7 @@ import Codec.CBOR.Decoding (Decoder)
 import qualified Codec.CBOR.Read as CBOR
 import Codec.CBOR.Term (Term (TBytes, TMap, TString))
 import qualified Codec.Serialise.Class as Serialise
+import qualified Crypto.Fido2.Attestation.AndroidKey.Statement as AndroidKey
 import qualified Crypto.Fido2.Attestation.Packed.Statement as Packed
 import Crypto.Fido2.Error (DecodingError (BinaryFailure, CBORFailure, FormatUnsupported))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
@@ -492,7 +493,7 @@ data AttestationObjectRaw = AttestationObjectRaw
 
 -- | Represents both the format and the parsed attestation statement. This is different from the protocol that
 --  implies storing the format and statement seperately.
-data AttestationFormat = FormatNone | FormatPacked Packed.Stmt
+data AttestationFormat = FormatNone | FormatPacked Packed.Stmt | FormatAndroidKey AndroidKey.Stmt
   deriving (Show)
 
 data AttestationObject = AttestationObject
@@ -510,13 +511,16 @@ decodeAttestationObject bs = do
   (rest, _, authDataRaw') <- first BinaryFailure $ Binary.runGetOrFail decodeAuthenticatorDataRaw (LBS.fromStrict authDataRaw)
   (rest, authData) <- first CBORFailure $ CBOR.deserialiseFromBytes (decodeAuthenticatorData authDataRaw authDataRaw') rest
   format <- decodeAttestationFormat fmt attStmt rest
-  pure (AttestationObject authData format)
+  pure $ AttestationObject authData format
 
 decodeAttestationFormat :: Text -> [(Term, Term)] -> LBS.ByteString -> Either DecodingError AttestationFormat
 decodeAttestationFormat "none" _ _ = Right FormatNone
 decodeAttestationFormat "packed" stmt bytes = do
   (_rest, statement) <- first CBORFailure $ CBOR.deserialiseFromBytes (Packed.decode stmt) bytes
   pure (FormatPacked statement)
+decodeAttestationFormat "android-key" stmt bytes = do
+  (_rest, statement) <- first CBORFailure $ CBOR.deserialiseFromBytes (AndroidKey.decode stmt) bytes
+  pure (FormatAndroidKey statement)
 decodeAttestationFormat fmt _ _ = Left $ FormatUnsupported fmt
 
 -- Helper. TODO  come up with more consistent names for all of these things, and allow

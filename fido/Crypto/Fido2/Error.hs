@@ -53,6 +53,8 @@ data DecodingError
     BinaryFailure (ByteString, ByteOffset, String)
   | -- | The desired attestation format is not supported
     FormatUnsupported Text
+  | -- | The ASN1 encoded value could not be decoded
+    ASN1DecodingError
   deriving (Show, Eq)
 
 -- | Any error that occurs during assertion
@@ -73,7 +75,19 @@ data AttestationError
   | -- | The attestation format was none, but attestation data was still present.
     StatementPresentForNone
   | -- | No AAGUID was found in the attested credential data
-    AttestationCredentialAAGUIDMissing
+    CredentialAAGUIDMissing
+  | -- | The key in the x5c certificate did not match the key in the attested credential data
+    CredentialKeyMismatch
+  | -- | The desired certificate extension is missing from the certificate
+    RecordExtensionMissing
+  | -- | The attestationHash is missing from the certificate extension
+    ChallengeHashMissing
+  | -- | The allAplications field was found in the certificate extension
+    AndroidKeyAllApplicationsFieldFound
+  | -- | The origin field of the certificate extension does not have the required value
+    AndroidKeyOriginFieldInvalid
+  | -- | The purpose field of the certificate extension does not have the requied value
+    AndroidKeyPurposeFieldInvalid
   | -- | The certificate's trust could not be established. This could be because it was unsigned,
     -- or the signed certificate was not found in the certificate store.
     TrustFailure
