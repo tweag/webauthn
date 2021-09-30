@@ -48,6 +48,7 @@ import qualified Codec.CBOR.Read as CBOR
 import Codec.CBOR.Term (Term (TBytes, TMap, TString))
 import qualified Codec.Serialise.Class as Serialise
 import qualified Crypto.Fido2.Attestation.AndroidKey.Statement as AndroidKey
+import qualified Crypto.Fido2.Attestation.FidoU2F.Statement as FidoU2F
 import qualified Crypto.Fido2.Attestation.Packed.Statement as Packed
 import Crypto.Fido2.Error (DecodingError (BinaryFailure, CBORFailure, FormatUnsupported))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
@@ -493,7 +494,7 @@ data AttestationObjectRaw = AttestationObjectRaw
 
 -- | Represents both the format and the parsed attestation statement. This is different from the protocol that
 --  implies storing the format and statement seperately.
-data AttestationFormat = FormatNone | FormatPacked Packed.Stmt | FormatAndroidKey AndroidKey.Stmt
+data AttestationFormat = FormatNone | FormatPacked Packed.Stmt | FormatAndroidKey AndroidKey.Stmt | FormatFidoU2F FidoU2F.Stmt
   deriving (Show)
 
 data AttestationObject = AttestationObject
@@ -521,6 +522,9 @@ decodeAttestationFormat "packed" stmt bytes = do
 decodeAttestationFormat "android-key" stmt bytes = do
   (_rest, statement) <- first CBORFailure $ CBOR.deserialiseFromBytes (AndroidKey.decode stmt) bytes
   pure (FormatAndroidKey statement)
+decodeAttestationFormat "fido-u2f" stmt bytes = do
+  (_rest, statement) <- first CBORFailure $ CBOR.deserialiseFromBytes (FidoU2F.decode stmt) bytes
+  pure (FormatFidoU2F statement)
 decodeAttestationFormat fmt _ _ = Left $ FormatUnsupported fmt
 
 -- Helper. TODO  come up with more consistent names for all of these things, and allow

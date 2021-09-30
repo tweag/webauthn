@@ -27,7 +27,7 @@ import Debug.Trace (traceShowId)
 data Stmt = Stmt
   { alg :: COSEAlgorithmIdentifier,
     sig :: ByteString,
-    x5c :: X509.SignedExact X509.Certificate,
+    x5c :: X509.SignedCertificate,
     -- | Holds the parsed attestation extension of the above X509 certificate
     -- Not part of the spec, but prevents parsing in the AndroidKey.verify function
     attExt :: ExtAttestation

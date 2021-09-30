@@ -62,6 +62,8 @@ library
     Crypto.Fido2.Attestation.AndroidKey.Statement,
     Crypto.Fido2.Attestation.Packed,
     Crypto.Fido2.Attestation.Packed.Statement,
+    Crypto.Fido2.Attestation.FidoU2F,
+    Crypto.Fido2.Attestation.FidoU2F.Statement,
     Crypto.Fido2.Error,
     Crypto.Fido2.Protocol,
     Crypto.Fido2.PublicKey,
