@@ -199,6 +199,9 @@ decodeECDSAPublicKey = do
   curve <- decode
   when (curve /= curveForAlg alg') $ fail "Curve must match alg. See <section>"
   decodeMapKey X
+  -- Extracting the x and y values of the point is counterproductive for the Fido-U2F attestation
+  -- However, since it is still useful otherwise we do perform it.
+  -- During Fifo-U2F attestation, the value is converted back into a ByteArray representation.
   x <- os2ip <$> CBOR.decodeBytesCanonical
   decodeMapKey Y
   tokenType <- CBOR.peekTokenType

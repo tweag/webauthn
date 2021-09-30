@@ -102,6 +102,12 @@ data AttestationError
   | -- | The certificate could not be parsed in a way to retrieve the public key
     -- TODO: Maybe a different name?
     CertiticatePublicKeyInvalid
+  | -- | The key retrieved from the certificate is not an EC key
+    U2FNoECKeyinCertificate
+  | -- | The key retrieved from the attested credential data is not an EC key
+    U2FNoECKeyInAttestedCredentialData
+  | -- | The serialized versions of the coordinates were not 32 bytes long
+    U2FUnexpectedCoordinateLength
   | -- | The ASN1 decoding failed for the provided reason
     ASN1Error ASN1Error
   | -- | A common error occured during attestation

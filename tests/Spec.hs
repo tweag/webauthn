@@ -141,6 +141,24 @@ main = Hspec.hspec $ do
                 Fido2.UserVerificationPreferred
                 response
         registerResult `shouldSatisfy` isRight
+  describe "U2F register" $
+    it "tests whether the fixed fido-u2f register has a valid attestation" $
+      do
+        Fido2.PublicKeyCredential {response} <-
+          decodeFile
+            @(Fido2.PublicKeyCredential Fido2.AuthenticatorAttestationResponse)
+            -- Test data used from fido2-net-lib (C) .NET Foundation and Contributors (MIT License)
+            "tests/responses/attestation/04-u2f.json"
+        let Fido2.AuthenticatorAttestationResponse {clientData} = response
+            Fido2.ClientData {challenge} = clientData
+        let registerResult =
+              Fido2.verifyAttestationResponse
+                (Fido2.Origin "https://localhost:44329")
+                (Fido2.RpId "localhost")
+                challenge
+                Fido2.UserVerificationPreferred
+                response
+        registerResult `shouldSatisfy` isRight
 
 {- Disabled because we can't yet reproduce a login response for the register-complete/02.json
   let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
