@@ -30,6 +30,7 @@ library
   build-depends:
     binary,
     aeson,
+    deriving-aeson,
     asn1-encoding,
     asn1-parse,
     asn1-types,
@@ -64,6 +65,7 @@ library
     Crypto.Fido2.Attestation.Packed.Statement,
     Crypto.Fido2.Attestation.FidoU2F,
     Crypto.Fido2.Attestation.FidoU2F.Statement,
+    Crypto.Fido2.Client.JavaScript,
     Crypto.Fido2.Error,
     Crypto.Fido2.Protocol,
     Crypto.Fido2.PublicKey,
