@@ -73,16 +73,16 @@ instance Convert HS.AuthenticatorAttachment where
   type JS HS.AuthenticatorAttachment = JS.DOMString
 
 instance Convert HS.ResidentKeyRequirement where
-  type JS HS.ResidentKeyRequirement = Maybe JS.DOMString
+  type JS HS.ResidentKeyRequirement = JS.DOMString
 
 instance Convert HS.UserVerificationRequirement where
-  type JS HS.UserVerificationRequirement = Maybe JS.DOMString
+  type JS HS.UserVerificationRequirement = JS.DOMString
 
 instance Convert HS.AuthenticatorSelectionCriteria where
   type JS HS.AuthenticatorSelectionCriteria = JS.AuthenticatorSelectionCriteria
 
 instance Convert HS.AttestationConveyancePreference where
-  type JS HS.AttestationConveyancePreference = Maybe JS.DOMString
+  type JS HS.AttestationConveyancePreference = JS.DOMString
 
 instance Convert HS.AuthenticationExtensionsClientInputs where
   type JS HS.AuthenticationExtensionsClientInputs = JS.AuthenticationExtensionsClientInputs
@@ -157,11 +157,11 @@ instance Encode HS.AuthenticatorSelectionCriteria where
   encode HS.AuthenticatorSelectionCriteria {..} =
     JS.AuthenticatorSelectionCriteria
       { authenticatorAttachment = encode authenticatorAttachment,
-        residentKey = encode residentKey,
+        residentKey = Just $ encode residentKey,
         -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
         -- Relying Parties SHOULD set it to true if, and only if, residentKey is set to required.
         requireResidentKey = Just (residentKey == HS.ResidentKeyRequirementRequired),
-        userVerification = encode userVerification
+        userVerification = Just $ encode userVerification
       }
 
 instance Encode HS.PublicKeyCredentialCreationOptions where
@@ -174,7 +174,7 @@ instance Encode HS.PublicKeyCredentialCreationOptions where
         timeout = encode timeout,
         excludeCredentials = Just $ encode excludeCredentials,
         authenticatorSelection = encode authenticatorSelection,
-        attestation = encode attestation,
+        attestation = Just $ encode attestation,
         extensions = encode extensions
       }
 
@@ -185,7 +185,7 @@ instance Encode HS.PublicKeyCredentialRequestOptions where
         timeout = encode timeout,
         rpId = encode rpId,
         allowCredentials = Just $ encode allowCredentials,
-        userVerification = encode userVerification,
+        userVerification = Just $ encode userVerification,
         extensions = Just $ encode extensions
       }
 
@@ -218,19 +218,19 @@ instance Encode HS.AuthenticatorAttachment where
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-residentKeyRequirement>
 instance Encode HS.ResidentKeyRequirement where
-  encode HS.ResidentKeyRequirementDiscouraged = Just "discouraged"
-  encode HS.ResidentKeyRequirementPreferred = Just "preferred"
-  encode HS.ResidentKeyRequirementRequired = Just "required"
+  encode HS.ResidentKeyRequirementDiscouraged = "discouraged"
+  encode HS.ResidentKeyRequirementPreferred = "preferred"
+  encode HS.ResidentKeyRequirementRequired = "required"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement>
 instance Encode HS.UserVerificationRequirement where
-  encode HS.UserVerificationRequirementRequired = Just "required"
-  encode HS.UserVerificationRequirementPreferred = Just "preferred"
-  encode HS.UserVerificationRequirementDiscouraged = Just "discouraged"
+  encode HS.UserVerificationRequirementRequired = "required"
+  encode HS.UserVerificationRequirementPreferred = "preferred"
+  encode HS.UserVerificationRequirementDiscouraged = "discouraged"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-attestation-convey>
 instance Encode HS.AttestationConveyancePreference where
-  encode HS.AttestationConveyancePreferenceNone = Just "none"
-  encode HS.AttestationConveyancePreferenceIndirect = Just "indirect"
-  encode HS.AttestationConveyancePreferenceDirect = Just "direct"
-  encode HS.AttestationConveyancePreferenceEnterprise = Just "enterprise"
+  encode HS.AttestationConveyancePreferenceNone = "none"
+  encode HS.AttestationConveyancePreferenceIndirect = "indirect"
+  encode HS.AttestationConveyancePreferenceDirect = "direct"
+  encode HS.AttestationConveyancePreferenceEnterprise = "enterprise"
