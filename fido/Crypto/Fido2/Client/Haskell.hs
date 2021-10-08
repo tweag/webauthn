@@ -3,6 +3,7 @@
 module Crypto.Fido2.Client.Haskell
   ( -- * Top-level types
     PublicKeyCredentialCreationOptions (..),
+    PublicKeyCredentialRequestOptions (..),
 
     -- * Nested types
     RpId (..),
@@ -48,6 +49,10 @@ import Data.Word (Word32)
 -- This default MAY be overridden by the caller, as long as the caller-specified 'RpId' value
 -- [is a registrable domain suffix of or is equal to](https://html.spec.whatwg.org/multipage/origin.html#is-a-registrable-domain-suffix-of-or-is-equal-to)
 -- the caller’s [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
+--
+-- TODO: 'RpId' is used for both https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrpentity-id
+-- and https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid, but the former
+-- uses DOMString, while the latter uses USVString. Is this a bug in the spec or is there an actual difference?
 newtype RpId = RpId {unRpId :: Text}
   deriving (Eq, Show)
 
@@ -431,5 +436,42 @@ data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
     -- established by [RFC8809](https://www.w3.org/TR/webauthn-2/#biblio-rfc8809) for an up-to-date
     -- list of registered [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
     extensions :: Maybe AuthenticationExtensionsClientInputs
+  }
+  deriving (Eq, Show)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
+-- The 'PublicKeyCredentialRequestOptions' dictionary supplies `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`
+-- with the data it needs to generate an assertion.
+data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-challenge)
+    -- This member represents a challenge that the selected [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) signs,
+    -- along with other data, when producing an [authentication assertion](https://www.w3.org/TR/webauthn-2/#authentication-assertion).
+    -- See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges) security consideration.
+    challenge :: Challenge,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-timeout)
+    -- This OPTIONAL member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
+    -- The value is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
+    timeout :: Maybe Timeout,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid)
+    -- This OPTIONAL member specifies the [relying party identifier](https://www.w3.org/TR/webauthn-2/#relying-party-identifier) claimed by the caller.
+    -- If omitted, its value will be the `[CredentialsContainer](https://w3c.github.io/webappsec-credential-management/#credentialscontainer)`
+    -- object’s [relevant settings object](https://html.spec.whatwg.org/multipage/webappapis.html#relevant-settings-object)'s
+    -- [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s
+    -- [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
+    rpId :: Maybe RpId,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-allowcredentials)
+    -- This OPTIONAL member contains a list of 'PublicKeyCredentialDescriptor'
+    -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
+    -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
+    allowCredentials :: [PublicKeyCredentialDescriptor],
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
+    -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
+    -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
+    -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
+    userVerification :: UserVerificationRequirement,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
+    -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
+    -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
+    extensions :: AuthenticationExtensionsClientInputs
   }
   deriving (Eq, Show)

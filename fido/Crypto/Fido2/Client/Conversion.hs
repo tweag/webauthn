@@ -90,6 +90,9 @@ instance Convert HS.AuthenticationExtensionsClientInputs where
 instance Convert HS.PublicKeyCredentialCreationOptions where
   type JS HS.PublicKeyCredentialCreationOptions = JS.PublicKeyCredentialCreationOptions
 
+instance Convert HS.PublicKeyCredentialRequestOptions where
+  type JS HS.PublicKeyCredentialRequestOptions = JS.PublicKeyCredentialRequestOptions
+
 -- | @'Encode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- encoded to the more generic JavaScript type @'JS' hs@ with the 'encode' function.
 class Encode hs where
@@ -173,6 +176,17 @@ instance Encode HS.PublicKeyCredentialCreationOptions where
         authenticatorSelection = encode authenticatorSelection,
         attestation = encode attestation,
         extensions = encode extensions
+      }
+
+instance Encode HS.PublicKeyCredentialRequestOptions where
+  encode HS.PublicKeyCredentialRequestOptions {..} =
+    JS.PublicKeyCredentialRequestOptions
+      { challenge = encode challenge,
+        timeout = encode timeout,
+        rpId = encode rpId,
+        allowCredentials = Just $ encode allowCredentials,
+        userVerification = encode userVerification,
+        extensions = Just $ encode extensions
       }
 
 instance Encode HS.AuthenticationExtensionsClientInputs where
