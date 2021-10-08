@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 
 -- |
 -- This module models direct representations of JavaScript objects interacting with the
@@ -27,9 +28,9 @@ module Crypto.Fido2.Client.JavaScript
   ( -- * Top-level types
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),
-    -- PublicKeyCredential (..),
-    -- AuthenticatorAttestationResponse (..),
-    -- AuthenticatorAssertionResponse (..),
+    PublicKeyCredential (..),
+    AuthenticatorAttestationResponse (..),
+    AuthenticatorAssertionResponse (..),
 
     -- * Nested types
     PublicKeyCredentialRpEntity (..),
@@ -39,11 +40,13 @@ module Crypto.Fido2.Client.JavaScript
     PublicKeyCredentialDescriptor (..),
     AuthenticatorSelectionCriteria (..),
     AuthenticationExtensionsClientInputs (..),
+    AuthenticationExtensionsClientOutputs (..),
 
     -- * JavaScript-builtin types
     DOMString,
     UnsignedLong,
     BufferSource (..),
+    ArrayBuffer,
   )
 where
 
@@ -85,6 +88,8 @@ instance Aeson.FromJSON BufferSource where
 
 instance Aeson.ToJSON BufferSource where
   toJSON (URLEncodedBase64 bs) = Aeson.String . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
+
+type ArrayBuffer = BufferSource
 
 type JSONEncoding = CustomJSON '[OmitNothingFields, FieldLabelModifier (Rename "typ" "type")]
 
@@ -198,3 +203,40 @@ data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialRequestOptions
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+data PublicKeyCredential response = PublicKeyCredential
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-identifier-slot)
+    rawId :: ArrayBuffer,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-response)
+    response :: response,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
+    clientExtensionResults :: AuthenticationExtensionsClientOutputs
+  }
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
+-- TODO: Implement a way to specify extensions, or implement them here directly
+data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
+  {
+  }
+  deriving (Eq, Show)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
+data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
+    clientDataJSON :: ArrayBuffer,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
+    attestationObject :: ArrayBuffer
+  }
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorassertionresponse)
+data AuthenticatorAssertionResponse = AuthenticatorAssertionResponse
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
+    clientDataJSON :: ArrayBuffer,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata)
+    authenticatorData :: ArrayBuffer,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-signature)
+    signature :: ArrayBuffer,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-userhandle)
+    userHandle :: Maybe ArrayBuffer
+  }
