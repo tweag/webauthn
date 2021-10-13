@@ -37,7 +37,6 @@ module Crypto.Fido2.Client.Haskell
     Origin (..),
     ClientDataHash (..),
     AttestationObject (..),
-    AttestationStatement (..),
     AuthenticationExtensionsClientOutputs (..),
     WebauthnType (..),
     AssertionSignature (..),
@@ -47,16 +46,20 @@ module Crypto.Fido2.Client.Haskell
     AAGUID (..),
     AuthenticatorDataFlags (..),
     AuthenticatorExtensionOutputs (..),
+    AttestationType (..),
   )
 where
 
+import Control.Exception (SomeException)
 import Crypto.Fido2.PublicKey (PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import qualified Data.ByteString as BS
+import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
 import Data.Text (Text)
 import Data.Word (Word32)
+import qualified Data.X509 as X509
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rp-id)
 -- A [valid domain string](https://url.spec.whatwg.org/#valid-domain-string)
@@ -613,7 +616,7 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata)
       -- This attribute contains the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
       -- returned by the authenticator. See [§ 6.1 Authenticator Data](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data).
-      authenticatorData :: AuthenticatorData,
+      authenticatorData :: AuthenticatorData 'Get,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-signature)
       -- This attribute contains the raw signature returned from the authenticator.
       -- See [§ 6.3.3 The authenticatorGetAssertion Operation](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion).
@@ -660,7 +663,7 @@ newtype AssertionSignature = AssertionSignature {unAssertionSignature :: BS.Byte
 -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
 -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
-data AuthenticatorData = AuthenticatorData
+data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rpidhash)
     -- SHA-256 hash of the [RP ID](https://www.w3.org/TR/webauthn-2/#rp-id) the
     -- [credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) is
@@ -673,10 +676,12 @@ data AuthenticatorData = AuthenticatorData
     signCount :: Word32,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)
     -- [attested credential data](https://www.w3.org/TR/webauthn-2/#attested-credential-data) (if present)
-    attestedCredentialData :: Maybe AttestedCredentialData,
+    attestedCredentialData :: AttestedCredentialData t,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authdataextensions)
     -- Extension-defined [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
-    extensions :: Maybe AuthenticatorExtensionOutputs
+    extensions :: Maybe AuthenticatorExtensionOutputs,
+    -- | Raw encoded data for verification purposes
+    rawData :: BS.ByteString
   }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-extension-output)
@@ -696,17 +701,22 @@ newtype RpIdHash = RpIdHash {unRpIdHash :: Digest SHA256}
 -- [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- when generating an [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object)
 -- for a given credential.
-data AttestedCredentialData = AttestedCredentialData
-  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
-    aaguid :: AAGUID,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialid)
-    credentialId :: CredentialId,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
-    credentialPublicKey :: PublicKey
-  }
+data AttestedCredentialData (t :: WebauthnType) where
+  AttestedCredentialData ::
+    { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
+      aaguid :: AAGUID,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialid)
+      credentialId :: CredentialId,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
+      credentialPublicKey :: PublicKey
+    } ->
+    AttestedCredentialData 'Create
+  NoAttestedCredentialData ::
+    AttestedCredentialData 'Get
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
 newtype AAGUID = AAGUID {unAAGUID :: BS.ByteString}
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#flags)
 data AuthenticatorDataFlags = AuthenticatorDataFlags
@@ -767,8 +777,93 @@ newtype Origin = Origin {unOrigin :: Text}
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
 data AttestationObject = AttestationObject
-  { authData :: AuthenticatorData,
-    attStmt :: AttestationStatement
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
+    -- The authenticator data structure encodes contextual bindings made by the
+    -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator).
+    -- These bindings are controlled by the authenticator itself, and derive
+    -- their trust from the [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)'s
+    -- assessment of the security properties of the authenticator. In one
+    -- extreme case, the authenticator may be embedded in the client, and its
+    -- bindings may be no more trustworthy than the [client data](https://www.w3.org/TR/webauthn-2/#client-data).
+    -- At the other extreme, the authenticator may be a discrete entity with high-security hardware
+    -- and software, connected to the client over a secure channel. In both cases,
+    -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
+    -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
+    -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
+    authData :: AuthenticatorData 'Create,
+    -- | Verifies the [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+    -- using the [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)'s
+    -- verification procedure. It returns an [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types),
+    -- which may include an X.509 certificate chain to further verify if relevant
+    validate :: ClientDataHash -> Either SomeException AttestationType
   }
 
-data AttestationStatement = AttestationStatementNone
+type NonEmptyCertificateChain = NonEmpty X509.SignedCertificate
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
+-- WebAuthn supports several [attestation types](https://www.w3.org/TR/webauthn-2/#attestation-type),
+-- defining the semantics of [attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+-- and their underlying trust models:
+data AttestationType
+  = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#basic-attestation)
+    -- In the case of basic attestation [\[UAFProtocol\]](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
+    -- the authenticator’s [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair)
+    -- is specific to an authenticator "model", i.e., a "batch" of authenticators.
+    -- Thus, authenticators of the same, or similar, model often share the same
+    -- [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
+    -- See [§ 14.4.1 Attestation Privacy](https://www.w3.org/TR/webauthn-2/#sctn-attestation-privacy)
+    -- for further information.
+    AttestationTypeBasic NonEmptyCertificateChain
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#self-attestation)
+    -- In the case of [self attestation](https://www.w3.org/TR/webauthn-2/#self-attestation),
+    -- also known as surrogate basic attestation [\[UAFProtocol\]](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
+    -- the Authenticator does not have any specific [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
+    -- Instead it uses the [credential private key](https://www.w3.org/TR/webauthn-2/#credential-private-key)
+    -- to create the [attestation signature](https://www.w3.org/TR/webauthn-2/#attestation-signature).
+    -- Authenticators without meaningful protection measures for an
+    -- [attestation private key](https://www.w3.org/TR/webauthn-2/#attestation-private-key)
+    -- typically use this attestation type.
+    AttestationTypeSelf
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attca)
+    -- In this case, an [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- is based on a Trusted Platform Module (TPM) and holds an authenticator-specific
+    -- "endorsement key" (EK). This key is used to securely communicate with a
+    -- trusted third party, the [Attestation CA](https://www.w3.org/TR/webauthn-2/#attestation-ca)
+    -- [\[TCG-CMCProfile-AIKCertEnroll\]](https://www.w3.org/TR/webauthn-2/#biblio-tcg-cmcprofile-aikcertenroll)
+    -- (formerly known as a "Privacy CA"). The [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- can generate multiple attestation identity key pairs (AIK) and requests an
+    -- [Attestation CA](https://www.w3.org/TR/webauthn-2/#attestation-ca) to
+    -- issue an AIK certificate for each. Using this approach, such an
+    -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) can
+    -- limit the exposure of the EK (which is a global correlation handle) to
+    -- Attestation CA(s). AIKs can be requested for each
+    -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)\-generated
+    -- [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
+    -- individually, and conveyed to [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
+    -- as [attestation certificates](https://www.w3.org/TR/webauthn-2/#attestation-certificate).
+    AttestationTypeAttCA NonEmptyCertificateChain
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#anonca)
+    -- In this case, the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- uses an [Anonymization CA](https://www.w3.org/TR/webauthn-2/#anonymization-ca)
+    -- which dynamically generates per-[credential](https://w3c.github.io/webappsec-credential-management/#concept-credential)
+    -- [attestation certificates](https://www.w3.org/TR/webauthn-2/#attestation-certificate)
+    -- such that the [attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+    -- presented to [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
+    -- do not provide uniquely identifiable information, e.g., that might be used for tracking purposes.
+    AttestationTypeAnonCA NonEmptyCertificateChain
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#none)
+    -- In this case, no attestation information is available. See also
+    -- [§ 8.7 None Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-none-attestation).
+    AttestationTypeNone
+  | -- | [Attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+    -- conveying [attestations](https://www.w3.org/TR/webauthn-2/#attestation) of
+    -- [type](https://www.w3.org/TR/webauthn-2/#attestation-type)
+    -- [AttCA](https://www.w3.org/TR/webauthn-2/#attca) or
+    -- [AnonCA](https://www.w3.org/TR/webauthn-2/#anonca) use the same data
+    -- structure as those of [type](https://www.w3.org/TR/webauthn-2/#attestation-type)
+    -- [Basic](https://www.w3.org/TR/webauthn-2/#basic), so the three attestation
+    -- types are, in general, distinguishable only with externally provided knowledge regarding the contents
+    -- of the [attestation certificates](https://www.w3.org/TR/webauthn-2/#attestation-certificate)
+    -- conveyed in the [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement).
+    AttestationTypeUncertain NonEmptyCertificateChain
+  deriving (Eq, Show)

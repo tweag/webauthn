@@ -1,5 +1,7 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -10,7 +12,9 @@ module Crypto.Fido2.Client.Conversion
   ( Convert (..),
     Encode (..),
     Decode (..),
+    AttestationDecode (..),
     DecodingError (..),
+    AttestationStatementFormat (..),
   )
 where
 
@@ -19,6 +23,8 @@ import Codec.CBOR.Term (Term (TBytes, TMap, TString))
 import qualified Codec.CBOR.Term as CBOR
 import Codec.Serialise (DeserialiseFailure, Serialise)
 import qualified Codec.Serialise as Serialise
+import Control.Exception (Exception, SomeException (SomeException))
+import Control.Monad (forM)
 import qualified Crypto.Fido2.Client.Haskell as HS
 import qualified Crypto.Fido2.Client.JavaScript as JS
 import qualified Crypto.Hash as Hash
@@ -26,10 +32,12 @@ import qualified Data.Aeson as Aeson
 import Data.Bifunctor (Bifunctor (second), first)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import Data.Coerce (Coercible, coerce)
 import Data.HashMap.Strict (HashMap, (!?))
+import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -141,8 +149,8 @@ instance Convert HS.AttestationObject where
 instance Convert HS.AssertionSignature where
   type JS HS.AssertionSignature = JS.ArrayBuffer
 
-instance Convert HS.AuthenticatorData where
-  type JS HS.AuthenticatorData = JS.ArrayBuffer
+instance Convert (HS.AuthenticatorData 'HS.Get) where
+  type JS (HS.AuthenticatorData 'HS.Get) = JS.ArrayBuffer
 
 -- | @'Encode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- encoded to the more generic JavaScript type @'JS' hs@ with the 'encode' function.
@@ -294,9 +302,13 @@ data DecodingError
   | DecodingErrorCBOR DeserialiseFailure
   | DecodingErrorBinary String
   | DecodingErrorNotAllInputUsed LBS.ByteString
-  | DecodingErrorStatement Text [(Term, Term)]
+  | DecodingErrorStatement Text (HashMap Text Term)
   | DecodingErrorUnknownAttestationStatementFormat Text
   | DecodingErrorUnexpectedAttestationObjectValues (Maybe Term, Maybe Term, Maybe Term)
+  | DecodingErrorUnexpectedAttestationStatementKey Term
+  | DecodingErrorAttestationStatement SomeException
+  | DecodingErrorUnexpectedAttestedCredentialData (HS.AttestedCredentialData 'HS.Create)
+  | DecodingErrorExpectedAttestedCredentialData
 
 -- | @'Decode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- decoded from the more generic JavaScript type @'JS' hs@ with the 'decode' function.
@@ -304,6 +316,11 @@ class Decode hs where
   decode :: JS hs -> Either DecodingError hs
   default decode :: Coercible (JS hs) hs => JS hs -> Either DecodingError hs
   decode = pure . coerce
+
+-- | @'Decode' hs@ indicates that the Haskell-specific type @hs@ can be
+-- decoded from the more generic JavaScript type @'JS' hs@ with the 'decode' function.
+class AttestationDecode hs where
+  attestationDecode :: HashMap Text SomeAttestationStatementFormat -> JS hs -> Either DecodingError hs
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -358,19 +375,19 @@ instance Decode HS.CollectedClientData where
           hash = HS.ClientDataHash $ Hash.hash bytes
         }
 
-instance Decode HS.AttestationObject where
-  decode (JS.URLEncodedBase64 bytes) = decodeAttestationObject (LBS.fromStrict bytes)
+instance AttestationDecode HS.AttestationObject where
+  attestationDecode attestationStatementFormatMap (JS.URLEncodedBase64 bytes) = decodeAttestationObject attestationStatementFormatMap (LBS.fromStrict bytes)
 
-instance Decode (HS.AuthenticatorResponse 'HS.Create) where
-  decode JS.AuthenticatorAttestationResponse {..} = do
+instance AttestationDecode (HS.AuthenticatorResponse 'HS.Create) where
+  attestationDecode attestationStatementFormatMap JS.AuthenticatorAttestationResponse {..} = do
     attestationClientData <- decode clientDataJSON
-    attestationObject <- decode attestationObject
+    attestationObject <- attestationDecode attestationStatementFormatMap attestationObject
     -- TODO
     let transports = Set.empty
     pure $ HS.AuthenticatorAttestationResponse {..}
 
-instance Decode HS.AuthenticatorData where
-  decode (JS.URLEncodedBase64 bytes) = useAllInput (LBS.fromStrict bytes) decodeAuthenticatorData
+instance Decode (HS.AuthenticatorData 'HS.Get) where
+  decode (JS.URLEncodedBase64 bytes) = decodeAuthenticatorData bytes
 
 instance Decode HS.AssertionSignature
 
@@ -388,10 +405,10 @@ instance Decode HS.AuthenticationExtensionsClientOutputs where
   decode JS.AuthenticationExtensionsClientOutputs {} =
     pure HS.AuthenticationExtensionsClientOutputs {}
 
-instance Decode (HS.PublicKeyCredential 'HS.Create) where
-  decode JS.PublicKeyCredential {..} = do
+instance AttestationDecode (HS.PublicKeyCredential 'HS.Create) where
+  attestationDecode attestationStatementFormatMap JS.PublicKeyCredential {..} = do
     identifier <- decode rawId
-    response <- decode response
+    response <- attestationDecode attestationStatementFormatMap response
     clientExtensionResults <- decode clientExtensionResults
     pure $ HS.PublicKeyCredential {..}
 
@@ -415,19 +432,34 @@ instance Decode (HS.PublicKeyCredential 'HS.Get) where
 type PartialBinaryDecoder a = LBS.ByteString -> Either DecodingError (LBS.ByteString, a)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
-decodeAttestationObject :: LBS.ByteString -> Either DecodingError HS.AttestationObject
-decodeAttestationObject bytes = do
+decodeAttestationObject :: HashMap Text SomeAttestationStatementFormat -> LBS.ByteString -> Either DecodingError HS.AttestationObject
+decodeAttestationObject formats bytes = do
   map :: HashMap Text Term <- first DecodingErrorCBOR $ Serialise.deserialiseOrFail bytes
   case (map !? "authData", map !? "fmt", map !? "attStmt") of
     (Just (TBytes authDataBytes), Just (TString fmt), Just (TMap attStmtPairs)) -> do
-      authData <- useAllInput (LBS.fromStrict authDataBytes) decodeAuthenticatorData
-      attStmt <- decodeAttestationStatement fmt attStmtPairs
+      authData <- decodeAuthenticatorData authDataBytes
+
+      validate <- case formats !? fmt of
+        Nothing -> Left $ DecodingErrorUnknownAttestationStatementFormat fmt
+        Just (SomeAttestationStatementFormat AttestationStatementFormat {..}) -> do
+          attStmtMap <-
+            HashMap.fromList <$> forM attStmtPairs \case
+              (TString text, term) -> pure (text, term)
+              (nonString, _) -> Left $ DecodingErrorUnexpectedAttestationStatementKey nonString
+          attStmt <- first (DecodingErrorAttestationStatement . SomeException) $ attestationStatementFormatDecode attStmtMap
+          pure $ first SomeException . attestationStatementFormatValidate attStmt authData
+
       pure HS.AttestationObject {..}
     terms -> Left $ DecodingErrorUnexpectedAttestationObjectValues terms
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
-decodeAuthenticatorData :: PartialBinaryDecoder HS.AuthenticatorData
-decodeAuthenticatorData bytes = do
+decodeAuthenticatorData ::
+  forall (t :: HS.WebauthnType).
+  ExpectedAttestedClientData t =>
+  BS.ByteString ->
+  Either DecodingError (HS.AuthenticatorData t)
+decodeAuthenticatorData rawData = do
+  let bytes = LBS.fromStrict rawData
   -- https://www.w3.org/TR/webauthn-2/#rpidhash
   (bytes, rpIdHash) <-
     second (HS.RpIdHash . fromJust . Hash.digestFromByteString)
@@ -447,10 +479,15 @@ decodeAuthenticatorData bytes = do
     runBinary Binary.getWord32be bytes
 
   -- https://www.w3.org/TR/webauthn-2/#attestedcredentialdata
-  (bytes, attestedCredentialData) <-
+  (bytes, mattestedCredentialData) <-
     if Bits.testBit bitFlags 6
       then fmap Just <$> decodeAttestedCredentialData bytes
       else pure (bytes, Nothing)
+  -- If bit 6 is set, we always parse the attested credential data, which
+  -- should only be included if t ~ Create (and its main constructor is indeed constrained to that)
+  -- With this line we actually check that it's only included for t ~ Create,
+  -- and that it's not included for t ~ Get
+  attestedCredentialData <- expectedAttestedClientData mattestedCredentialData
 
   -- https://www.w3.org/TR/webauthn-2/#authdataextensions
   (bytes, extensions) <-
@@ -458,10 +495,32 @@ decodeAuthenticatorData bytes = do
       then fmap Just <$> decodeExtensions bytes
       else pure (bytes, Nothing)
 
-  pure (bytes, HS.AuthenticatorData {..})
+  if LBS.null bytes
+    then pure HS.AuthenticatorData {..}
+    else Left $ DecodingErrorNotAllInputUsed bytes
 
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#attested-credential-data)
-decodeAttestedCredentialData :: PartialBinaryDecoder HS.AttestedCredentialData
+-- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature),
+-- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
+-- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
+-- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature),
+-- the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the
+-- `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
+class ExpectedAttestedClientData (t :: HS.WebauthnType) where
+  expectedAttestedClientData ::
+    Maybe (HS.AttestedCredentialData 'HS.Create) ->
+    Either DecodingError (HS.AttestedCredentialData t)
+
+-- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature), the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
+instance ExpectedAttestedClientData 'HS.Create where
+  expectedAttestedClientData Nothing = Left DecodingErrorExpectedAttestedCredentialData
+  expectedAttestedClientData (Just credentialData) = pure credentialData
+
+-- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature), the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
+instance ExpectedAttestedClientData 'HS.Get where
+  expectedAttestedClientData Nothing = pure HS.NoAttestedCredentialData
+  expectedAttestedClientData (Just credentialData) = Left $ DecodingErrorUnexpectedAttestedCredentialData credentialData
+
+decodeAttestedCredentialData :: PartialBinaryDecoder (HS.AttestedCredentialData 'HS.Create)
 decodeAttestedCredentialData bytes = do
   -- https://www.w3.org/TR/webauthn-2/#aaguid
   (bytes, aaguid) <-
@@ -490,24 +549,20 @@ decodeExtensions bytes = do
   (bytes, _extensions :: HashMap Text CBOR.Term) <- runCBOR bytes
   pure (bytes, HS.AuthenticatorExtensionOutputs {})
 
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-defined-attestation-formats)
-decodeAttestationStatement :: Text -> [(Term, Term)] -> Either DecodingError HS.AttestationStatement
--- https://www.w3.org/TR/webauthn-2/#sctn-none-attestation
-decodeAttestationStatement "none" pairs
-  -- Contains an empty map
-  | null pairs = pure HS.AttestationStatementNone
-  | otherwise = Left $ DecodingErrorStatement "none" pairs
--- TODO
-decodeAttestationStatement unknown _ = Left $ DecodingErrorUnknownAttestationStatementFormat unknown
+data AttestationStatementFormat a ed ev = (Exception ed, Exception ev) =>
+  AttestationStatementFormat
+  { attestationStatementFormatIdentifier :: Text,
+    attestationStatementFormatDecode :: HashMap Text CBOR.Term -> Either ed a,
+    attestationStatementFormatValidate ::
+      a ->
+      HS.AuthenticatorData 'HS.Create ->
+      HS.ClientDataHash ->
+      Either ev HS.AttestationType
+  }
+
+data SomeAttestationStatementFormat = forall a ed ev. SomeAttestationStatementFormat (AttestationStatementFormat a ed ev)
 
 -- ** Utils
-
-useAllInput :: LBS.ByteString -> PartialBinaryDecoder a -> Either DecodingError a
-useAllInput bytes decoder = case decoder bytes of
-  Left err -> Left err
-  Right (rest, result)
-    | LBS.null rest -> Left $ DecodingErrorNotAllInputUsed rest
-    | otherwise -> Right result
 
 runBinary :: Binary.Get a -> PartialBinaryDecoder a
 runBinary get bytes = case Binary.runGetOrFail get bytes of
