@@ -186,67 +186,67 @@ instance Encode a => Encode [a] where
 instance Encode HS.PublicKeyCredentialRpEntity where
   encode HS.PublicKeyCredentialRpEntity {..} =
     JS.PublicKeyCredentialRpEntity
-      { id = encode id,
-        name = encode name
+      { id = encode pkcreId,
+        name = encode pkcreName
       }
 
 instance Encode HS.PublicKeyCredentialUserEntity where
   encode HS.PublicKeyCredentialUserEntity {..} =
     JS.PublicKeyCredentialUserEntity
-      { id = encode id,
-        displayName = encode displayName,
-        name = encode name
+      { id = encode pkcueId,
+        displayName = encode pkcueDisplayName,
+        name = encode pkcueName
       }
 
 instance Encode HS.PublicKeyCredentialParameters where
   encode HS.PublicKeyCredentialParameters {..} =
     JS.PublicKeyCredentialParameters
-      { typ = encode typ,
-        alg = encode alg
+      { typ = encode pkcpTyp,
+        alg = encode pkcpAlg
       }
 
 instance Encode HS.PublicKeyCredentialDescriptor where
   encode HS.PublicKeyCredentialDescriptor {..} =
     JS.PublicKeyCredentialDescriptor
-      { typ = encode typ,
-        id = encode id,
-        transports = encode transports
+      { typ = encode pkcdTyp,
+        id = encode pkcdId,
+        transports = encode pkcdTransports
       }
 
 instance Encode HS.AuthenticatorSelectionCriteria where
   encode HS.AuthenticatorSelectionCriteria {..} =
     JS.AuthenticatorSelectionCriteria
-      { authenticatorAttachment = encode authenticatorAttachment,
-        residentKey = Just $ encode residentKey,
+      { authenticatorAttachment = encode ascAuthenticatorAttachment,
+        residentKey = Just $ encode ascResidentKey,
         -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
         -- Relying Parties SHOULD set it to true if, and only if, residentKey is set to required.
-        requireResidentKey = Just (residentKey == HS.ResidentKeyRequirementRequired),
-        userVerification = Just $ encode userVerification
+        requireResidentKey = Just (ascResidentKey == HS.ResidentKeyRequirementRequired),
+        userVerification = Just $ encode ascUserVerification
       }
 
 instance Encode (HS.PublicKeyCredentialOptions 'HS.Create) where
   encode HS.PublicKeyCredentialCreationOptions {..} =
     JS.PublicKeyCredentialCreationOptions
-      { rp = encode pkcCreationRp,
-        user = encode pkcCreationUser,
-        challenge = encode pkcCreationChallenge,
-        pubKeyCredParams = encode pkcCreationPubKeyCredParams,
-        timeout = encode pkcCreationTimeout,
-        excludeCredentials = Just $ encode pkcCreationExcludeCredentials,
-        authenticatorSelection = encode pkcCreationAuthenticatorSelection,
-        attestation = Just $ encode pkcCreationAttestation,
-        extensions = encode pkcCreationExtensions
+      { rp = encode pkcocRp,
+        user = encode pkcocUser,
+        challenge = encode pkcocChallenge,
+        pubKeyCredParams = encode pkcocPubKeyCredParams,
+        timeout = encode pkcocTimeout,
+        excludeCredentials = Just $ encode pkcocExcludeCredentials,
+        authenticatorSelection = encode pkcocAuthenticatorSelection,
+        attestation = Just $ encode pkcocAttestation,
+        extensions = encode pkcocExtensions
       }
 
 instance Encode (HS.PublicKeyCredentialOptions 'HS.Get) where
   encode HS.PublicKeyCredentialRequestOptions {..} =
     JS.PublicKeyCredentialRequestOptions
-      { challenge = encode pkcRequestChallenge,
-        timeout = encode pkcRequestTimeout,
-        rpId = encode pkcRequestRpId,
-        allowCredentials = Just $ encode pkcRequestAllowCredentials,
-        userVerification = Just $ encode pkcRequestUserVerification,
-        extensions = Just $ encode pkcRequestExtensions
+      { challenge = encode pkcogChallenge,
+        timeout = encode pkcogTimeout,
+        rpId = encode pkcogRpId,
+        allowCredentials = Just $ encode pkcogAllowCredentials,
+        userVerification = Just $ encode pkcogUserVerification,
+        extensions = Just $ encode pkcogExtensions
       }
 
 instance Encode HS.AuthenticationExtensionsClientInputs where
@@ -255,10 +255,10 @@ instance Encode HS.AuthenticationExtensionsClientInputs where
 
 -- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
 instance Encode HS.COSEAlgorithmIdentifier where
-  encode HS.ES512 = -36
-  encode HS.ES384 = -35
-  encode HS.EdDSA = -8
-  encode HS.ES256 = -7
+  encode HS.COSEAlgorithmIdentifierES512 = -36
+  encode HS.COSEAlgorithmIdentifierES384 = -35
+  encode HS.COSEAlgorithmIdentifierEdDSA = -8
+  encode HS.COSEAlgorithmIdentifierES256 = -7
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
 instance Encode HS.PublicKeyCredentialType where
@@ -266,15 +266,15 @@ instance Encode HS.PublicKeyCredentialType where
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport>
 instance Encode HS.AuthenticatorTransport where
-  encode HS.USB = "usb"
-  encode HS.NFC = "nfc"
-  encode HS.BLE = "ble"
-  encode HS.Internal = "internal"
+  encode HS.AuthenticatorTransportUSB = "usb"
+  encode HS.AuthenticatorTransportNFC = "nfc"
+  encode HS.AuthenticatorTransportBLE = "ble"
+  encode HS.AuthenticatorTransportInternal = "internal"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment>
 instance Encode HS.AuthenticatorAttachment where
-  encode HS.Platform = "platform"
-  encode HS.CrossPlatform = "cross-platform"
+  encode HS.AuthenticatorAttachmentPlatform = "platform"
+  encode HS.AuthenticatorAttachmentCrossPlatform = "cross-platform"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-residentKeyRequirement>
 instance Encode HS.ResidentKeyRequirement where
@@ -369,10 +369,10 @@ instance SingI t => Decode (HS.CollectedClientData t) where
     unless (typ == expectedType) $ Left (DecodingErrorUnexpectedWebauthnType expectedType typ)
     pure
       HS.CollectedClientData
-        { challenge = HS.Challenge challenge,
-          origin = HS.Origin origin,
-          crossOrigin = crossOrigin,
-          hash = HS.ClientDataHash $ Hash.hash bytes
+        { ccdChallenge = HS.Challenge challenge,
+          ccdOrigin = HS.Origin origin,
+          ccdCrossOrigin = crossOrigin,
+          ccdHash = HS.ClientDataHash $ Hash.hash bytes
         }
 
 instance AttestationDecode HS.AttestationObject where
@@ -380,10 +380,10 @@ instance AttestationDecode HS.AttestationObject where
 
 instance AttestationDecode (HS.AuthenticatorResponse 'HS.Create) where
   attestationDecode attestationStatementFormatMap JS.AuthenticatorAttestationResponse {..} = do
-    attestationClientData <- decode clientDataJSON
-    attestationObject <- attestationDecode attestationStatementFormatMap attestationObject
+    arcClientData <- decode clientDataJSON
+    arcAttestationObject <- attestationDecode attestationStatementFormatMap attestationObject
     -- TODO
-    let transports = Set.empty
+    let arcTransports = Set.empty
     pure $ HS.AuthenticatorAttestationResponse {..}
 
 instance Decode (HS.AuthenticatorData 'HS.Get) where
@@ -395,10 +395,10 @@ instance Decode HS.UserHandle
 
 instance Decode (HS.AuthenticatorResponse 'HS.Get) where
   decode JS.AuthenticatorAssertionResponse {..} = do
-    assertionClientData <- decode clientDataJSON
-    authenticatorData <- decode authenticatorData
-    signature <- decode signature
-    userHandle <- decode userHandle
+    argClientData <- decode clientDataJSON
+    argAuthenticatorData <- decode authenticatorData
+    argSignature <- decode signature
+    argUserHandle <- decode userHandle
     pure $ HS.AuthenticatorAssertionResponse {..}
 
 instance Decode HS.AuthenticationExtensionsClientOutputs where
@@ -407,16 +407,16 @@ instance Decode HS.AuthenticationExtensionsClientOutputs where
 
 instance AttestationDecode (HS.PublicKeyCredential 'HS.Create) where
   attestationDecode attestationStatementFormatMap JS.PublicKeyCredential {..} = do
-    identifier <- decode rawId
-    response <- attestationDecode attestationStatementFormatMap response
-    clientExtensionResults <- decode clientExtensionResults
+    pkcIdentifier <- decode rawId
+    pkcResponse <- attestationDecode attestationStatementFormatMap response
+    pkcClientExtensionResults <- decode clientExtensionResults
     pure $ HS.PublicKeyCredential {..}
 
 instance Decode (HS.PublicKeyCredential 'HS.Get) where
   decode JS.PublicKeyCredential {..} = do
-    identifier <- decode rawId
-    response <- decode response
-    clientExtensionResults <- decode clientExtensionResults
+    pkcIdentifier <- decode rawId
+    pkcResponse <- decode response
+    pkcClientExtensionResults <- decode clientExtensionResults
     pure $ HS.PublicKeyCredential {..}
 
 -- * Binary formats
@@ -450,9 +450,9 @@ decodeAttestationObject formats bytes = do
   map :: HashMap Text Term <- first DecodingErrorCBOR $ Serialise.deserialiseOrFail bytes
   case (map !? "authData", map !? "fmt", map !? "attStmt") of
     (Just (TBytes authDataBytes), Just (TString fmt), Just (TMap attStmtPairs)) -> do
-      authData <- decodeAuthenticatorData authDataBytes
+      aoAuthData <- decodeAuthenticatorData authDataBytes
 
-      validate <- case formats !? fmt of
+      aoValidate <- case formats !? fmt of
         Nothing -> Left $ DecodingErrorUnknownAttestationStatementFormat fmt
         Just (SomeAttestationStatementFormat AttestationStatementFormat {..}) -> do
           attStmtMap <-
@@ -460,7 +460,7 @@ decodeAttestationObject formats bytes = do
               (TString text, term) -> pure (text, term)
               (nonString, _) -> Left $ DecodingErrorUnexpectedAttestationStatementKey nonString
           attStmt <- first (DecodingErrorAttestationStatement . SomeException) $ attestationStatementFormatDecode attStmtMap
-          pure $ first SomeException . attestationStatementFormatValidate attStmt authData
+          pure $ first SomeException . attestationStatementFormatValidate attStmt aoAuthData
 
       pure HS.AttestationObject {..}
     terms -> Left $ DecodingErrorUnexpectedAttestationObjectValues terms
@@ -471,28 +471,28 @@ decodeAuthenticatorData ::
   SingI t =>
   BS.ByteString ->
   Either DecodingError (HS.AuthenticatorData t)
-decodeAuthenticatorData rawData = do
-  let bytes = LBS.fromStrict rawData
+decodeAuthenticatorData adRawData = do
+  let bytes = LBS.fromStrict adRawData
   -- https://www.w3.org/TR/webauthn-2/#rpidhash
-  (bytes, rpIdHash) <-
+  (bytes, adRpIdHash) <-
     second (HS.RpIdHash . fromJust . Hash.digestFromByteString)
       <$> runBinary (Binary.getByteString 32) bytes
 
   -- https://www.w3.org/TR/webauthn-2/#flags
   (bytes, bitFlags) <-
     runBinary Binary.getWord8 bytes
-  let flags =
+  let adFlags =
         HS.AuthenticatorDataFlags
-          { userPresent = Bits.testBit bitFlags 0,
-            userVerified = Bits.testBit bitFlags 2
+          { adfUserPresent = Bits.testBit bitFlags 0,
+            adfUserVerified = Bits.testBit bitFlags 2
           }
 
   -- https://www.w3.org/TR/webauthn-2/#signcount
-  (bytes, signCount) <-
+  (bytes, adSignCount) <-
     runBinary Binary.getWord32be bytes
 
   -- https://www.w3.org/TR/webauthn-2/#attestedcredentialdata
-  (bytes, attestedCredentialData) <- case (sing @t, Bits.testBit bitFlags 6) of
+  (bytes, adAttestedCredentialData) <- case (sing @t, Bits.testBit bitFlags 6) of
     -- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature),
     -- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
     -- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
@@ -505,7 +505,7 @@ decodeAuthenticatorData rawData = do
     (SGet, True) -> Left DecodingErrorUnexpectedAttestedCredentialData
 
   -- https://www.w3.org/TR/webauthn-2/#authdataextensions
-  (bytes, extensions) <-
+  (bytes, adExtensions) <-
     if Bits.testBit bitFlags 7
       then fmap Just <$> decodeExtensions bytes
       else pure (bytes, Nothing)
@@ -517,7 +517,7 @@ decodeAuthenticatorData rawData = do
 decodeAttestedCredentialData :: PartialBinaryDecoder (HS.AttestedCredentialData 'HS.Create)
 decodeAttestedCredentialData bytes = do
   -- https://www.w3.org/TR/webauthn-2/#aaguid
-  (bytes, aaguid) <-
+  (bytes, acdAaguid) <-
     second HS.AAGUID
       <$> runBinary (Binary.getByteString 16) bytes
 
@@ -526,12 +526,12 @@ decodeAttestedCredentialData bytes = do
     runBinary Binary.getWord16be bytes
 
   -- https://www.w3.org/TR/webauthn-2/#credentialid
-  (bytes, credentialId) <-
+  (bytes, acdCredentialId) <-
     second HS.CredentialId
       <$> runBinary (Binary.getByteString (fromIntegral credentialLength)) bytes
 
   -- https://www.w3.org/TR/webauthn-2/#credentialpublickey
-  (bytes, credentialPublicKey) <-
+  (bytes, acdCredentialPublicKey) <-
     runCBOR bytes
 
   pure (bytes, HS.AttestedCredentialData {..})

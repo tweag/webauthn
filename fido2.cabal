@@ -22,7 +22,6 @@ common sanity
     LambdaCase
     OverloadedStrings
     TypeApplications
-    DuplicateRecordFields
 
 library
   import: sanity
