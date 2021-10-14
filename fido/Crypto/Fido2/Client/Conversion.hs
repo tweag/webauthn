@@ -9,12 +9,16 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Crypto.Fido2.Client.Conversion
-  ( Convert (..),
-    Encode (..),
-    Decode (..),
-    AttestationDecode (..),
+  ( encodePublicKeyCredentialCreationOptions,
+    encodePublicKeyCredentialRequestOptions,
+    decodeCreatedPublicKeyCredential,
+    decodeRequestedPublicKeyCredential,
     DecodingError (..),
+    CreatedDecodingError (..),
+    RequestedDecodingError (..),
     AttestationStatementFormat (..),
+    SomeAttestationStatementFormat (..),
+    SupportedAttestationStatementFormats,
   )
 where
 
@@ -45,6 +49,67 @@ import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Deriving.Aeson (CustomJSON (CustomJSON), FieldLabelModifier, OmitNothingFields, Rename)
 import GHC.Generics (Generic)
+
+encodePublicKeyCredentialCreationOptions ::
+  HS.PublicKeyCredentialOptions 'HS.Create ->
+  JS.PublicKeyCredentialCreationOptions
+encodePublicKeyCredentialCreationOptions = encode
+
+encodePublicKeyCredentialRequestOptions ::
+  HS.PublicKeyCredentialOptions 'HS.Get ->
+  JS.PublicKeyCredentialRequestOptions
+encodePublicKeyCredentialRequestOptions = encode
+
+data DecodingError
+  = DecodingErrorClientDataJSON String
+  | DecodingErrorClientDataChallenge String
+  | DecodingErrorUnexpectedWebauthnType JS.DOMString JS.DOMString
+  | DecodingErrorExpectedAttestedCredentialData
+  | DecodingErrorUnexpectedAttestedCredentialData
+  | DecodingErrorNotAllInputUsed LBS.ByteString
+  | DecodingErrorBinary String
+  | DecodingErrorCBOR DeserialiseFailure
+  deriving (Show, Exception)
+
+data CreatedDecodingError
+  = CreatedDecodingErrorCommon DecodingError
+  | CreatedDecodingErrorCBOR DeserialiseFailure
+  | CreatedDecodingErrorUnknownAttestationStatementFormat Text
+  | CreatedDecodingErrorUnexpectedAttestationStatementKey Term
+  | CreatedDecodingErrorAttestationStatement SomeException
+  | CreatedDecodingErrorUnexpectedAttestationObjectValues (Maybe Term, Maybe Term, Maybe Term)
+  deriving (Show, Exception)
+
+newtype RequestedDecodingError = RequestedDecodingErrorCommon DecodingError
+
+decodeCreatedPublicKeyCredential ::
+  SupportedAttestationStatementFormats ->
+  JS.CreatedPublicKeyCredential ->
+  Either CreatedDecodingError (HS.PublicKeyCredential 'HS.Create)
+decodeCreatedPublicKeyCredential = decodeCreated
+
+decodeRequestedPublicKeyCredential ::
+  JS.RequestedPublicKeyCredential ->
+  Either RequestedDecodingError (HS.PublicKeyCredential 'HS.Get)
+decodeRequestedPublicKeyCredential = decodeRequested
+
+data AttestationStatementFormat a ed ev = (Exception ed, Exception ev) =>
+  AttestationStatementFormat
+  { attestationStatementFormatIdentifier ::
+      Text,
+    attestationStatementFormatDecode ::
+      HashMap Text CBOR.Term ->
+      Either ed a,
+    attestationStatementFormatValidate ::
+      a ->
+      HS.AuthenticatorData 'HS.Create ->
+      HS.ClientDataHash ->
+      Either ev HS.AttestationType
+  }
+
+data SomeAttestationStatementFormat = forall a ed ev. SomeAttestationStatementFormat (AttestationStatementFormat a ed ev)
+
+type SupportedAttestationStatementFormats = HashMap Text SomeAttestationStatementFormat
 
 -- | @'Convert' hs@ indicates that the Haskell-specific type @hs@ has a more
 -- general JavaScript-specific type associated with it, which can be accessed with 'JS'.
@@ -295,24 +360,6 @@ instance Encode HS.AttestationConveyancePreference where
   encode HS.AttestationConveyancePreferenceDirect = "direct"
   encode HS.AttestationConveyancePreferenceEnterprise = "enterprise"
 
--- | Errors that can occur during decoding of client data
-data DecodingError
-  = DecodingErrorClientDataJSON String
-  | DecodingErrorUnexpectedWebauthnType JS.DOMString JS.DOMString
-  | DecodingErrorClientDataChallenge String
-  | DecodingErrorCBOR DeserialiseFailure
-  | DecodingErrorBinary String
-  | DecodingErrorNotAllInputUsed LBS.ByteString
-  | DecodingErrorStatement Text (HashMap Text Term)
-  | DecodingErrorUnknownAttestationStatementFormat Text
-  | DecodingErrorUnexpectedAttestationObjectValues (Maybe Term, Maybe Term, Maybe Term)
-  | DecodingErrorUnexpectedAttestationStatementKey Term
-  | DecodingErrorAttestationStatement SomeException
-  | DecodingErrorUnexpectedAttestedCredentialData
-  | DecodingErrorExpectedAttestedCredentialData
-
--- | @'Decode' hs@ indicates that the Haskell-specific type @hs@ can be
--- decoded from the more generic JavaScript type @'JS' hs@ with the 'decode' function.
 class Decode hs where
   decode :: JS hs -> Either DecodingError hs
   default decode :: Coercible (JS hs) hs => JS hs -> Either DecodingError hs
@@ -320,8 +367,13 @@ class Decode hs where
 
 -- | @'Decode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- decoded from the more generic JavaScript type @'JS' hs@ with the 'decode' function.
-class AttestationDecode hs where
-  attestationDecode :: HashMap Text SomeAttestationStatementFormat -> JS hs -> Either DecodingError hs
+class DecodeRequested hs where
+  decodeRequested :: JS hs -> Either RequestedDecodingError hs
+
+-- | @'Decode' hs@ indicates that the Haskell-specific type @hs@ can be
+-- decoded from the more generic JavaScript type @'JS' hs@ with the 'decode' function.
+class DecodeCreated hs where
+  decodeCreated :: SupportedAttestationStatementFormats -> JS hs -> Either CreatedDecodingError hs
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -375,13 +427,13 @@ instance SingI t => Decode (HS.CollectedClientData t) where
           ccdHash = HS.ClientDataHash $ Hash.hash bytes
         }
 
-instance AttestationDecode HS.AttestationObject where
-  attestationDecode attestationStatementFormatMap (JS.URLEncodedBase64 bytes) = decodeAttestationObject attestationStatementFormatMap (LBS.fromStrict bytes)
+instance DecodeCreated HS.AttestationObject where
+  decodeCreated attestationStatementFormatMap (JS.URLEncodedBase64 bytes) = decodeAttestationObject attestationStatementFormatMap (LBS.fromStrict bytes)
 
-instance AttestationDecode (HS.AuthenticatorResponse 'HS.Create) where
-  attestationDecode attestationStatementFormatMap JS.AuthenticatorAttestationResponse {..} = do
-    arcClientData <- decode clientDataJSON
-    arcAttestationObject <- attestationDecode attestationStatementFormatMap attestationObject
+instance DecodeCreated (HS.AuthenticatorResponse 'HS.Create) where
+  decodeCreated attestationStatementFormatMap JS.AuthenticatorAttestationResponse {..} = do
+    arcClientData <- first CreatedDecodingErrorCommon $ decode clientDataJSON
+    arcAttestationObject <- decodeCreated attestationStatementFormatMap attestationObject
     -- TODO
     let arcTransports = Set.empty
     pure $ HS.AuthenticatorAttestationResponse {..}
@@ -405,11 +457,11 @@ instance Decode HS.AuthenticationExtensionsClientOutputs where
   decode JS.AuthenticationExtensionsClientOutputs {} =
     pure HS.AuthenticationExtensionsClientOutputs {}
 
-instance AttestationDecode (HS.PublicKeyCredential 'HS.Create) where
-  attestationDecode attestationStatementFormatMap JS.PublicKeyCredential {..} = do
-    pkcIdentifier <- decode rawId
-    pkcResponse <- attestationDecode attestationStatementFormatMap response
-    pkcClientExtensionResults <- decode clientExtensionResults
+instance DecodeCreated (HS.PublicKeyCredential 'HS.Create) where
+  decodeCreated attestationStatementFormatMap JS.PublicKeyCredential {..} = do
+    pkcIdentifier <- first CreatedDecodingErrorCommon $ decode rawId
+    pkcResponse <- decodeCreated attestationStatementFormatMap response
+    pkcClientExtensionResults <- first CreatedDecodingErrorCommon $ decode clientExtensionResults
     pure $ HS.PublicKeyCredential {..}
 
 instance Decode (HS.PublicKeyCredential 'HS.Get) where
@@ -418,6 +470,9 @@ instance Decode (HS.PublicKeyCredential 'HS.Get) where
     pkcResponse <- decode response
     pkcClientExtensionResults <- decode clientExtensionResults
     pure $ HS.PublicKeyCredential {..}
+
+instance DecodeRequested (HS.PublicKeyCredential 'HS.Get) where
+  decodeRequested js = first RequestedDecodingErrorCommon $ decode js
 
 -- * Binary formats
 
@@ -431,39 +486,26 @@ instance Decode (HS.PublicKeyCredential 'HS.Get) where
 -- much nastiness.
 type PartialBinaryDecoder a = LBS.ByteString -> Either DecodingError (LBS.ByteString, a)
 
-data AttestationStatementFormat a ed ev = (Exception ed, Exception ev) =>
-  AttestationStatementFormat
-  { attestationStatementFormatIdentifier :: Text,
-    attestationStatementFormatDecode :: HashMap Text CBOR.Term -> Either ed a,
-    attestationStatementFormatValidate ::
-      a ->
-      HS.AuthenticatorData 'HS.Create ->
-      HS.ClientDataHash ->
-      Either ev HS.AttestationType
-  }
-
-data SomeAttestationStatementFormat = forall a ed ev. SomeAttestationStatementFormat (AttestationStatementFormat a ed ev)
-
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
-decodeAttestationObject :: HashMap Text SomeAttestationStatementFormat -> LBS.ByteString -> Either DecodingError HS.AttestationObject
+decodeAttestationObject :: HashMap Text SomeAttestationStatementFormat -> LBS.ByteString -> Either CreatedDecodingError HS.AttestationObject
 decodeAttestationObject formats bytes = do
-  map :: HashMap Text Term <- first DecodingErrorCBOR $ Serialise.deserialiseOrFail bytes
+  map :: HashMap Text Term <- first CreatedDecodingErrorCBOR $ Serialise.deserialiseOrFail bytes
   case (map !? "authData", map !? "fmt", map !? "attStmt") of
     (Just (TBytes authDataBytes), Just (TString fmt), Just (TMap attStmtPairs)) -> do
-      aoAuthData <- decodeAuthenticatorData authDataBytes
+      aoAuthData <- first CreatedDecodingErrorCommon $ decodeAuthenticatorData authDataBytes
 
       aoValidate <- case formats !? fmt of
-        Nothing -> Left $ DecodingErrorUnknownAttestationStatementFormat fmt
+        Nothing -> Left $ CreatedDecodingErrorUnknownAttestationStatementFormat fmt
         Just (SomeAttestationStatementFormat AttestationStatementFormat {..}) -> do
           attStmtMap <-
             HashMap.fromList <$> forM attStmtPairs \case
               (TString text, term) -> pure (text, term)
-              (nonString, _) -> Left $ DecodingErrorUnexpectedAttestationStatementKey nonString
-          attStmt <- first (DecodingErrorAttestationStatement . SomeException) $ attestationStatementFormatDecode attStmtMap
+              (nonString, _) -> Left $ CreatedDecodingErrorUnexpectedAttestationStatementKey nonString
+          attStmt <- first (CreatedDecodingErrorAttestationStatement . SomeException) $ attestationStatementFormatDecode attStmtMap
           pure $ first SomeException . attestationStatementFormatValidate attStmt aoAuthData
 
       pure HS.AttestationObject {..}
-    terms -> Left $ DecodingErrorUnexpectedAttestationObjectValues terms
+    terms -> Left $ CreatedDecodingErrorUnexpectedAttestationObjectValues terms
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 decodeAuthenticatorData ::
