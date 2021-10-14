@@ -24,9 +24,10 @@ import qualified Codec.CBOR.Term as CBOR
 import Codec.Serialise (DeserialiseFailure, Serialise)
 import qualified Codec.Serialise as Serialise
 import Control.Exception (Exception, SomeException (SomeException))
-import Control.Monad (forM)
+import Control.Monad (forM, unless)
 import qualified Crypto.Fido2.Client.Haskell as HS
 import qualified Crypto.Fido2.Client.JavaScript as JS
+import Crypto.Fido2.Client.WebauthnType (SWebauthnType (SCreate, SGet), SingI, sing)
 import qualified Crypto.Hash as Hash
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (Bifunctor (second), first)
@@ -140,8 +141,8 @@ instance Convert (HS.AuthenticatorResponse 'HS.Get) where
 instance Convert HS.AuthenticationExtensionsClientOutputs where
   type JS HS.AuthenticationExtensionsClientOutputs = JS.AuthenticationExtensionsClientOutputs
 
-instance Convert HS.CollectedClientData where
-  type JS HS.CollectedClientData = JS.ArrayBuffer
+instance Convert (HS.CollectedClientData t) where
+  type JS (HS.CollectedClientData t) = JS.ArrayBuffer
 
 instance Convert HS.AttestationObject where
   type JS HS.AttestationObject = JS.ArrayBuffer
@@ -297,7 +298,7 @@ instance Encode HS.AttestationConveyancePreference where
 -- | Errors that can occur during decoding of client data
 data DecodingError
   = DecodingErrorClientDataJSON String
-  | DecodingErrorUnknownWebauthnType JS.DOMString
+  | DecodingErrorUnexpectedWebauthnType JS.DOMString JS.DOMString
   | DecodingErrorClientDataChallenge String
   | DecodingErrorCBOR DeserialiseFailure
   | DecodingErrorBinary String
@@ -307,7 +308,7 @@ data DecodingError
   | DecodingErrorUnexpectedAttestationObjectValues (Maybe Term, Maybe Term, Maybe Term)
   | DecodingErrorUnexpectedAttestationStatementKey Term
   | DecodingErrorAttestationStatement SomeException
-  | DecodingErrorUnexpectedAttestedCredentialData (HS.AttestedCredentialData 'HS.Create)
+  | DecodingErrorUnexpectedAttestedCredentialData
   | DecodingErrorExpectedAttestedCredentialData
 
 -- | @'Decode' hs@ indicates that the Haskell-specific type @hs@ can be
@@ -347,7 +348,7 @@ data ClientDataJSON = ClientDataJSON
   -- See <https://www.w3.org/TR/webauthn-2/#clientdatajson-serialization>
   deriving (Aeson.FromJSON) via CustomJSON '[OmitNothingFields, FieldLabelModifier (Rename "typ" "type")] ClientDataJSON
 
-instance Decode HS.CollectedClientData where
+instance SingI t => Decode (HS.CollectedClientData t) where
   decode (JS.URLEncodedBase64 bytes) = do
     -- https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data
     ClientDataJSON {..} <- first DecodingErrorClientDataJSON $ Aeson.eitherDecodeStrict bytes
@@ -362,14 +363,13 @@ instance Decode HS.CollectedClientData where
     -- and "webauthn.get" when getting an assertion from an existing credential.
     -- The purpose of this member is to prevent certain types of signature confusion
     -- attacks (where an attacker substitutes one legitimate signature for another).
-    typ <- case typ of
-      "webauthn.create" -> pure HS.Create
-      "webauthn.get" -> pure HS.Get
-      unknown -> Left $ DecodingErrorUnknownWebauthnType unknown
+    let expectedType = case sing @t of
+          SCreate -> "webauthn.create"
+          SGet -> "webauthn.get"
+    unless (typ == expectedType) $ Left (DecodingErrorUnexpectedWebauthnType expectedType typ)
     pure
       HS.CollectedClientData
-        { typ = typ,
-          challenge = HS.Challenge challenge,
+        { challenge = HS.Challenge challenge,
           origin = HS.Origin origin,
           crossOrigin = crossOrigin,
           hash = HS.ClientDataHash $ Hash.hash bytes
@@ -431,6 +431,19 @@ instance Decode (HS.PublicKeyCredential 'HS.Get) where
 -- much nastiness.
 type PartialBinaryDecoder a = LBS.ByteString -> Either DecodingError (LBS.ByteString, a)
 
+data AttestationStatementFormat a ed ev = (Exception ed, Exception ev) =>
+  AttestationStatementFormat
+  { attestationStatementFormatIdentifier :: Text,
+    attestationStatementFormatDecode :: HashMap Text CBOR.Term -> Either ed a,
+    attestationStatementFormatValidate ::
+      a ->
+      HS.AuthenticatorData 'HS.Create ->
+      HS.ClientDataHash ->
+      Either ev HS.AttestationType
+  }
+
+data SomeAttestationStatementFormat = forall a ed ev. SomeAttestationStatementFormat (AttestationStatementFormat a ed ev)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 decodeAttestationObject :: HashMap Text SomeAttestationStatementFormat -> LBS.ByteString -> Either DecodingError HS.AttestationObject
 decodeAttestationObject formats bytes = do
@@ -454,8 +467,8 @@ decodeAttestationObject formats bytes = do
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 decodeAuthenticatorData ::
-  forall (t :: HS.WebauthnType).
-  ExpectedAttestedClientData t =>
+  forall t.
+  SingI t =>
   BS.ByteString ->
   Either DecodingError (HS.AuthenticatorData t)
 decodeAuthenticatorData rawData = do
@@ -479,15 +492,17 @@ decodeAuthenticatorData rawData = do
     runBinary Binary.getWord32be bytes
 
   -- https://www.w3.org/TR/webauthn-2/#attestedcredentialdata
-  (bytes, mattestedCredentialData) <-
-    if Bits.testBit bitFlags 6
-      then fmap Just <$> decodeAttestedCredentialData bytes
-      else pure (bytes, Nothing)
-  -- If bit 6 is set, we always parse the attested credential data, which
-  -- should only be included if t ~ Create (and its main constructor is indeed constrained to that)
-  -- With this line we actually check that it's only included for t ~ Create,
-  -- and that it's not included for t ~ Get
-  attestedCredentialData <- expectedAttestedClientData mattestedCredentialData
+  (bytes, attestedCredentialData) <- case (sing @t, Bits.testBit bitFlags 6) of
+    -- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature),
+    -- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
+    -- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
+    (SCreate, True) -> decodeAttestedCredentialData bytes
+    (SCreate, False) -> Left DecodingErrorExpectedAttestedCredentialData
+    -- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature),
+    -- the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the
+    -- `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
+    (SGet, False) -> pure (bytes, HS.NoAttestedCredentialData)
+    (SGet, True) -> Left DecodingErrorUnexpectedAttestedCredentialData
 
   -- https://www.w3.org/TR/webauthn-2/#authdataextensions
   (bytes, extensions) <-
@@ -498,27 +513,6 @@ decodeAuthenticatorData rawData = do
   if LBS.null bytes
     then pure HS.AuthenticatorData {..}
     else Left $ DecodingErrorNotAllInputUsed bytes
-
--- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature),
--- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
--- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
--- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature),
--- the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the
--- `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
-class ExpectedAttestedClientData (t :: HS.WebauthnType) where
-  expectedAttestedClientData ::
-    Maybe (HS.AttestedCredentialData 'HS.Create) ->
-    Either DecodingError (HS.AttestedCredentialData t)
-
--- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature), the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
-instance ExpectedAttestedClientData 'HS.Create where
-  expectedAttestedClientData Nothing = Left DecodingErrorExpectedAttestedCredentialData
-  expectedAttestedClientData (Just credentialData) = pure credentialData
-
--- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature), the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
-instance ExpectedAttestedClientData 'HS.Get where
-  expectedAttestedClientData Nothing = pure HS.NoAttestedCredentialData
-  expectedAttestedClientData (Just credentialData) = Left $ DecodingErrorUnexpectedAttestedCredentialData credentialData
 
 decodeAttestedCredentialData :: PartialBinaryDecoder (HS.AttestedCredentialData 'HS.Create)
 decodeAttestedCredentialData bytes = do
@@ -548,19 +542,6 @@ decodeExtensions bytes = do
   -- TODO
   (bytes, _extensions :: HashMap Text CBOR.Term) <- runCBOR bytes
   pure (bytes, HS.AuthenticatorExtensionOutputs {})
-
-data AttestationStatementFormat a ed ev = (Exception ed, Exception ev) =>
-  AttestationStatementFormat
-  { attestationStatementFormatIdentifier :: Text,
-    attestationStatementFormatDecode :: HashMap Text CBOR.Term -> Either ed a,
-    attestationStatementFormatValidate ::
-      a ->
-      HS.AuthenticatorData 'HS.Create ->
-      HS.ClientDataHash ->
-      Either ev HS.AttestationType
-  }
-
-data SomeAttestationStatementFormat = forall a ed ev. SomeAttestationStatementFormat (AttestationStatementFormat a ed ev)
 
 -- ** Utils
 

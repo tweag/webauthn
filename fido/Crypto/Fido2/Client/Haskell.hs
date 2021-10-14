@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 
 -- |
 -- This module contains the same top-level definitions as 'Crypto.Fido2.Client.JavaScript', but with the types containing a more Haskell-friendly structure
@@ -38,7 +38,6 @@ module Crypto.Fido2.Client.Haskell
     ClientDataHash (..),
     AttestationObject (..),
     AuthenticationExtensionsClientOutputs (..),
-    WebauthnType (..),
     AssertionSignature (..),
     AuthenticatorData (..),
     RpIdHash (..),
@@ -47,10 +46,12 @@ module Crypto.Fido2.Client.Haskell
     AuthenticatorDataFlags (..),
     AuthenticatorExtensionOutputs (..),
     AttestationType (..),
+    module Crypto.Fido2.Client.WebauthnType,
   )
 where
 
 import Control.Exception (SomeException)
+import Crypto.Fido2.Client.WebauthnType (WebauthnType (Create, Get))
 import Crypto.Fido2.PublicKey (PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
@@ -503,16 +504,6 @@ data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
   }
   deriving (Eq, Show)
 
--- | The type of Webauthn relying party operation that is being executed
--- Used by the [type](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-type)
--- member of the client data
-data WebauthnType
-  = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
-    Create
-  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
-    Get
-  deriving (Eq, Show)
-
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- The 'PublicKeyCredential' interface contains the attributes that are returned to the caller when a new credential is created, or a new assertion is requested.
 data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
@@ -564,7 +555,7 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- passed to the authenticator by the client in order to generate this credential.
       -- The exact JSON serialization MUST be preserved, as the
       -- [hash of the serialized client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data) has been computed over it.
-      attestationClientData :: CollectedClientData,
+      attestationClientData :: CollectedClientData 'Create,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
       -- This attribute contains an [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object),
       -- which is opaque to, and cryptographically protected against tampering by, the client.
@@ -612,7 +603,7 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- passed to the authenticator by the client in order to generate this credential.
       -- The exact JSON serialization MUST be preserved, as the
       -- [hash of the serialized client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data) has been computed over it.
-      assertionClientData :: CollectedClientData,
+      assertionClientData :: CollectedClientData 'Get,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata)
       -- This attribute contains the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
       -- returned by the authenticator. See [§ 6.1 Authenticator Data](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data).
@@ -743,9 +734,8 @@ data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutpu
 -- The client data represents the contextual bindings of both the
 -- [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)
 -- and the [client](https://www.w3.org/TR/webauthn-2/#client).
-data CollectedClientData = CollectedClientData
-  { typ :: WebauthnType,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
+data CollectedClientData (t :: WebauthnType) = CollectedClientData
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
     -- This member contains the challenge provided by the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
     -- See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges) security consideration.
     challenge :: Challenge,
