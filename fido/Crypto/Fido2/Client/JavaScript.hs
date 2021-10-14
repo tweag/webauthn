@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- |
 -- This module models direct representations of JavaScript objects interacting with the
@@ -213,13 +214,27 @@ data PublicKeyCredential response = PublicKeyCredential
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
     clientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
+  deriving (Eq, Show, Generic)
+
+deriving via
+  JSONEncoding (PublicKeyCredential response)
+  instance
+    Aeson.FromJSON response =>
+    Aeson.FromJSON (PublicKeyCredential response)
+
+deriving via
+  JSONEncoding (PublicKeyCredential response)
+  instance
+    Aeson.ToJSON response =>
+    Aeson.ToJSON (PublicKeyCredential response)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- TODO: Implement a way to specify extensions, or implement them here directly
 data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
   {
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticationExtensionsClientOutputs
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
 data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
@@ -228,6 +243,8 @@ data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
     attestationObject :: ArrayBuffer
   }
+  deriving (Eq, Show, Generic)
+  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorAttestationResponse
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorassertionresponse)
 data AuthenticatorAssertionResponse = AuthenticatorAssertionResponse
@@ -240,3 +257,5 @@ data AuthenticatorAssertionResponse = AuthenticatorAssertionResponse
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-userhandle)
     userHandle :: Maybe ArrayBuffer
   }
+  deriving (Eq, Show, Generic)
+  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorAssertionResponse

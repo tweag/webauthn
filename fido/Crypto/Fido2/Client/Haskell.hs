@@ -46,6 +46,7 @@ module Crypto.Fido2.Client.Haskell
     AuthenticatorDataFlags (..),
     AuthenticatorExtensionOutputs (..),
     AttestationType (..),
+    NonEmptyCertificateChain,
     module Crypto.Fido2.Client.WebauthnType,
   )
 where
@@ -742,7 +743,7 @@ data CollectedClientData (t :: WebauthnType) = CollectedClientData
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-origin)
     -- This member contains the fully qualified [origin](https://html.spec.whatwg.org/multipage/origin.html#concept-origin)
     -- of the requester, as provided to the authenticator by the client, in the syntax
-    -- defined by [\[RFC6454\]](https://www.w3.org/TR/webauthn-2/#biblio-rfc6454).
+    -- defined by [RFC6454](https://www.w3.org/TR/webauthn-2/#biblio-rfc6454).
     origin :: Origin,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-crossorigin)
     -- This member contains the inverse of the `sameOriginWithAncestors` argument value
@@ -796,7 +797,7 @@ type NonEmptyCertificateChain = NonEmpty X509.SignedCertificate
 -- and their underlying trust models:
 data AttestationType
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#basic-attestation)
-    -- In the case of basic attestation [\[UAFProtocol\]](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
+    -- In the case of basic attestation [UAFProtocol](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
     -- the authenticator’s [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair)
     -- is specific to an authenticator "model", i.e., a "batch" of authenticators.
     -- Thus, authenticators of the same, or similar, model often share the same
@@ -806,7 +807,7 @@ data AttestationType
     AttestationTypeBasic NonEmptyCertificateChain
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#self-attestation)
     -- In the case of [self attestation](https://www.w3.org/TR/webauthn-2/#self-attestation),
-    -- also known as surrogate basic attestation [\[UAFProtocol\]](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
+    -- also known as surrogate basic attestation [UAFProtocol](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
     -- the Authenticator does not have any specific [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
     -- Instead it uses the [credential private key](https://www.w3.org/TR/webauthn-2/#credential-private-key)
     -- to create the [attestation signature](https://www.w3.org/TR/webauthn-2/#attestation-signature).
@@ -819,7 +820,7 @@ data AttestationType
     -- is based on a Trusted Platform Module (TPM) and holds an authenticator-specific
     -- "endorsement key" (EK). This key is used to securely communicate with a
     -- trusted third party, the [Attestation CA](https://www.w3.org/TR/webauthn-2/#attestation-ca)
-    -- [\[TCG-CMCProfile-AIKCertEnroll\]](https://www.w3.org/TR/webauthn-2/#biblio-tcg-cmcprofile-aikcertenroll)
+    -- [TCG-CMCProfile-AIKCertEnroll](https://www.w3.org/TR/webauthn-2/#biblio-tcg-cmcprofile-aikcertenroll)
     -- (formerly known as a "Privacy CA"). The [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
     -- can generate multiple attestation identity key pairs (AIK) and requests an
     -- [Attestation CA](https://www.w3.org/TR/webauthn-2/#attestation-ca) to
