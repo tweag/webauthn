@@ -30,11 +30,13 @@ module Crypto.Fido2.Client.JavaScript
   ( -- * Top-level types
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),
+    CreatedPublicKeyCredential,
+    RequestedPublicKeyCredential,
+
+    -- * Nested types
     PublicKeyCredential (..),
     AuthenticatorAttestationResponse (..),
     AuthenticatorAssertionResponse (..),
-
-    -- * Nested types
     PublicKeyCredentialRpEntity (..),
     PublicKeyCredentialUserEntity (..),
     PublicKeyCredentialParameters (..),
@@ -228,6 +230,10 @@ deriving via
   instance
     Aeson.ToJSON response =>
     Aeson.ToJSON (PublicKeyCredential response)
+
+type CreatedPublicKeyCredential = PublicKeyCredential AuthenticatorAttestationResponse
+
+type RequestedPublicKeyCredential = PublicKeyCredential AuthenticatorAssertionResponse
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- TODO: Implement a way to specify extensions, or implement them here directly
