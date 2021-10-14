@@ -120,11 +120,11 @@ instance Convert HS.AttestationConveyancePreference where
 instance Convert HS.AuthenticationExtensionsClientInputs where
   type JS HS.AuthenticationExtensionsClientInputs = JS.AuthenticationExtensionsClientInputs
 
-instance Convert HS.PublicKeyCredentialCreationOptions where
-  type JS HS.PublicKeyCredentialCreationOptions = JS.PublicKeyCredentialCreationOptions
+instance Convert (HS.PublicKeyCredentialOptions 'HS.Create) where
+  type JS (HS.PublicKeyCredentialOptions 'HS.Create) = JS.PublicKeyCredentialCreationOptions
 
-instance Convert HS.PublicKeyCredentialRequestOptions where
-  type JS HS.PublicKeyCredentialRequestOptions = JS.PublicKeyCredentialRequestOptions
+instance Convert (HS.PublicKeyCredentialOptions 'HS.Get) where
+  type JS (HS.PublicKeyCredentialOptions 'HS.Get) = JS.PublicKeyCredentialRequestOptions
 
 instance Convert (HS.PublicKeyCredential 'HS.Create) where
   type JS (HS.PublicKeyCredential 'HS.Create) = JS.PublicKeyCredential JS.AuthenticatorAttestationResponse
@@ -224,29 +224,29 @@ instance Encode HS.AuthenticatorSelectionCriteria where
         userVerification = Just $ encode userVerification
       }
 
-instance Encode HS.PublicKeyCredentialCreationOptions where
+instance Encode (HS.PublicKeyCredentialOptions 'HS.Create) where
   encode HS.PublicKeyCredentialCreationOptions {..} =
     JS.PublicKeyCredentialCreationOptions
-      { rp = encode rp,
-        user = encode user,
-        challenge = encode challenge,
-        pubKeyCredParams = encode pubKeyCredParams,
-        timeout = encode timeout,
-        excludeCredentials = Just $ encode excludeCredentials,
-        authenticatorSelection = encode authenticatorSelection,
-        attestation = Just $ encode attestation,
-        extensions = encode extensions
+      { rp = encode pkcCreationRp,
+        user = encode pkcCreationUser,
+        challenge = encode pkcCreationChallenge,
+        pubKeyCredParams = encode pkcCreationPubKeyCredParams,
+        timeout = encode pkcCreationTimeout,
+        excludeCredentials = Just $ encode pkcCreationExcludeCredentials,
+        authenticatorSelection = encode pkcCreationAuthenticatorSelection,
+        attestation = Just $ encode pkcCreationAttestation,
+        extensions = encode pkcCreationExtensions
       }
 
-instance Encode HS.PublicKeyCredentialRequestOptions where
+instance Encode (HS.PublicKeyCredentialOptions 'HS.Get) where
   encode HS.PublicKeyCredentialRequestOptions {..} =
     JS.PublicKeyCredentialRequestOptions
-      { challenge = encode challenge,
-        timeout = encode timeout,
-        rpId = encode rpId,
-        allowCredentials = Just $ encode allowCredentials,
-        userVerification = Just $ encode userVerification,
-        extensions = Just $ encode extensions
+      { challenge = encode pkcRequestChallenge,
+        timeout = encode pkcRequestTimeout,
+        rpId = encode pkcRequestRpId,
+        allowCredentials = Just $ encode pkcRequestAllowCredentials,
+        userVerification = Just $ encode pkcRequestUserVerification,
+        extensions = Just $ encode pkcRequestExtensions
       }
 
 instance Encode HS.AuthenticationExtensionsClientInputs where

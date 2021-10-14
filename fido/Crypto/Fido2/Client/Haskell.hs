@@ -1,15 +1,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- |
 -- This module contains the same top-level definitions as 'Crypto.Fido2.Client.JavaScript', but with the types containing a more Haskell-friendly structure
 module Crypto.Fido2.Client.Haskell
   ( -- * Top-level types
-    PublicKeyCredentialCreationOptions (..),
-    PublicKeyCredentialRequestOptions (..),
+    PublicKeyCredentialOptions (..),
     PublicKeyCredential (..),
-    AuthenticatorResponse (..),
 
     -- * Nested types
     RpId (..),
@@ -47,6 +46,7 @@ module Crypto.Fido2.Client.Haskell
     AuthenticatorExtensionOutputs (..),
     AttestationType (..),
     NonEmptyCertificateChain,
+    AuthenticatorResponse (..),
     module Crypto.Fido2.Client.WebauthnType,
   )
 where
@@ -417,93 +417,97 @@ data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
 newtype Timeout = Timeout {unTimeout :: Word32}
   deriving (Eq, Show)
 
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
-data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
-  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-rp)
-    -- This member contains data about the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
-    -- responsible for the request.
-    rp :: PublicKeyCredentialRpEntity,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-user)
-    -- This member contains data about the user account for which the
-    -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) is requesting attestation.
-    user :: PublicKeyCredentialUserEntity,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-challenge)
-    -- This member contains a challenge intended to be used for generating the newly created
-    -- credential’s attestation object. See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
-    -- security consideration.
-    challenge :: Challenge,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-pubkeycredparams)
-    -- This member contains information about the desired properties of the credential to be created.
-    -- The sequence is ordered from most preferred to least preferred.
-    -- The [client](https://www.w3.org/TR/webauthn-2/#client) makes a best-effort
-    -- to create the most preferred credential that it can.
-    pubKeyCredParams :: [PublicKeyCredentialParameters],
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
-    -- This member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
-    -- This is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
-    timeout :: Maybe Timeout,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-excludecredentials)
-    -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
-    -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
-    -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
-    -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
-    excludeCredentials :: [PublicKeyCredentialDescriptor],
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
-    -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
-    -- that wish to select the appropriate authenticators to participate in the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
-    authenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
-    -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
-    -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
-    attestation :: AttestationConveyancePreference,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
-    -- This member contains additional parameters requesting additional processing by the client and authenticator.
-    -- For example, the caller may request that only authenticators with certain capabilities be used to create the credential,
-    -- or that particular information be returned in the [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object).
-    -- Some extensions are defined in [§ 9 WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#sctn-extensions);
-    -- consult the IANA "WebAuthn Extension Identifiers" registry [IANA-WebAuthn-Registries](https://www.w3.org/TR/webauthn-2/#biblio-iana-webauthn-registries)
-    -- established by [RFC8809](https://www.w3.org/TR/webauthn-2/#biblio-rfc8809) for an up-to-date
-    -- list of registered [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
-    extensions :: Maybe AuthenticationExtensionsClientInputs
-  }
-  deriving (Eq, Show)
+data PublicKeyCredentialOptions (t :: WebauthnType) where
+  -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
+  PublicKeyCredentialCreationOptions ::
+    { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-rp)
+      -- This member contains data about the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
+      -- responsible for the request.
+      pkcCreationRp :: PublicKeyCredentialRpEntity,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-user)
+      -- This member contains data about the user account for which the
+      -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) is requesting attestation.
+      pkcCreationUser :: PublicKeyCredentialUserEntity,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-challenge)
+      -- This member contains a challenge intended to be used for generating the newly created
+      -- credential’s attestation object. See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
+      -- security consideration.
+      pkcCreationChallenge :: Challenge,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-pubkeycredparams)
+      -- This member contains information about the desired properties of the credential to be created.
+      -- The sequence is ordered from most preferred to least preferred.
+      -- The [client](https://www.w3.org/TR/webauthn-2/#client) makes a best-effort
+      -- to create the most preferred credential that it can.
+      pkcCreationPubKeyCredParams :: [PublicKeyCredentialParameters],
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
+      -- This member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
+      -- This is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
+      pkcCreationTimeout :: Maybe Timeout,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-excludecredentials)
+      -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
+      -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
+      -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
+      -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
+      pkcCreationExcludeCredentials :: [PublicKeyCredentialDescriptor],
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
+      -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
+      -- that wish to select the appropriate authenticators to participate in the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
+      pkcCreationAuthenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
+      -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
+      -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
+      pkcCreationAttestation :: AttestationConveyancePreference,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
+      -- This member contains additional parameters requesting additional processing by the client and authenticator.
+      -- For example, the caller may request that only authenticators with certain capabilities be used to create the credential,
+      -- or that particular information be returned in the [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object).
+      -- Some extensions are defined in [§ 9 WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#sctn-extensions);
+      -- consult the IANA "WebAuthn Extension Identifiers" registry [IANA-WebAuthn-Registries](https://www.w3.org/TR/webauthn-2/#biblio-iana-webauthn-registries)
+      -- established by [RFC8809](https://www.w3.org/TR/webauthn-2/#biblio-rfc8809) for an up-to-date
+      -- list of registered [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
+      pkcCreationExtensions :: Maybe AuthenticationExtensionsClientInputs
+    } ->
+    PublicKeyCredentialOptions 'Create
+  -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
+  -- The 'PublicKeyCredentialRequestOptions' dictionary supplies `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`
+  -- with the data it needs to generate an assertion.
+  PublicKeyCredentialRequestOptions ::
+    { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-challenge)
+      -- This member represents a challenge that the selected [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) signs,
+      -- along with other data, when producing an [authentication assertion](https://www.w3.org/TR/webauthn-2/#authentication-assertion).
+      -- See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges) security consideration.
+      pkcRequestChallenge :: Challenge,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-timeout)
+      -- This OPTIONAL member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
+      -- The value is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
+      pkcRequestTimeout :: Maybe Timeout,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid)
+      -- This OPTIONAL member specifies the [relying party identifier](https://www.w3.org/TR/webauthn-2/#relying-party-identifier) claimed by the caller.
+      -- If omitted, its value will be the `[CredentialsContainer](https://w3c.github.io/webappsec-credential-management/#credentialscontainer)`
+      -- object’s [relevant settings object](https://html.spec.whatwg.org/multipage/webappapis.html#relevant-settings-object)'s
+      -- [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s
+      -- [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
+      pkcRequestRpId :: Maybe RpId,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-allowcredentials)
+      -- This OPTIONAL member contains a list of 'PublicKeyCredentialDescriptor'
+      -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
+      -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
+      pkcRequestAllowCredentials :: [PublicKeyCredentialDescriptor],
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
+      -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
+      -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
+      -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
+      pkcRequestUserVerification :: UserVerificationRequirement,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
+      -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
+      -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
+      pkcRequestExtensions :: AuthenticationExtensionsClientInputs
+    } ->
+    PublicKeyCredentialOptions 'Get
 
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
--- The 'PublicKeyCredentialRequestOptions' dictionary supplies `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`
--- with the data it needs to generate an assertion.
-data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
-  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-challenge)
-    -- This member represents a challenge that the selected [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) signs,
-    -- along with other data, when producing an [authentication assertion](https://www.w3.org/TR/webauthn-2/#authentication-assertion).
-    -- See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges) security consideration.
-    challenge :: Challenge,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-timeout)
-    -- This OPTIONAL member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
-    -- The value is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
-    timeout :: Maybe Timeout,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid)
-    -- This OPTIONAL member specifies the [relying party identifier](https://www.w3.org/TR/webauthn-2/#relying-party-identifier) claimed by the caller.
-    -- If omitted, its value will be the `[CredentialsContainer](https://w3c.github.io/webappsec-credential-management/#credentialscontainer)`
-    -- object’s [relevant settings object](https://html.spec.whatwg.org/multipage/webappapis.html#relevant-settings-object)'s
-    -- [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s
-    -- [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
-    rpId :: Maybe RpId,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-allowcredentials)
-    -- This OPTIONAL member contains a list of 'PublicKeyCredentialDescriptor'
-    -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
-    -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
-    allowCredentials :: [PublicKeyCredentialDescriptor],
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
-    -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
-    -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
-    -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
-    userVerification :: UserVerificationRequirement,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
-    -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
-    -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
-    extensions :: AuthenticationExtensionsClientInputs
-  }
-  deriving (Eq, Show)
+deriving instance Eq (PublicKeyCredentialOptions t)
+
+deriving instance Show (PublicKeyCredentialOptions t)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- The 'PublicKeyCredential' interface contains the attributes that are returned to the caller when a new credential is created, or a new assertion is requested.
