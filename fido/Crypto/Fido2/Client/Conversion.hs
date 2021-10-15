@@ -16,9 +16,10 @@ module Crypto.Fido2.Client.Conversion
     DecodingError (..),
     CreatedDecodingError (..),
     RequestedDecodingError (..),
-    AttestationStatementFormat (..),
+    SupportedFormats,
+    mkSupportedFormats,
+    DecodingAttestationStatementFormat (..),
     SomeAttestationStatementFormat (..),
-    SupportedAttestationStatementFormats,
   )
 where
 
@@ -43,6 +44,9 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Coerce (Coercible, coerce)
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
+import Data.Kind (Type)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -83,7 +87,7 @@ data CreatedDecodingError
 newtype RequestedDecodingError = RequestedDecodingErrorCommon DecodingError
 
 decodeCreatedPublicKeyCredential ::
-  SupportedAttestationStatementFormats ->
+  SupportedFormats ->
   JS.CreatedPublicKeyCredential ->
   Either CreatedDecodingError (HS.PublicKeyCredential 'HS.Create)
 decodeCreatedPublicKeyCredential = decodeCreated
@@ -92,24 +96,6 @@ decodeRequestedPublicKeyCredential ::
   JS.RequestedPublicKeyCredential ->
   Either RequestedDecodingError (HS.PublicKeyCredential 'HS.Get)
 decodeRequestedPublicKeyCredential = decodeRequested
-
-data AttestationStatementFormat a ed ev = (Exception ed, Exception ev) =>
-  AttestationStatementFormat
-  { attestationStatementFormatIdentifier ::
-      Text,
-    attestationStatementFormatDecode ::
-      HashMap Text CBOR.Term ->
-      Either ed a,
-    attestationStatementFormatValidate ::
-      a ->
-      HS.AuthenticatorData 'HS.Create ->
-      HS.ClientDataHash ->
-      Either ev HS.AttestationType
-  }
-
-data SomeAttestationStatementFormat = forall a ed ev. SomeAttestationStatementFormat (AttestationStatementFormat a ed ev)
-
-type SupportedAttestationStatementFormats = HashMap Text SomeAttestationStatementFormat
 
 -- | @'Convert' hs@ indicates that the Haskell-specific type @hs@ has a more
 -- general JavaScript-specific type associated with it, which can be accessed with 'JS'.
@@ -373,7 +359,7 @@ class DecodeRequested hs where
 -- | @'Decode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- decoded from the more generic JavaScript type @'JS' hs@ with the 'decode' function.
 class DecodeCreated hs where
-  decodeCreated :: SupportedAttestationStatementFormats -> JS hs -> Either CreatedDecodingError hs
+  decodeCreated :: SupportedFormats -> JS hs -> Either CreatedDecodingError hs
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -486,25 +472,52 @@ instance DecodeRequested (HS.PublicKeyCredential 'HS.Get) where
 -- much nastiness.
 type PartialBinaryDecoder a = LBS.ByteString -> Either DecodingError (LBS.ByteString, a)
 
+mkSupportedFormats :: [SomeAttestationStatementFormat] -> SupportedFormats
+mkSupportedFormats formats =
+  SupportedFormats (HashMap.fromList (map withIdentifier formats))
+  where
+    withIdentifier someFormat@(SomeAttestationStatementFormat format) =
+      (HS.attestationStatementFormatIdentifier format, someFormat)
+
+class
+  ( HS.AttestationStatementFormat a,
+    Exception (AttStmtDecodingError a)
+  ) =>
+  DecodingAttestationStatementFormat a
+  where
+  type AttStmtDecodingError a :: Type
+
+  attestationStatementFormatDecode ::
+    a ->
+    HashMap Text CBOR.Term ->
+    Either (AttStmtDecodingError a) (HS.AttStmt a)
+
+data SomeAttestationStatementFormat
+  = forall a.
+    DecodingAttestationStatementFormat a =>
+    SomeAttestationStatementFormat a
+
+newtype SupportedFormats = SupportedFormats (HashMap Text SomeAttestationStatementFormat)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
-decodeAttestationObject :: HashMap Text SomeAttestationStatementFormat -> LBS.ByteString -> Either CreatedDecodingError HS.AttestationObject
-decodeAttestationObject formats bytes = do
+decodeAttestationObject :: SupportedFormats -> LBS.ByteString -> Either CreatedDecodingError HS.AttestationObject
+decodeAttestationObject (SupportedFormats formats) bytes = do
   map :: HashMap Text Term <- first CreatedDecodingErrorCBOR $ Serialise.deserialiseOrFail bytes
   case (map !? "authData", map !? "fmt", map !? "attStmt") of
     (Just (TBytes authDataBytes), Just (TString fmt), Just (TMap attStmtPairs)) -> do
       aoAuthData <- first CreatedDecodingErrorCommon $ decodeAuthenticatorData authDataBytes
 
-      aoValidate <- case formats !? fmt of
+      case formats !? fmt of
         Nothing -> Left $ CreatedDecodingErrorUnknownAttestationStatementFormat fmt
-        Just (SomeAttestationStatementFormat AttestationStatementFormat {..}) -> do
+        Just (SomeAttestationStatementFormat aoFmt) -> do
           attStmtMap <-
             HashMap.fromList <$> forM attStmtPairs \case
               (TString text, term) -> pure (text, term)
               (nonString, _) -> Left $ CreatedDecodingErrorUnexpectedAttestationStatementKey nonString
-          attStmt <- first (CreatedDecodingErrorAttestationStatement . SomeException) $ attestationStatementFormatDecode attStmtMap
-          pure $ first SomeException . attestationStatementFormatValidate attStmt aoAuthData
-
-      pure HS.AttestationObject {..}
+          aoAttStmt <-
+            first (CreatedDecodingErrorAttestationStatement . SomeException) $
+              attestationStatementFormatDecode aoFmt attStmtMap
+          pure $ HS.AttestationObject {..}
     terms -> Left $ CreatedDecodingErrorUnexpectedAttestationObjectValues terms
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)

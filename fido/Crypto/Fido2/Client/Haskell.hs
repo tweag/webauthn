@@ -1,7 +1,9 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- |
 -- This module contains the same top-level definitions as 'Crypto.Fido2.Client.JavaScript', but with the types containing a more Haskell-friendly structure
@@ -47,21 +49,24 @@ module Crypto.Fido2.Client.Haskell
     AttestationType (..),
     NonEmptyCertificateChain,
     AuthenticatorResponse (..),
+    AttestationStatementFormat (..),
     module Crypto.Fido2.Client.WebauthnType,
   )
 where
 
-import Control.Exception (SomeException)
+import Control.Exception (Exception)
 import Crypto.Fido2.Client.WebauthnType (WebauthnType (Create, Get))
 import Crypto.Fido2.PublicKey (PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import qualified Data.ByteString as BS
+import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
 import Data.Text (Text)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
+import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rp-id)
 -- A [valid domain string](https://url.spec.whatwg.org/#valid-domain-string)
@@ -538,6 +543,10 @@ data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
     pkcClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
 
+deriving instance Eq (PublicKeyCredential t)
+
+deriving instance Show (PublicKeyCredential t)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticatorresponse)
 -- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) respond to
 -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) requests by
@@ -626,6 +635,10 @@ data AuthenticatorResponse (t :: WebauthnType) where
     } ->
     AuthenticatorResponse 'Get
 
+deriving instance Eq (AuthenticatorResponse t)
+
+deriving instance Show (AuthenticatorResponse t)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#assertion-signature)
 -- An assertion signature is produced when the
 -- [authenticatorGetAssertion](https://www.w3.org/TR/webauthn-2/#authenticatorgetassertion)
@@ -645,6 +658,7 @@ data AuthenticatorResponse (t :: WebauthnType) where
 -- The [assertion signature](https://www.w3.org/TR/webauthn-2/#assertion-signature)
 -- format is illustrated in [Figure 4, below](https://www.w3.org/TR/webauthn-2/#fig-signature).
 newtype AssertionSignature = AssertionSignature {unAssertionSignature :: BS.ByteString}
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data)
 -- The authenticator data structure encodes contextual bindings made by the
@@ -679,6 +693,7 @@ data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
     -- | Raw encoded data for verification purposes
     adRawData :: BS.ByteString
   }
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-extension-output)
 data AuthenticatorExtensionOutputs = AuthenticatorExtensionOutputs
@@ -691,6 +706,7 @@ data AuthenticatorExtensionOutputs = AuthenticatorExtensionOutputs
 -- [credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) is
 -- [scoped](https://www.w3.org/TR/webauthn-2/#scope) to.
 newtype RpIdHash = RpIdHash {unRpIdHash :: Digest SHA256}
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data)
 -- Attested credential data is a variable-length byte array added to the
@@ -710,6 +726,10 @@ data AttestedCredentialData (t :: WebauthnType) where
   NoAttestedCredentialData ::
     AttestedCredentialData 'Get
 
+deriving instance Eq (AttestedCredentialData t)
+
+deriving instance Show (AttestedCredentialData t)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
 newtype AAGUID = AAGUID {unAAGUID :: BS.ByteString}
   deriving (Eq, Show)
@@ -725,6 +745,7 @@ data AuthenticatorDataFlags = AuthenticatorDataFlags
     -- the user is said to be "[verified](https://www.w3.org/TR/webauthn-2/#concept-user-verified)".
     adfUserVerified :: Bool
   }
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- This is a dictionary containing the [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output)
@@ -771,7 +792,9 @@ newtype Origin = Origin {unOrigin :: Text}
   deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
-data AttestationObject = AttestationObject
+data AttestationObject = forall a.
+  AttestationStatementFormat a =>
+  AttestationObject
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     -- The authenticator data structure encodes contextual bindings made by the
     -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator).
@@ -786,12 +809,45 @@ data AttestationObject = AttestationObject
     -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
     aoAuthData :: AuthenticatorData 'Create,
-    -- | Verifies the [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement)
-    -- using the [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)'s
-    -- verification procedure. It returns an [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types),
-    -- which may include an X.509 certificate chain to further verify if relevant
-    aoValidate :: ClientDataHash -> Either SomeException AttestationType
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)
+    aoFmt :: a,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+    aoAttStmt :: AttStmt a
   }
+
+instance Eq AttestationObject where
+  AttestationObject {aoAuthData = lAuthData, aoFmt = lFmt, aoAttStmt = lAttStmt}
+    == AttestationObject {aoAuthData = rAuthData, aoFmt = rFmt, aoAttStmt = rAttStmt} =
+      lAuthData == rAuthData
+        -- We need to use some simple reflection in order to be able to compare the attestation statements
+        && case eqTypeRep (typeOf lFmt) (typeOf rFmt) of
+          Just HRefl -> lAttStmt == rAttStmt
+          Nothing -> False
+
+deriving instance Show AttestationObject
+
+class
+  ( Eq (AttStmt a),
+    Show (AttStmt a),
+    Exception (AttStmtValidationError a),
+    Typeable a,
+    Show a
+  ) =>
+  AttestationStatementFormat a
+  where
+  type AttStmt a :: Type
+  type AttStmtValidationError a :: Type
+
+  attestationStatementFormatIdentifier ::
+    a ->
+    Text
+
+  attestationStatementFormatValidate ::
+    a ->
+    AttStmt a ->
+    AuthenticatorData 'Create ->
+    ClientDataHash ->
+    Either (AttStmtValidationError a) AttestationType
 
 type NonEmptyCertificateChain = NonEmpty X509.SignedCertificate
 
