@@ -43,8 +43,6 @@ module Crypto.Fido2.Client.JavaScript
     COSEAlgorithmIdentifier,
     PublicKeyCredentialDescriptor (..),
     AuthenticatorSelectionCriteria (..),
-    AuthenticationExtensionsClientInputs (..),
-    AuthenticationExtensionsClientOutputs (..),
 
     -- * JavaScript-builtin types
     DOMString,
@@ -58,6 +56,7 @@ import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64
 import Data.Int (Int32)
+import Data.Map (Map)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Data.Word (Word32)
@@ -116,7 +115,7 @@ data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
     attestation :: Maybe DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
-    extensions :: Maybe AuthenticationExtensionsClientInputs
+    extensions :: Maybe (Map Text Aeson.Value)
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialCreationOptions
@@ -182,14 +181,6 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorSelectionCriteria
 
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
--- TODO: Implement a way to specify extensions, or implement them here directly
-data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
-  {
-  }
-  deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticationExtensionsClientInputs
-
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
 data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-challenge)
@@ -203,7 +194,7 @@ data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
     userVerification :: Maybe DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
-    extensions :: Maybe AuthenticationExtensionsClientInputs
+    extensions :: Maybe (Map Text Aeson.Value)
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialRequestOptions
@@ -215,7 +206,7 @@ data PublicKeyCredential response = PublicKeyCredential
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-response)
     response :: response,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
-    clientExtensionResults :: AuthenticationExtensionsClientOutputs
+    clientExtensionResults :: Map Text Aeson.Value
   }
   deriving (Eq, Show, Generic)
 
@@ -234,14 +225,6 @@ deriving via
 type CreatedPublicKeyCredential = PublicKeyCredential AuthenticatorAttestationResponse
 
 type RequestedPublicKeyCredential = PublicKeyCredential AuthenticatorAssertionResponse
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
--- TODO: Implement a way to specify extensions, or implement them here directly
-data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
-  {
-  }
-  deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticationExtensionsClientOutputs
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
 data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse

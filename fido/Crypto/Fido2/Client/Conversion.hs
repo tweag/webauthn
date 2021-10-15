@@ -183,7 +183,7 @@ instance Convert HS.AttestationConveyancePreference where
   type JS HS.AttestationConveyancePreference = JS.DOMString
 
 instance Convert HS.AuthenticationExtensionsClientInputs where
-  type JS HS.AuthenticationExtensionsClientInputs = JS.AuthenticationExtensionsClientInputs
+  type JS HS.AuthenticationExtensionsClientInputs = Map Text Aeson.Value
 
 instance Convert (HS.PublicKeyCredentialOptions 'HS.Create) where
   type JS (HS.PublicKeyCredentialOptions 'HS.Create) = JS.PublicKeyCredentialCreationOptions
@@ -204,7 +204,7 @@ instance Convert (HS.AuthenticatorResponse 'HS.Get) where
   type JS (HS.AuthenticatorResponse 'HS.Get) = JS.AuthenticatorAssertionResponse
 
 instance Convert HS.AuthenticationExtensionsClientOutputs where
-  type JS HS.AuthenticationExtensionsClientOutputs = JS.AuthenticationExtensionsClientOutputs
+  type JS HS.AuthenticationExtensionsClientOutputs = Map Text Aeson.Value
 
 instance Convert (HS.CollectedClientData t) where
   type JS (HS.CollectedClientData t) = JS.ArrayBuffer
@@ -315,8 +315,8 @@ instance Encode (HS.PublicKeyCredentialOptions 'HS.Get) where
       }
 
 instance Encode HS.AuthenticationExtensionsClientInputs where
-  encode HS.AuthenticationExtensionsClientInputs {} =
-    JS.AuthenticationExtensionsClientInputs {}
+  -- TODO: Implement extension support
+  encode HS.AuthenticationExtensionsClientInputs {} = Map.empty
 
 -- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
 instance Encode HS.COSEAlgorithmIdentifier where
@@ -454,8 +454,8 @@ instance Decode (HS.AuthenticatorResponse 'HS.Get) where
     pure $ HS.AuthenticatorAssertionResponse {..}
 
 instance Decode HS.AuthenticationExtensionsClientOutputs where
-  decode JS.AuthenticationExtensionsClientOutputs {} =
-    pure HS.AuthenticationExtensionsClientOutputs {}
+  -- TODO: Implement extension support
+  decode _ = pure HS.AuthenticationExtensionsClientOutputs {}
 
 instance DecodeCreated (HS.PublicKeyCredential 'HS.Create) where
   decodeCreated attestationStatementFormatMap JS.PublicKeyCredential {..} = do
