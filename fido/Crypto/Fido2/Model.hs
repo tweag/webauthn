@@ -838,11 +838,11 @@ class
   type AttStmt a :: Type
   type AttStmtValidationError a :: Type
 
-  attestationStatementFormatIdentifier ::
+  asfIdentifier ::
     a ->
     Text
 
-  attestationStatementFormatValidate ::
+  asfValidate ::
     a ->
     AttStmt a ->
     AuthenticatorData 'Create ->

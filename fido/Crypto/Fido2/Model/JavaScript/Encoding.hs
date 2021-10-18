@@ -5,6 +5,11 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
+-- | This module handles the encoding of structures passed to the
+-- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
+-- and [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
+-- methods while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
+-- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
 module Crypto.Fido2.Model.JavaScript.Encoding
   ( encodePublicKeyCredentialCreationOptions,
     encodePublicKeyCredentialRequestOptions,
@@ -17,22 +22,19 @@ import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Map as Map
 
-encodePublicKeyCredentialCreationOptions ::
-  M.PublicKeyCredentialOptions 'M.Create ->
-  JS.PublicKeyCredentialCreationOptions
-encodePublicKeyCredentialCreationOptions = encode
-
-encodePublicKeyCredentialRequestOptions ::
-  M.PublicKeyCredentialOptions 'M.Get ->
-  JS.PublicKeyCredentialRequestOptions
-encodePublicKeyCredentialRequestOptions = encode
-
 -- | @'Encode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- encoded to the more generic JavaScript type @'JS' hs@ with the 'encode' function.
 class Convert a => Encode a where
   encode :: a -> JS a
   default encode :: Coercible a (JS a) => a -> JS a
   encode = coerce
+
+instance Encode hs => Encode (Maybe hs) where
+  encode Nothing = Nothing
+  encode (Just hs) = Just $ encode hs
+
+instance Encode a => Encode [a] where
+  encode = fmap encode
 
 instance Encode M.RpId
 
@@ -50,12 +52,51 @@ instance Encode M.Timeout
 
 instance Encode M.CredentialId
 
-instance Encode hs => Encode (Maybe hs) where
-  encode Nothing = Nothing
-  encode (Just hs) = Just $ encode hs
+instance Encode M.AuthenticationExtensionsClientInputs where
+  -- TODO: Implement extension support
+  encode M.AuthenticationExtensionsClientInputs {} = Map.empty
 
-instance Encode a => Encode [a] where
-  encode = fmap encode
+-- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
+instance Encode M.COSEAlgorithmIdentifier where
+  encode M.COSEAlgorithmIdentifierES512 = -36
+  encode M.COSEAlgorithmIdentifierES384 = -35
+  encode M.COSEAlgorithmIdentifierEdDSA = -8
+  encode M.COSEAlgorithmIdentifierES256 = -7
+
+-- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
+instance Encode M.PublicKeyCredentialType where
+  encode M.PublicKeyCredentialTypePublicKey = "public-key"
+
+-- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport>
+instance Encode M.AuthenticatorTransport where
+  encode M.AuthenticatorTransportUSB = "usb"
+  encode M.AuthenticatorTransportNFC = "nfc"
+  encode M.AuthenticatorTransportBLE = "ble"
+  encode M.AuthenticatorTransportInternal = "internal"
+
+-- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment>
+instance Encode M.AuthenticatorAttachment where
+  encode M.AuthenticatorAttachmentPlatform = "platform"
+  encode M.AuthenticatorAttachmentCrossPlatform = "cross-platform"
+
+-- | <https://www.w3.org/TR/webauthn-2/#enum-residentKeyRequirement>
+instance Encode M.ResidentKeyRequirement where
+  encode M.ResidentKeyRequirementDiscouraged = "discouraged"
+  encode M.ResidentKeyRequirementPreferred = "preferred"
+  encode M.ResidentKeyRequirementRequired = "required"
+
+-- | <https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement>
+instance Encode M.UserVerificationRequirement where
+  encode M.UserVerificationRequirementRequired = "required"
+  encode M.UserVerificationRequirementPreferred = "preferred"
+  encode M.UserVerificationRequirementDiscouraged = "discouraged"
+
+-- | <https://www.w3.org/TR/webauthn-2/#enum-attestation-convey>
+instance Encode M.AttestationConveyancePreference where
+  encode M.AttestationConveyancePreferenceNone = "none"
+  encode M.AttestationConveyancePreferenceIndirect = "indirect"
+  encode M.AttestationConveyancePreferenceDirect = "direct"
+  encode M.AttestationConveyancePreferenceEnterprise = "enterprise"
 
 instance Encode M.PublicKeyCredentialRpEntity where
   encode M.PublicKeyCredentialRpEntity {..} =
@@ -123,48 +164,20 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
         extensions = Just $ encode pkcogExtensions
       }
 
-instance Encode M.AuthenticationExtensionsClientInputs where
-  -- TODO: Implement extension support
-  encode M.AuthenticationExtensionsClientInputs {} = Map.empty
+-- | Encodes a 'JS.PublicKeyCredentialCreationOptions', corresponding to the
+-- [`PublicKeyCredentialCreationOptions` dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
+-- to be passed to the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
+-- method while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
+encodePublicKeyCredentialCreationOptions ::
+  M.PublicKeyCredentialOptions 'M.Create ->
+  JS.PublicKeyCredentialCreationOptions
+encodePublicKeyCredentialCreationOptions = encode
 
--- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
-instance Encode M.COSEAlgorithmIdentifier where
-  encode M.COSEAlgorithmIdentifierES512 = -36
-  encode M.COSEAlgorithmIdentifierES384 = -35
-  encode M.COSEAlgorithmIdentifierEdDSA = -8
-  encode M.COSEAlgorithmIdentifierES256 = -7
-
--- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
-instance Encode M.PublicKeyCredentialType where
-  encode M.PublicKeyCredentialTypePublicKey = "public-key"
-
--- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport>
-instance Encode M.AuthenticatorTransport where
-  encode M.AuthenticatorTransportUSB = "usb"
-  encode M.AuthenticatorTransportNFC = "nfc"
-  encode M.AuthenticatorTransportBLE = "ble"
-  encode M.AuthenticatorTransportInternal = "internal"
-
--- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment>
-instance Encode M.AuthenticatorAttachment where
-  encode M.AuthenticatorAttachmentPlatform = "platform"
-  encode M.AuthenticatorAttachmentCrossPlatform = "cross-platform"
-
--- | <https://www.w3.org/TR/webauthn-2/#enum-residentKeyRequirement>
-instance Encode M.ResidentKeyRequirement where
-  encode M.ResidentKeyRequirementDiscouraged = "discouraged"
-  encode M.ResidentKeyRequirementPreferred = "preferred"
-  encode M.ResidentKeyRequirementRequired = "required"
-
--- | <https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement>
-instance Encode M.UserVerificationRequirement where
-  encode M.UserVerificationRequirementRequired = "required"
-  encode M.UserVerificationRequirementPreferred = "preferred"
-  encode M.UserVerificationRequirementDiscouraged = "discouraged"
-
--- | <https://www.w3.org/TR/webauthn-2/#enum-attestation-convey>
-instance Encode M.AttestationConveyancePreference where
-  encode M.AttestationConveyancePreferenceNone = "none"
-  encode M.AttestationConveyancePreferenceIndirect = "indirect"
-  encode M.AttestationConveyancePreferenceDirect = "direct"
-  encode M.AttestationConveyancePreferenceEnterprise = "enterprise"
+-- | Encodes a 'JS.PublicKeyCredentialRequestOptions', corresponding to the
+-- [`PublicKeyCredentialRequestOptions` dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
+-- to be passed to the [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
+-- method while [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
+encodePublicKeyCredentialRequestOptions ::
+  M.PublicKeyCredentialOptions 'M.Get ->
+  JS.PublicKeyCredentialRequestOptions
+encodePublicKeyCredentialRequestOptions = encode
