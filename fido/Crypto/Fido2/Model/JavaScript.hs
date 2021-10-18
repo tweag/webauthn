@@ -26,7 +26,7 @@
 -- - @'PublicKeyCredential' response@ and all its subtypes. Responses of the
 --   [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) (in which case @response ~ 'AuthenticatorAttestationResponse'@) and
 --   [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get) (in which case @response ~ 'AuthenticatorAssertionResponse'@ methods.
-module Crypto.Fido2.Client.JavaScript
+module Crypto.Fido2.Model.JavaScript
   ( -- * Top-level types
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),

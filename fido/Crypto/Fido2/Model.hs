@@ -7,7 +7,7 @@
 
 -- |
 -- This module contains the same top-level definitions as 'Crypto.Fido2.Client.JavaScript', but with the types containing a more Haskell-friendly structure
-module Crypto.Fido2.Client.Haskell
+module Crypto.Fido2.Model
   ( -- * Top-level types
     PublicKeyCredentialOptions (..),
     PublicKeyCredential (..),
@@ -50,12 +50,12 @@ module Crypto.Fido2.Client.Haskell
     NonEmptyCertificateChain,
     AuthenticatorResponse (..),
     AttestationStatementFormat (..),
-    module Crypto.Fido2.Client.WebauthnType,
+    module Crypto.Fido2.Model.WebauthnType,
   )
 where
 
 import Control.Exception (Exception)
-import Crypto.Fido2.Client.WebauthnType (WebauthnType (Create, Get))
+import Crypto.Fido2.Model.WebauthnType (WebauthnType (Create, Get))
 import Crypto.Fido2.PublicKey (PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)

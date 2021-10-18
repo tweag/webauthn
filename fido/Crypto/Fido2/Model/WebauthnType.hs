@@ -10,7 +10,7 @@
 -- with corresponding singleton instances 'Sing' and 'SingI', in order to
 -- facilitate interoperability of kind and type between compile time and
 -- runtime.
-module Crypto.Fido2.Client.WebauthnType
+module Crypto.Fido2.Model.WebauthnType
   ( WebauthnType (..),
     SWebauthnType (..),
     module Data.Singletons,
