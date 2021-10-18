@@ -14,12 +14,12 @@ instance M.AttestationStatementFormat None where
   type AttStmt None = ()
   asfIdentifier _ = "none"
 
-instance D.DecodingAttestationStatementFormat None where
+instance D.DecodableAttestationStatementFormat None where
   type AttStmtDecodingError None = Void
   asfDecode _ _ = Right ()
 
 instance V.VerifiableAttestationStatementFormat None where
-  type AttStmtValidationError None = Void
+  type AttStmtVerificationError None = Void
   asfVerify _ _ _ _ = Right M.AttestationTypeNone
 
 asfNone :: D.SomeAttestationStatementFormat

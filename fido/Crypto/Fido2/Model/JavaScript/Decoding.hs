@@ -15,7 +15,7 @@
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
 module Crypto.Fido2.Model.JavaScript.Decoding
   ( -- * Decoding attestation statement formats
-    DecodingAttestationStatementFormat (..),
+    DecodableAttestationStatementFormat (..),
     SomeAttestationStatementFormat (..),
     SupportedAttestationStatementFormats,
     mkSupportedAttestationStatementFormats,
@@ -63,7 +63,7 @@ class
   ( M.AttestationStatementFormat a,
     Exception (AttStmtDecodingError a)
   ) =>
-  DecodingAttestationStatementFormat a
+  DecodableAttestationStatementFormat a
   where
   -- | The type of decoding errors that can occur when decoding this
   -- attestation statement using 'asfDecode'
@@ -82,7 +82,7 @@ class
 -- This is used for 'mkSupportedAttestationStatementFormats'
 data SomeAttestationStatementFormat
   = forall a.
-    DecodingAttestationStatementFormat a =>
+    DecodableAttestationStatementFormat a =>
     SomeAttestationStatementFormat a
 
 -- | A type representing the set of supported attestation statement formats.
