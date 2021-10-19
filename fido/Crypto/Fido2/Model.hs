@@ -81,7 +81,7 @@ import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 -- The values of this enumeration are used for versioning the Authentication Assertion
 -- and attestation structures according to the type of the authenticator.
 data PublicKeyCredentialType = PublicKeyCredentialTypePublicKey
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier)
 -- A 'COSEAlgorithmIdentifier''s value is a number identifying a cryptographic algorithm.
@@ -93,7 +93,7 @@ data COSEAlgorithmIdentifier
   | COSEAlgorithmIdentifierES384
   | COSEAlgorithmIdentifierES512
   | COSEAlgorithmIdentifierEdDSA
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
 -- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) may implement various [transports](https://www.w3.org/TR/webauthn-2/#enum-transport) for communicating with [clients](https://www.w3.org/TR/webauthn-2/#client). This enumeration defines hints as to how clients might communicate with a particular authenticator in order to obtain an assertion for a specific credential. Note that these hints represent the [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)'s best belief as to how an authenticator may be reached. A [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) will typically learn of the supported transports for a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) via [getTransports()](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports).
@@ -110,7 +110,7 @@ data AuthenticatorTransport
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-internal)
     -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) is contacted using a [client device](https://www.w3.org/TR/webauthn-2/#client-device)-specific transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators). These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
     AuthenticatorTransportInternal
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
 -- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)' [attachment modalities](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality). [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) use this to express a preferred [authenticator attachment modality](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality) when calling [@navigator.credentials.create()@](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) to [create a credential](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
@@ -121,7 +121,7 @@ data AuthenticatorAttachment
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattachment-cross-platform)
     -- This value indicates [cross-platform attachment](https://www.w3.org/TR/webauthn-2/#cross-platform-attachment).
     AuthenticatorAttachmentCrossPlatform
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-residentkeyrequirement)
 -- This enumeration’s values describe the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
@@ -148,7 +148,7 @@ data ResidentKeyRequirement
     -- and is prepared to receive an error if a
     -- [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential) cannot be created.
     ResidentKeyRequirementRequired
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement)
 -- A [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may
@@ -172,7 +172,7 @@ data UserVerificationRequirement
     -- does not want [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) employed
     -- during the operation (e.g., in the interest of minimizing disruption to the user interaction flow).
     UserVerificationRequirementDiscouraged
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-attestation-convey)
 -- [WebAuthn Relying Parties](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may use
@@ -225,7 +225,7 @@ data AttestationConveyancePreference
     -- and [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement), unaltered,
     -- to the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
     AttestationConveyancePreferenceEnterprise
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 type NonEmptyCertificateChain = NonEmpty X509.SignedCertificate
 
