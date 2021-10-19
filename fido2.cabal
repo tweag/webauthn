@@ -22,7 +22,6 @@ common sanity
     LambdaCase
     OverloadedStrings
     TypeApplications
-    DuplicateRecordFields
 
 library
   import: sanity
@@ -30,6 +29,7 @@ library
   build-depends:
     binary,
     aeson,
+    deriving-aeson,
     asn1-encoding,
     asn1-parse,
     asn1-types,
@@ -45,6 +45,7 @@ library
     x509,
     x509-validation,
     scientific,
+    singletons,
     vector,
     time,
     x509,
@@ -64,6 +65,12 @@ library
     Crypto.Fido2.Attestation.Packed.Statement,
     Crypto.Fido2.Attestation.FidoU2F,
     Crypto.Fido2.Attestation.FidoU2F.Statement,
+    Crypto.Fido2.Model,
+    Crypto.Fido2.Model.WebauthnType,
+    Crypto.Fido2.Model.JavaScript,
+    Crypto.Fido2.Model.JavaScript.Decoding,
+    Crypto.Fido2.Model.JavaScript.Encoding,
+    Crypto.Fido2.Model.JavaScript.Types,
     Crypto.Fido2.Error,
     Crypto.Fido2.Protocol,
     Crypto.Fido2.PublicKey,
