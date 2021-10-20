@@ -33,6 +33,7 @@ module Crypto.Fido2.Model
     RpIdHash (..),
     ClientDataHash (..),
     Origin (..),
+    SignatureCounter (..),
 
     -- * Extensions (unimplemented)
     AuthenticationExtensionsClientInputs (..),
@@ -79,6 +80,7 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
+import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word32)
@@ -335,6 +337,7 @@ newtype AAGUID = AAGUID {unAAGUID :: BS.ByteString}
 -- uses DOMString, while the latter uses USVString. Is this a bug in the spec or is there an actual difference?
 newtype RpId = RpId {unRpId :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability)
@@ -345,6 +348,7 @@ newtype RpId = RpId {unRpId :: Text}
 -- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir) about how this metadata is encoded.
 newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- The user handle is specified by a [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party),
@@ -362,6 +366,7 @@ newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
 -- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir) about how this metadata is encoded.
 newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayName :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) identifier for a user account.
@@ -380,6 +385,7 @@ newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayNam
 --   about how this metadata is encoded.
 newtype UserAccountName = UserAccountName {unUserAccountName :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credential-id)
 -- A probabilistically-unique [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
@@ -437,6 +443,13 @@ newtype ClientDataHash = ClientDataHash {unClientDataHash :: Digest SHA256}
 -- | [(spec)](https://html.spec.whatwg.org/multipage/origin.html#concept-origin)
 newtype Origin = Origin {unOrigin :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#signcount)
+-- [Signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
+newtype SignatureCounter = SignatureCounter {unSignatureCounter :: Word32}
+  deriving (Eq, Show)
+  deriving newtype (Num, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
@@ -656,7 +669,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- This OPTIONAL member contains a list of 'PublicKeyCredentialDescriptor'
       -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
       -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
-      pkcogAllowCredentials :: [PublicKeyCredentialDescriptor],
+      pkcogAllowCredentials :: Maybe [PublicKeyCredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
       -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
       -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
@@ -744,7 +757,7 @@ data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
     adFlags :: AuthenticatorDataFlags,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#signcount)
     -- [Signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
-    adSignCount :: Word32,
+    adSignCount :: SignatureCounter,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)
     -- [attested credential data](https://www.w3.org/TR/webauthn-2/#attested-credential-data) (if present)
     adAttestedCredentialData :: AttestedCredentialData t,
