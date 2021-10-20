@@ -49,9 +49,14 @@ module Crypto.Fido2.Model
     CollectedClientData (..),
     AttestedCredentialData (..),
     AuthenticatorData (..),
-    AttestationStatementFormat (..),
     AttestationObject (..),
     AuthenticatorResponse (..),
+    AttestationStatementFormat (..),
+    SomeAttestationStatementFormat (..),
+    SupportedAttestationStatementFormats (..),
+
+    -- * Utility functions
+    mkSupportedAttestationStatementFormats,
 
     -- * Top-level types
     PublicKeyCredentialOptions (..),
@@ -62,15 +67,20 @@ module Crypto.Fido2.Model
   )
 where
 
+import qualified Codec.CBOR.Term as CBOR
+import Control.Exception (Exception)
 import Crypto.Fido2.Model.WebauthnType (WebauthnType (Create, Get))
 import Crypto.Fido2.PublicKey (PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import qualified Data.ByteString as BS
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Word (Word32)
 import qualified Data.X509 as X509
 import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
@@ -751,7 +761,7 @@ data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
 -- [identifier](https://www.w3.org/TR/webauthn-2/#sctn-attstn-fmt-ids)
 -- and [attestation statement structure](https://www.w3.org/TR/webauthn-2/#attestation-statement)
 class
-  (Eq (AttStmt a), Show (AttStmt a), Typeable a, Show a) =>
+  (Eq (AttStmt a), Show (AttStmt a), Typeable a, Show a, Exception (AttStmtDecodingError a), Exception (AttStmtVerificationError a)) =>
   AttestationStatementFormat a
   where
   -- | The type of a fully-decoded and structurally valid attestation statement
@@ -785,9 +795,62 @@ class
   -- [§ 8.2 Packed Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation).
   asfIdentifier :: a -> Text
 
+  -- | The type of verification errors that can occur when verifying this
+  -- attestation statement using 'asfVerify'
+  type AttStmtVerificationError a :: Type
+
+  -- | [(spec)](https://www.w3.org/TR/webauthn-2/#verification-procedure)
+  -- The procedure to verify an [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+  asfVerify ::
+    a ->
+    AttStmt a ->
+    AuthenticatorData 'Create ->
+    ClientDataHash ->
+    Either (AttStmtVerificationError a) AttestationType
+
+  -- | The type of decoding errors that can occur when decoding this
+  -- attestation statement using 'asfDecode'
+  type AttStmtDecodingError a :: Type
+
+  -- | A decoder for the attestation statement [syntax](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+  -- The @attStmt@ CBOR map is given as an input. See
+  -- [Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
+  asfDecode ::
+    a ->
+    HashMap Text CBOR.Term ->
+    Either (AttStmtDecodingError a) (AttStmt a)
+
+-- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+-- In contrast to 'DecodingAttestationStatementFormat', this type can be put into a list.
+-- This is used for 'mkSupportedAttestationStatementFormats'
+data SomeAttestationStatementFormat
+  = forall a.
+    AttestationStatementFormat a =>
+    SomeAttestationStatementFormat a
+
+-- | A type representing the set of supported attestation statement formats.
+-- The constructor is intentionally not exported, use
+-- 'mkSupportedAttestationStatementFormats' instead
+newtype SupportedAttestationStatementFormats
+  = -- HashMap invariant: asfIdentifier (hm ! k) == k
+    SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
+
+-- | Creates a valid 'SupportedAttestationStatementFormats' from a list of 'SomeAttestationStatementFormat's.
+mkSupportedAttestationStatementFormats :: [SomeAttestationStatementFormat] -> SupportedAttestationStatementFormats
+mkSupportedAttestationStatementFormats formats = SupportedAttestationStatementFormats asfMap
+  where
+    asfMap = HashMap.fromListWithKey merge (map withIdentifier formats)
+    merge ident _ _ =
+      error $
+        "mkSupportedAttestationStatementFormats: Duplicate attestation statement format identifier \""
+          <> Text.unpack ident
+          <> "\""
+    withIdentifier someFormat@(SomeAttestationStatementFormat format) =
+      (asfIdentifier format, someFormat)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
 data AttestationObject = forall a.
-  AttestationStatementFormat a =>
+  (AttestationStatementFormat a) =>
   AttestationObject
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     -- The authenticator data structure encodes contextual bindings made by the

@@ -27,8 +27,8 @@ import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.Serialise as CBOR
 import Control.Exception (Exception, SomeException (SomeException))
 import Control.Monad (forM, unless)
-import Crypto.Fido2.AttestationNew.Format
-  ( DecodableAttestationStatementFormat (asfDecode),
+import Crypto.Fido2.Model
+  ( AttestationStatementFormat (asfDecode),
     SomeAttestationStatementFormat (SomeAttestationStatementFormat),
     SupportedAttestationStatementFormats (SupportedAttestationStatementFormats),
   )

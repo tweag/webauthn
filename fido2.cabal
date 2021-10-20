@@ -65,7 +65,6 @@ library
     Crypto.Fido2.Attestation.Packed,
     Crypto.Fido2.Attestation.Packed.Statement,
     Crypto.Fido2.AttestationNew,
-    Crypto.Fido2.AttestationNew.Format,
     Crypto.Fido2.AttestationNew.None,
     Crypto.Fido2.EncodingUtils,
     Crypto.Fido2.Error,
