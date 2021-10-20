@@ -14,13 +14,7 @@
 -- methods while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
 module Crypto.Fido2.Model.JavaScript.Decoding
-  ( -- * Decoding attestation statement formats
-    DecodableAttestationStatementFormat (..),
-    SomeAttestationStatementFormat (..),
-    SupportedAttestationStatementFormats,
-    mkSupportedAttestationStatementFormats,
-
-    -- * Decoding PublicKeyCredential results
+  ( -- * Decoding PublicKeyCredential results
     DecodingError (..),
     CreatedDecodingError (..),
     decodeCreatedPublicKeyCredential,
@@ -33,6 +27,11 @@ import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.Serialise as CBOR
 import Control.Exception (Exception, SomeException (SomeException))
 import Control.Monad (forM, unless)
+import Crypto.Fido2.AttestationNew.Format
+  ( DecodableAttestationStatementFormat (asfDecode),
+    SomeAttestationStatementFormat (SomeAttestationStatementFormat),
+    SupportedAttestationStatementFormats (SupportedAttestationStatementFormats),
+  )
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
@@ -48,62 +47,12 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Coerce (Coercible, coerce)
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
-import Data.Kind (Type)
 import Data.Maybe (fromJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Deriving.Aeson as Aeson
 import GHC.Generics (Generic)
-
--- | Extends the 'M.AttestationStatementFormat' class with the ability for the
--- attestation statement to be decoded from a CBOR map.
-class
-  ( M.AttestationStatementFormat a,
-    Exception (AttStmtDecodingError a)
-  ) =>
-  DecodableAttestationStatementFormat a
-  where
-  -- | The type of decoding errors that can occur when decoding this
-  -- attestation statement using 'asfDecode'
-  type AttStmtDecodingError a :: Type
-
-  -- | A decoder for the attestation statement [syntax](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
-  -- The @attStmt@ CBOR map is given as an input. See
-  -- [Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
-  asfDecode ::
-    a ->
-    HashMap Text CBOR.Term ->
-    Either (AttStmtDecodingError a) (M.AttStmt a)
-
--- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
--- In contrast to 'DecodingAttestationStatementFormat', this type can be put into a list.
--- This is used for 'mkSupportedAttestationStatementFormats'
-data SomeAttestationStatementFormat
-  = forall a.
-    DecodableAttestationStatementFormat a =>
-    SomeAttestationStatementFormat a
-
--- | A type representing the set of supported attestation statement formats.
--- The constructor is intentionally not exported, use
--- 'mkSupportedAttestationStatementFormats' instead
-newtype SupportedAttestationStatementFormats
-  = -- HashMap invariant: asfIdentifier (hm ! k) == k
-    SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
-
--- | Creates a valid 'SupportedAttestationStatementFormats' from a list of 'SomeAttestationStatementFormat's.
-mkSupportedAttestationStatementFormats :: [SomeAttestationStatementFormat] -> SupportedAttestationStatementFormats
-mkSupportedAttestationStatementFormats formats = SupportedAttestationStatementFormats asfMap
-  where
-    asfMap = HashMap.fromListWithKey merge (map withIdentifier formats)
-    merge ident _ _ =
-      error $
-        "mkSupportedAttestationStatementFormats: Duplicate attestation statement format identifier \""
-          <> Text.unpack ident
-          <> "\""
-    withIdentifier someFormat@(SomeAttestationStatementFormat format) =
-      (M.asfIdentifier format, someFormat)
 
 -- | Decoding errors that can only occur when decoding a
 -- 'JS.CreatedPublicKeyCredential' result with 'decodeCreatedPublicKeyCredential'
