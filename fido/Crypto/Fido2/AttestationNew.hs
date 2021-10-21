@@ -5,10 +5,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.Fido2.AttestationNew (verifyAttestationResponse) where
+module Crypto.Fido2.AttestationNew (AttestationError, verifyAttestationResponse) where
 
+import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless, when)
-import Crypto.Fido2.Error (AttestationError (AttestationCommonError), CommonError (ChallengeMismatch, CryptoAlgorithmUnsupported, RpIdHashMismatch, RpOriginMismatch, UserNotPresent, UserNotVerified))
+import Crypto.Fido2.Error (CommonError (ChallengeMismatch, CryptoAlgorithmUnsupported, RpIdHashMismatch, RpOriginMismatch, UserNotPresent, UserNotVerified))
 import Crypto.Fido2.Model
   ( AttestationObject (AttestationObject, aoAttStmt, aoAuthData, aoFmt),
     AttestationStatementFormat (asfVerify),
@@ -31,7 +32,13 @@ import Crypto.Fido2.Model
   )
 import Crypto.Fido2.PublicKey (keyAlgorithm)
 import qualified Crypto.Hash as Hash
+import Data.Bifunctor (first)
 import qualified Data.Text.Encoding as Text
+
+data AttestationError
+  = -- | A common error occured during attestation
+    AttestationCommonError CommonError
+  | AttestationFormatError SomeException
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- This function implements step 8 - 24 of the spec, step 1-7 are done
@@ -96,7 +103,7 @@ verifyAttestationResponse
     -- policy of the Relying Party regarding unsolicited extensions, i.e., those that were not specified as part of options.extensions. In the general
     -- case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
     -- TODO: Extensions aren't currently implemented
-    _ <- undefined $ asfVerify aoFmt aoAttStmt aoAuthData (ccdHash arcClientData)
+    attType <- first (AttestationFormatError . SomeException) $ asfVerify aoFmt aoAttStmt aoAuthData (ccdHash arcClientData)
 
     -- TODO: Next steps
     undefined
