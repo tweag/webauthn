@@ -55,6 +55,7 @@ library
     jose >= 0.8.5,
     lens,
     mtl,
+    validation,
   exposed-modules:
     Crypto.Fido2.Assertion,
     Crypto.Fido2.Attestation,

@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -5,16 +6,19 @@
 module Crypto.Fido2.Assertion
   ( verifyAssertionResponse,
     VerificationError (..),
+    CredentialEntry (..),
+    SignatureCounterResult (..),
   )
 where
 
-import Control.Monad (unless, when)
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad (unless)
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.PublicKey (PublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
+import Data.List.NonEmpty (NonEmpty)
+import Data.Validation (Validation (Failure))
 
 data VerificationError
   = VerificationErrorDisallowedCredential (M.PublicKeyCredential 'M.Get)
@@ -27,19 +31,44 @@ data VerificationError
   | VerificationErrorUserNotPresent
   | VerificationErrorUserNotVerified
   | VerificationErrorInvalidSignature PublicKey BS.ByteString M.AssertionSignature
+  | VerificationErrorPolicyRejected
+
+data CredentialEntry = CredentialEntry
+  { ceUserHandle :: M.UserHandle,
+    cePublicKey :: PublicKey,
+    ceSignCounter :: M.SignatureCounter
+  }
+
+data SignatureCounterResult
+  = -- | There is no signature counter being used, the database entry doesn't
+    -- need to be updated
+    SignatureCounterZero
+  | -- | The signature counter needs to be updated in the database
+    SignatureCounterUpdated M.SignatureCounter
+  | -- | The signature counter decreased, the authenticator was potentially
+    -- cloned
+    SignatureCounterPotentiallyCloned
 
 verifyAssertionResponse ::
-  MonadError VerificationError m =>
+  -- | The origin of the server
   M.Origin ->
+  -- | The hash of the relying party id
   M.RpIdHash ->
   -- | The user handle, in case the user is authenticated already
   Maybe M.UserHandle ->
-  -- | For a credential id, the corresponding user handle, public key and stored sign count
-  (M.CredentialId -> m (M.UserHandle, PublicKey, M.SignatureCounter)) ->
+  -- | The database entry for the credential, as created in the initial
+  -- attestation and optionally updated in subsequent assertions
+  CredentialEntry ->
+  -- | The options that were passed to the get() method
   M.PublicKeyCredentialOptions 'M.Get ->
+  -- | The credential returned from get()
   M.PublicKeyCredential 'M.Get ->
-  m Bool
-verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential options credential = do
+  -- | Either a non-empty list of validation errors in case of the assertion
+  -- being invalid
+  -- Or in case of success a signature counter result, which should be dealt
+  -- with
+  Validation (NonEmpty VerificationError) SignatureCounterResult
+verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credential = do
   -- Implemented by caller
   -- 1. Let options be a new PublicKeyCredentialRequestOptions structure
   -- configured to the Relying Party's needs for the ceremony.
@@ -74,10 +103,7 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential opti
     Nothing -> pure ()
     Just allowCredentials
       | M.pkcIdentifier credential `elem` map M.pkcdId allowCredentials -> pure ()
-      | otherwise -> throwError $ VerificationErrorDisallowedCredential credential
-
-  -- Look up the owner (user handle) and public key of the returned credential
-  (credentialOwner, credentialPublicKey, storedSignCount) <- lookupCredential (M.pkcIdentifier credential)
+      | otherwise -> Failure $ pure $ VerificationErrorDisallowedCredential credential
 
   -- 6. Identify the user being authenticated and verify that this user is the
   -- owner of the public key credential source credentialSource identified by
@@ -92,23 +118,24 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential opti
   -- -> If the user was not identified before the authentication ceremony was
   -- initiated, verify that response.userHandle is present, and that the user
   -- identified by this value is the owner of credentialSource.
+  let owner = ceUserHandle entry
   case (mauthenticatedUser, M.argUserHandle response) of
     (Just authenticatedUser, Just userHandle)
-      | authenticatedUser /= credentialOwner ->
-        throwError $ VerificationErrorAuthenticatedUserHandleMismatch authenticatedUser credentialOwner
-      | userHandle /= credentialOwner ->
-        throwError $ VerificationErrorCredentialUserHandleMismatch userHandle credentialOwner
+      | authenticatedUser /= owner ->
+        Failure $ pure $ VerificationErrorAuthenticatedUserHandleMismatch authenticatedUser owner
+      | userHandle /= owner ->
+        Failure $ pure $ VerificationErrorCredentialUserHandleMismatch userHandle owner
       | otherwise -> pure ()
     (Just authenticatedUser, Nothing)
-      | authenticatedUser /= credentialOwner ->
-        throwError $ VerificationErrorAuthenticatedUserHandleMismatch authenticatedUser credentialOwner
+      | authenticatedUser /= owner ->
+        Failure $ pure $ VerificationErrorAuthenticatedUserHandleMismatch authenticatedUser owner
       | otherwise -> pure ()
     (Nothing, Just userHandle)
-      | userHandle /= credentialOwner ->
-        throwError $ VerificationErrorCredentialUserHandleMismatch userHandle credentialOwner
+      | userHandle /= owner ->
+        Failure $ pure $ VerificationErrorCredentialUserHandleMismatch userHandle owner
       | otherwise -> pure ()
     (Nothing, Nothing) ->
-      throwError VerificationErrorCannotVerifyUserHandle
+      Failure $ pure VerificationErrorCannotVerifyUserHandle
 
   -- 7. Using credential.id (or credential.rawId, if base64url encoding is
   -- inappropriate for your use case), look up the corresponding credential
@@ -136,11 +163,11 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential opti
 
   -- 12. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
   unless (M.ccdChallenge c == M.pkcogChallenge options) $
-    throwError $ VerificationErrorChallengeMismatch (M.ccdChallenge c) (M.pkcogChallenge options)
+    Failure $ pure $ VerificationErrorChallengeMismatch (M.ccdChallenge c) (M.pkcogChallenge options)
 
   -- 13. Verify that the value of C.origin matches the Relying Party's origin.
   unless (M.ccdOrigin c == origin) $
-    throwError $ VerificationErrorOriginMismatch (M.ccdOrigin c) origin
+    Failure $ pure $ VerificationErrorOriginMismatch (M.ccdOrigin c) origin
 
   -- 14. Verify that the value of C.tokenBinding.status matches the state of
   -- Token Binding for the TLS connection over which the attestation was
@@ -154,11 +181,11 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential opti
   -- Note: If using the appid extension, this step needs some special logic.
   -- See § 10.1 FIDO AppID Extension (appid) for details.
   unless (M.adRpIdHash authData == rpIdHash) $
-    throwError $ VerificationErrorRpIdHashMismatch (M.adRpIdHash authData) rpIdHash
+    Failure $ pure $ VerificationErrorRpIdHashMismatch (M.adRpIdHash authData) rpIdHash
 
   -- 16. Verify that the User Present bit of the flags in authData is set.
   unless (M.adfUserPresent (M.adFlags authData)) $
-    throwError VerificationErrorUserNotPresent
+    Failure $ pure VerificationErrorUserNotPresent
 
   -- 17. If user verification is required for this assertion, verify that the
   -- User Verified bit of the flags in authData is set.
@@ -167,7 +194,7 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential opti
   -- required
   case (M.pkcogUserVerification options, M.adfUserVerified (M.adFlags authData)) of
     (M.UserVerificationRequirementRequired, True) -> pure ()
-    (M.UserVerificationRequirementRequired, False) -> throwError VerificationErrorUserNotVerified
+    (M.UserVerificationRequirementRequired, False) -> Failure $ pure VerificationErrorUserNotVerified
     (M.UserVerificationRequirementPreferred, True) -> pure ()
     (M.UserVerificationRequirementPreferred, False) ->
       -- TODO: Maybe throw warning that user verification was preferred but not provided
@@ -194,9 +221,10 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential opti
 
   -- 20. Using credentialPublicKey, verify that sig is a valid signature over
   -- the binary concatenation of authData and hash.
-  let message = M.adRawData authData <> hash
-  unless (PublicKey.verify credentialPublicKey message (M.unAssertionSignature sig)) $
-    throwError $ VerificationErrorInvalidSignature credentialPublicKey message sig
+  let pubKey = cePublicKey entry
+      message = M.adRawData authData <> hash
+  unless (PublicKey.verify pubKey message (M.unAssertionSignature sig)) $
+    Failure $ pure $ VerificationErrorInvalidSignature pubKey message sig
 
   -- 21. Let storedSignCount be the stored signature counter value associated
   -- with credential.id. If authData.signCount is nonzero or storedSignCount
@@ -211,9 +239,14 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser lookupCredential opti
   --      into their risk scoring. Whether the Relying Party updates
   --      storedSignCount in this case, or not, or fails the authentication
   --      ceremony or not, is Relying Party-specific.
-  when (M.adSignCount authData /= 0 || storedSignCount /= 0) $
-    if M.adSignCount authData > storedSignCount
-      then undefined
-      else undefined
+  signCountResult <- case (M.adSignCount authData, ceSignCounter entry) of
+    (0, 0) -> pure SignatureCounterZero
+    (returned, stored)
+      | returned > stored -> pure $ SignatureCounterUpdated returned
+      | otherwise -> pure SignatureCounterPotentiallyCloned
+      | otherwise -> pure SignatureCounterPotentiallyCloned
 
-  undefined
+  -- 22. If all the above steps are successful, continue with the
+  -- authentication ceremony as appropriate. Otherwise, fail the
+  -- authentication ceremony.
+  pure signCountResult
