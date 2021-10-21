@@ -41,7 +41,7 @@ data AttestationError
   | AttestationFormatError SomeException
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
--- This function implements step 8 - 24 of the spec, step 1-7 are done
+-- This function implements step 8 - 21 of the spec, step 1-7 are done
 -- either by the server or ensured by the typesystem during decoding.
 verifyAttestationResponse ::
   Origin ->
@@ -128,4 +128,5 @@ verifyAttestationResponse
     -- TODO: A policy is not currently implement, as is the metadata service.
 
     -- TODO: This function should result in the trustworthiness of the attestation.
+    -- NOTE: Further steps of the procedure are handled by the server side
     pure ()
