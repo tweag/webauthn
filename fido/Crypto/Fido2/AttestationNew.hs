@@ -95,7 +95,7 @@ verifyAttestationResponse
     when (userVerificationRequirement == UserVerificationRequirementRequired && not (adfUserVerified adFlags)) . Left $ AttestationCommonError UserNotVerified
 
     -- 16. Verify that the "alg" parameter in the credential public key in authData matches the alg attribute of one of the items in options.pubKeyCredParams.
-    -- TODO: Remove undefined when the CoseAlgorithmIdentifiers have beenunified
+    -- TODO: Remove undefined when the CoseAlgorithmIdentifiers have been unified
     unless (undefined keyAlgorithm acdCredentialPublicKey `elem` map pkcpAlg pkcocPubKeyCredParams) . Left $ AttestationCommonError CryptoAlgorithmUnsupported
 
     -- 17. Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the
@@ -103,7 +103,29 @@ verifyAttestationResponse
     -- policy of the Relying Party regarding unsolicited extensions, i.e., those that were not specified as part of options.extensions. In the general
     -- case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
     -- TODO: Extensions aren't currently implemented
-    attType <- first (AttestationFormatError . SomeException) $ asfVerify aoFmt aoAttStmt aoAuthData (ccdHash arcClientData)
 
-    -- TODO: Next steps
-    undefined
+    -- 18. Determine the attestation statement format by performing a USASCII case-sensitive match on fmt against the set of supported
+    -- WebAuthn Attestation Statement Format Identifier values. An up-to-date list of registered WebAuthn Attestation Statement Format Identifier
+    -- values is maintained in the IANA "WebAuthn Attestation Statement Format Identifiers" registry [IANA-WebAuthn-Registries] established by [RFC8809].
+    -- NOTE: This check is done during decoding and enforced by the type-system
+
+    -- 19. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature,
+    -- by using the attestation statement format fmt’s verification procedure given attStmt, authData and hash.
+    _attType <- first (AttestationFormatError . SomeException) $ asfVerify aoFmt aoAttStmt aoAuthData (ccdHash arcClientData)
+
+    -- 20. If validation is successful, obtain a list of acceptable trust anchors (i.e. attestation root certificates) for that attestation type and attestation statement format fmt,
+    -- from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information,
+    -- using the aaguid in the attestedCredentialData in authData.
+    -- TODO: The metadata service is not currently implemented
+
+    -- 21. Assess the attestation trustworthiness using the outputs of the verification procedure in step 19, as follows:
+    --
+    -- -   If no attestation was provided, verify that None attestation is acceptable under Relying Party policy.
+    -- -   If self attestation was used, verify that self attestation is acceptable under Relying Party policy.
+    -- -   Otherwise, use the X.509 certificates returned as the attestation trust path from the verification procedure
+    --     to verify that the attestation public key either correctly chains up to an acceptable root certificate,
+    --     or is itself an acceptable certificate (i.e., it and the root certificate obtained in Step 20 may be the same).
+    -- TODO: A policy is not currently implement, as is the metadata service.
+
+    -- TODO: This function should result in the trustworthiness of the attestation.
+    pure ()
