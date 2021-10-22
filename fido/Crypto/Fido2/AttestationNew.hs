@@ -9,65 +9,60 @@ module Crypto.Fido2.AttestationNew (AttestationError, verifyAttestationResponse)
 
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless, when)
-import Crypto.Fido2.Error (CommonError (ChallengeMismatch, CryptoAlgorithmUnsupported, RpIdHashMismatch, RpOriginMismatch, UserNotPresent, UserNotVerified))
-import Crypto.Fido2.Model
-  ( AttestationObject (AttestationObject, aoAttStmt, aoAuthData, aoFmt),
-    AttestationStatementFormat (asfVerify),
-    AttestedCredentialData (AttestedCredentialData, acdCredentialPublicKey),
-    AuthenticatorData (AuthenticatorData, adAttestedCredentialData, adFlags, adRpIdHash),
-    AuthenticatorDataFlags (adfUserPresent, adfUserVerified),
-    AuthenticatorResponse
-      ( AuthenticatorAttestationResponse,
-        arcAttestationObject,
-        arcClientData
-      ),
-    CollectedClientData (ccdChallenge, ccdHash, ccdOrigin),
-    Origin,
-    PublicKeyCredentialOptions (PublicKeyCredentialCreationOptions, pkcocChallenge, pkcocPubKeyCredParams),
-    PublicKeyCredentialParameters (pkcpAlg),
-    RpId (unRpId),
-    RpIdHash (unRpIdHash),
-    UserVerificationRequirement (UserVerificationRequirementRequired),
-    WebauthnType (Create),
-  )
+import Crypto.Fido2.Model (RpIdHash (RpIdHash))
+import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.PublicKey (keyAlgorithm)
 import qualified Crypto.Hash as Hash
 import Data.Bifunctor (first)
 import qualified Data.Text.Encoding as Text
 
 data AttestationError
-  = -- | A common error occured during attestation
-    AttestationCommonError CommonError
-  | AttestationFormatError SomeException
+  = -- | The returned challenge does not match the desired one
+    AttestationChallengeMismatch M.Challenge M.Challenge
+  | -- | The returned origin does not match the relying party's origin
+    AttestationOriginMismatch M.Origin M.Origin
+  | -- | The hash of the relying party id does not match the has in the returned authentication data
+    AttestationRpIdHashMismatch M.RpIdHash M.RpIdHash
+  | -- | The userpresent bit in the authdata was not set
+    AttestationUserNotPresent
+  | -- | The userverified bit in the authdata was not set
+    AttestationUserNotVerified
+  | -- | The desired algorithm is not supported by this implementation or by the fido2 specification
+    AttestationCryptoAlgorithmUnsupported M.COSEAlgorithmIdentifier [M.COSEAlgorithmIdentifier]
+  | -- | There was some exception in the statement format specific section
+    AttestationFormatError SomeException
+  deriving (Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- This function implements step 8 - 21 of the spec, step 1-7 are done
 -- either by the server or ensured by the typesystem during decoding.
 verifyAttestationResponse ::
-  Origin ->
-  RpId ->
-  PublicKeyCredentialOptions 'Create ->
-  UserVerificationRequirement ->
-  AuthenticatorResponse 'Create ->
+  M.Origin ->
+  M.RpId ->
+  M.PublicKeyCredentialOptions 'M.Create ->
+  M.UserVerificationRequirement ->
+  M.AuthenticatorResponse 'M.Create ->
   Either AttestationError ()
 verifyAttestationResponse
   rpOrigin
   rpId
-  PublicKeyCredentialCreationOptions {pkcocChallenge, pkcocPubKeyCredParams}
+  M.PublicKeyCredentialCreationOptions {pkcocChallenge, pkcocPubKeyCredParams}
   userVerificationRequirement
-  AuthenticatorAttestationResponse
+  M.AuthenticatorAttestationResponse
     { arcClientData,
       arcAttestationObject =
-        AttestationObject
-          { aoAuthData = aoAuthData@AuthenticatorData {adAttestedCredentialData = AttestedCredentialData {..}, ..},
+        M.AttestationObject
+          { aoAuthData = aoAuthData@M.AuthenticatorData {adAttestedCredentialData = M.AttestedCredentialData {..}, ..},
             ..
           }
     } = do
     -- 8. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-    when (ccdChallenge arcClientData /= pkcocChallenge) . Left $ AttestationCommonError ChallengeMismatch
+    let ccdChallenge = M.ccdChallenge arcClientData
+    when (ccdChallenge /= pkcocChallenge) . Left $ AttestationChallengeMismatch ccdChallenge pkcocChallenge
 
     -- 9. Verify that the value of C.origin matches the Relying Party's origin.
-    when (ccdOrigin arcClientData /= rpOrigin) . Left $ AttestationCommonError RpOriginMismatch
+    let ccdOrigin = M.ccdOrigin arcClientData
+    when (ccdOrigin /= rpOrigin) . Left $ AttestationOriginMismatch ccdOrigin rpOrigin
 
     -- 10. Verify that the value of C.tokenBinding.status matches the state of Token
     -- Binding for the TLS connection over which the assertion was obtained. If
@@ -86,17 +81,18 @@ verifyAttestationResponse
     -- NOTE: Already matched in the function patternmatch
 
     -- 13. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
-    when (Hash.hash (Text.encodeUtf8 $ unRpId rpId) /= unRpIdHash adRpIdHash) . Left $ AttestationCommonError RpIdHashMismatch
+    let rpIdHash' = RpIdHash . Hash.hash . Text.encodeUtf8 $ M.unRpId rpId
+    when (rpIdHash' /= adRpIdHash) . Left $ AttestationRpIdHashMismatch rpIdHash' adRpIdHash
 
     -- 14. Verify that the User Present bit of the flags in authData is set.
-    unless (adfUserPresent adFlags) . Left $ AttestationCommonError UserNotPresent
+    unless (M.adfUserPresent adFlags) $ Left AttestationUserNotPresent
 
     -- 15. If user verification is required for this registration, verify that the User Verified bit of the flags in authData is set.
-    when (userVerificationRequirement == UserVerificationRequirementRequired && not (adfUserVerified adFlags)) . Left $ AttestationCommonError UserNotVerified
+    when (userVerificationRequirement == M.UserVerificationRequirementRequired && not (M.adfUserVerified adFlags)) $ Left AttestationUserNotVerified
 
     -- 16. Verify that the "alg" parameter in the credential public key in authData matches the alg attribute of one of the items in options.pubKeyCredParams.
     -- TODO: Remove undefined when the CoseAlgorithmIdentifiers have been unified
-    unless (undefined keyAlgorithm acdCredentialPublicKey `elem` map pkcpAlg pkcocPubKeyCredParams) . Left $ AttestationCommonError CryptoAlgorithmUnsupported
+    unless (undefined keyAlgorithm acdCredentialPublicKey `elem` map M.pkcpAlg pkcocPubKeyCredParams) . Left $ AttestationCryptoAlgorithmUnsupported undefined []
 
     -- 17. Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the
     -- extensions in authData are as expected, considering the client extension input values that were given in options.extensions and any specific
@@ -111,7 +107,7 @@ verifyAttestationResponse
 
     -- 19. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature,
     -- by using the attestation statement format fmt’s verification procedure given attStmt, authData and hash.
-    _attType <- first (AttestationFormatError . SomeException) $ asfVerify aoFmt aoAttStmt aoAuthData (ccdHash arcClientData)
+    _attType <- first (AttestationFormatError . SomeException) $ M.asfVerify aoFmt aoAttStmt aoAuthData (M.ccdHash arcClientData)
 
     -- 20. If validation is successful, obtain a list of acceptable trust anchors (i.e. attestation root certificates) for that attestation type and attestation statement format fmt,
     -- from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information,
