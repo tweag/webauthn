@@ -67,6 +67,7 @@ library
     Crypto.Fido2.Attestation.Packed.Statement,
     Crypto.Fido2.AttestationNew,
     Crypto.Fido2.AttestationNew.None,
+    Crypto.Fido2.AttestationNew.AndroidKey,
     Crypto.Fido2.EncodingUtils,
     Crypto.Fido2.Error,
     Crypto.Fido2.Metadata.Blob,
