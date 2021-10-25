@@ -9,7 +9,7 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, void)
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey, toAlg)
+import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey, toAlg, toPublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
@@ -173,7 +173,7 @@ instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
           Just (Left err) -> Left $ DecodingErrorCertificateExtension err
           Nothing -> Left DecodingErrorCertificateExtensionMissing
 
-        pubKey <- case PublicKey.toPublicKey (X509.certPubKey cert) of
+        pubKey <- case toPublicKey alg (X509.certPubKey cert) of
           Nothing -> Left $ DecodingErrorPublicKey (X509.certPubKey cert)
           Just key -> pure key
 

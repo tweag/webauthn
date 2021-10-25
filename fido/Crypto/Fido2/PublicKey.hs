@@ -11,6 +11,8 @@ module Crypto.Fido2.PublicKey
     PublicKey (..),
     verify,
     decodePublicKey,
+    toAlg,
+    toPublicKey,
   )
 where
 
@@ -29,6 +31,8 @@ import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1
 import Data.ByteString (ByteString)
 import Data.Typeable (Typeable)
+import qualified Data.X509 as X509
+import qualified Data.X509.EC as X509
 import Type.Reflection (eqTypeRep, typeOf, type (:~~:) (HRefl))
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier)
@@ -94,11 +98,7 @@ decodePublicKey = do
     decodeECDSAPublicKey = do
       decodeMapKey Alg
       alg <- decodeCOSEAlgorithmIdentifier
-      hash <- case alg of
-        COSEAlgorithmIdentifierES256 -> pure $ SomeHashAlgorithm Hash.SHA256
-        COSEAlgorithmIdentifierES384 -> pure $ SomeHashAlgorithm Hash.SHA384
-        COSEAlgorithmIdentifierES512 -> pure $ SomeHashAlgorithm Hash.SHA512
-        _ -> fail "Unsupported `alg`"
+      hash <- coseEcdsaHash alg
       decodeMapKey Crv
       curveIdentifier <- decodeCurveIdentifier
       curveIdentifier' <- curveForAlg alg
@@ -173,12 +173,43 @@ decodePublicKey = do
     decodeCOSEAlgorithmIdentifier =
       toAlg =<< CBOR.decodeIntCanonical
 
-    toAlg :: (Eq a, Num a, MonadFail f) => a -> f COSEAlgorithmIdentifier
-    toAlg (-7) = pure COSEAlgorithmIdentifierES256
-    toAlg (-35) = pure COSEAlgorithmIdentifierES384
-    toAlg (-36) = pure COSEAlgorithmIdentifierES512
-    toAlg (-8) = pure COSEAlgorithmIdentifierEdDSA
-    toAlg _ = fail "Unsupported `alg`"
+toAlg :: (Eq a, Num a, MonadFail f) => a -> f COSEAlgorithmIdentifier
+toAlg (-7) = pure COSEAlgorithmIdentifierES256
+toAlg (-35) = pure COSEAlgorithmIdentifierES384
+toAlg (-36) = pure COSEAlgorithmIdentifierES512
+toAlg (-8) = pure COSEAlgorithmIdentifierEdDSA
+toAlg _ = fail "Unsupported `alg`"
+
+-- https://www.iana.org/assignments/cose/cose.xhtml#algorithms
+coseEcdsaHash :: MonadFail f => COSEAlgorithmIdentifier -> f SomeHashAlgorithm
+coseEcdsaHash COSEAlgorithmIdentifierES256 = pure $ SomeHashAlgorithm Hash.SHA256
+coseEcdsaHash COSEAlgorithmIdentifierES384 = pure $ SomeHashAlgorithm Hash.SHA384
+coseEcdsaHash COSEAlgorithmIdentifierES512 = pure $ SomeHashAlgorithm Hash.SHA512
+coseEcdsaHash COSEAlgorithmIdentifierEdDSA = fail "Not an ECDSA identifier"
+
+toPublicKey :: MonadFail f => COSEAlgorithmIdentifier -> X509.PubKey -> f PublicKey
+toPublicKey COSEAlgorithmIdentifierEdDSA (X509.PubKeyEd25519 key) = pure $ Ed25519PublicKey key
+toPublicKey alg (X509.PubKeyEC key) = do
+  hashAlg <- coseEcdsaHash alg
+  curveName <-
+    maybe
+      (fail "Non-recognized curve")
+      pure
+      (X509.ecPubKeyCurveName key)
+  let curve = ECC.getCurveByName curveName
+  point <-
+    maybe
+      (fail "Deserialization failed or point not on curve")
+      pure
+      (X509.unserializePoint curve (X509.pubkeyEC_pub key))
+  let key = ECDSA.PublicKey curve point
+  pure $ ECDSAPublicKey hashAlg key
+toPublicKey alg pubkey =
+  fail $
+    "Unsupported combination of COSE alg "
+      <> show alg
+      <> " and X509 public key "
+      <> show pubkey
 
 -- | Decodes a signature for a specific public key's type
 -- Signatures are a bit weird in Webauthn.  For ES256 and RS256 they're ASN.1
