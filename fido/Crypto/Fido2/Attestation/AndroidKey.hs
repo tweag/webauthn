@@ -3,13 +3,20 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Crypto.Fido2.Attestation.AndroidKey where
+module Crypto.Fido2.Attestation.AndroidKey
+  ( asfAndroidKey,
+    AttestationStatementFormatAndroidKey (..),
+    DecodingError (..),
+    Statement (..),
+    VerificationError (..),
+  )
+where
 
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
-import Control.Monad (forM, unless, void)
+import Control.Monad (forM, unless, void, when)
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey, toAlg, toPublicKey)
+import Crypto.Fido2.PublicKey (PublicKey, toAlg, toPublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
@@ -18,10 +25,9 @@ import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
 import Data.HashMap.Strict (HashMap, (!?))
-import qualified Data.HashMap.Strict as HashMap
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromMaybe)
+import Data.Maybe (isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -118,9 +124,8 @@ data AttestationStatementFormatAndroidKey = AttestationStatementFormatAndroidKey
   deriving (Show)
 
 -- androidStmtFormat (https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation)
-data Stmt = Stmt
-  { alg :: COSEAlgorithmIdentifier,
-    sig :: ByteString,
+data Statement = Statement
+  { sig :: ByteString,
     x5c :: NonEmpty X509.SignedCertificate,
     -- | Holds the parsed attestation extension of the above X509 certificate
     -- Not part of the spec, but prevents parsing in the AndroidKey.verify function
@@ -140,6 +145,11 @@ data DecodingError
 
 data VerificationError
   = VerificationErrorCertiticatePublicKeyInvalid
+  | VerificationErrorCredentialKeyMismatch
+  | VerificationErrorChallengeMismatch
+  | VerificationErrorAndroidKeyAllApplicationsFieldFound
+  | VerificationErrorAndroidKeyOriginFieldInvalid
+  | VerificationErrorAndroidKeyPurposeFieldInvalid
   deriving (Show, Exception)
 
 -- https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h
@@ -151,7 +161,7 @@ kmPurposeSign :: Integer
 kmPurposeSign = 2
 
 instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
-  type AttStmt AttestationStatementFormatAndroidKey = Stmt
+  type AttStmt AttestationStatementFormatAndroidKey = Statement
 
   asfIdentifier _ = "android-key"
 
@@ -177,12 +187,12 @@ instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
           Nothing -> Left $ DecodingErrorPublicKey (X509.certPubKey cert)
           Just key -> pure key
 
-        pure Stmt {..}
+        pure Statement {..}
       _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
 
   type AttStmtVerificationError AttestationStatementFormatAndroidKey = VerificationError
 
-  asfVerify _ Stmt {alg = _alg, sig, x5c = x5c@(credCert :| _), attExt, pubKey} M.AuthenticatorData {adRawData, adAttestedCredentialData} clientDataHash = do
+  asfVerify _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData, adAttestedCredentialData} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to
     -- extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -190,18 +200,17 @@ instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
     -- 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the
     -- public key in the first certificate in x5c with the algorithm specified in alg.
     -- TODO: Maybe use verifyX509Sig like in Packed.hs
-    let signedData = adRawData <> convert clientDataHash
+    let signedData = adRawData <> convert (M.unClientDataHash clientDataHash)
     unless (PublicKey.verify pubKey signedData sig) . Left $ undefined
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the
     -- attestedCredentialData in authenticatorData.
-    let key = credentialPublicKey credData
-    unless (key == x5cKey) $ Left CredentialKeyMismatch
+    unless (M.acdCredentialPublicKey adAttestedCredentialData == pubKey) $ Left VerificationErrorCredentialKeyMismatch
 
     -- 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to
     -- clientDataHash.
     -- See https://source.android.com/security/keystore/attestation for the ASN1 description
-    unless (attestationChallenge attExt == clientDataHash) . Left $ AttestationCommonError ChallengeMismatch
+    unless (attestationChallenge attExt == M.unClientDataHash clientDataHash) . Left $ VerificationErrorChallengeMismatch
 
     -- 5. Verify the following using the appropriate authorization list from the attestation certificate extension data:
 
@@ -210,20 +219,23 @@ instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
     -- PublicKeyCredential MUST be scoped to the RP ID.
     let software = softwareEnforced attExt
         tee = teeEnforced attExt
-    when (isJust (allApplications software) || isJust (allApplications tee)) $ Left AndroidKeyAllApplicationsFieldFound
+    when (isJust (allApplications software) || isJust (allApplications tee)) $ Left VerificationErrorAndroidKeyAllApplicationsFieldFound
 
     -- 5.b For the following, use only the teeEnforced authorization list if the
     -- RP wants to accept only keys from a trusted execution environment,
     -- otherwise use the union of teeEnforced and softwareEnforced.
     -- TODO: Allow the users of the library set the required trust level
     -- 5.b.1 The value in the AuthorizationList.origin field is equal to KM_ORIGIN_GENERATED.
-    unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) $ Left AndroidKeyOriginFieldInvalid
+    unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) $ Left VerificationErrorAndroidKeyOriginFieldInvalid
 
     -- 5.b.2 The value in the AuthorizationList.purpose field is equal to KM_PURPOSE_SIGN.
     -- NOTE: This statement is ambiguous as the purpose field is a set. Existing libraries take the same approach, checking if KM_PURPOSE_SIGN is the only member.
     let targetSet = Just $ Set.singleton kmPurposeSign
-    unless (targetSet == purpose software || targetSet == purpose tee) $ Left AndroidKeyPurposeFieldInvalid
+    unless (targetSet == purpose software || targetSet == purpose tee) $ Left VerificationErrorAndroidKeyPurposeFieldInvalid
 
     -- 6. If successful, return implementation-specific values representing attestation type Basic and attestation trust
     -- path x5c.
-    maybe (Left CredentialDataMissing) pure attestedCredentialData
+    pure (M.AttestationTypeBasic x5c)
+
+asfAndroidKey :: M.SomeAttestationStatementFormat
+asfAndroidKey = M.SomeAttestationStatementFormat AttestationStatementFormatAndroidKey
