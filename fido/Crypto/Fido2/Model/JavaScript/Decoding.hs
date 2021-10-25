@@ -36,6 +36,7 @@ import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
+import Crypto.Fido2.PublicKey (decodePublicKey)
 import qualified Crypto.Hash as Hash
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first, second)
@@ -96,9 +97,9 @@ runBinary get bytes = case Binary.runGetOrFail get bytes of
   Left (_rest, _offset, err) -> Left $ DecodingErrorBinary err
   Right (rest, _offset, result) -> Right (rest, result)
 
--- | A 'PartialBinaryDecoder' for a CBOR encoding specified using 'CBOR.Serialise'
-runCBOR :: CBOR.Serialise a => PartialBinaryDecoder a
-runCBOR bytes = first DecodingErrorCBOR $ CBOR.deserialiseFromBytes CBOR.decode bytes
+-- | A 'PartialBinaryDecoder' for a CBOR encoding specified using the given Decoder
+runCBOR :: CBOR.Decoder s a -> PartialBinaryDecoder a
+runCBOR decoder bytes = first DecodingErrorCBOR $ CBOR.deserialiseFromBytes decoder bytes
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 decodeAuthenticatorData ::
@@ -167,7 +168,7 @@ decodeAttestedCredentialData bytes = do
 
   -- https://www.w3.org/TR/webauthn-2/#credentialpublickey
   (bytes, acdCredentialPublicKey) <-
-    runCBOR bytes
+    runCBOR decodePublicKey bytes
 
   pure (bytes, M.AttestedCredentialData {..})
 
@@ -175,7 +176,7 @@ decodeAttestedCredentialData bytes = do
 decodeExtensions :: PartialBinaryDecoder M.AuthenticatorExtensionOutputs
 decodeExtensions bytes = do
   -- TODO
-  (bytes, _extensions :: HashMap Text CBOR.Term) <- runCBOR bytes
+  (bytes, _extensions :: HashMap Text CBOR.Term) <- runCBOR CBOR.decode bytes
   pure (bytes, M.AuthenticatorExtensionOutputs {})
 
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be

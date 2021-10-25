@@ -10,7 +10,6 @@
 module Crypto.Fido2.Model
   ( -- * Enumerations
     PublicKeyCredentialType (..),
-    COSEAlgorithmIdentifier (..),
     AuthenticatorTransport (..),
     AuthenticatorAttachment (..),
     ResidentKeyRequirement (..),
@@ -71,7 +70,7 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Crypto.Fido2.Model.WebauthnType (WebauthnType (Create, Get))
-import Crypto.Fido2.PublicKey (PublicKey)
+import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import qualified Data.ByteString as BS
@@ -93,18 +92,6 @@ import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 -- The values of this enumeration are used for versioning the Authentication Assertion
 -- and attestation structures according to the type of the authenticator.
 data PublicKeyCredentialType = PublicKeyCredentialTypePublicKey
-  deriving (Eq, Show, Bounded, Enum, Ord)
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier)
--- A 'COSEAlgorithmIdentifier''s value is a number identifying a cryptographic algorithm.
--- The algorithm identifiers SHOULD be values registered in the IANA COSE Algorithms
--- registry [IANA-COSE-ALGS-REG](https://www.w3.org/TR/webauthn-2/#biblio-iana-cose-algs-reg),
--- for instance, -7 for "ES256" and -257 for "RS256".
-data COSEAlgorithmIdentifier
-  = COSEAlgorithmIdentifierES256
-  | COSEAlgorithmIdentifierES384
-  | COSEAlgorithmIdentifierES512
-  | COSEAlgorithmIdentifierEdDSA
   deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
