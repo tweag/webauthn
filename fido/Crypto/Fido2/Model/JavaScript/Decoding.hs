@@ -125,7 +125,8 @@ decodeAuthenticatorData adRawData = do
 
   -- https://www.w3.org/TR/webauthn-2/#signcount
   (bytes, adSignCount) <-
-    runBinary Binary.getWord32be bytes
+    second M.SignatureCounter
+      <$> runBinary Binary.getWord32be bytes
 
   -- https://www.w3.org/TR/webauthn-2/#attestedcredentialdata
   (bytes, adAttestedCredentialData) <- case (sing @t, Bits.testBit bitFlags 6) of
