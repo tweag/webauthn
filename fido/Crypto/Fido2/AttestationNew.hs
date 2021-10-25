@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -13,8 +14,9 @@ import Crypto.Fido2.Model (RpIdHash (RpIdHash))
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.PublicKey (keyAlgorithm)
 import qualified Crypto.Hash as Hash
-import Data.Bifunctor (first)
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Text.Encoding as Text
+import Data.Validation (Validation (Failure), liftError)
 
 data AttestationError
   = -- | The returned challenge does not match the desired one
@@ -37,12 +39,19 @@ data AttestationError
 -- This function implements step 8 - 21 of the spec, step 1-7 are done
 -- either by the server or ensured by the typesystem during decoding.
 verifyAttestationResponse ::
+  -- | The origin of the server
   M.Origin ->
+  -- | The relying party id
   M.RpId ->
+  -- | The options passed to the create() method
   M.PublicKeyCredentialOptions 'M.Create ->
+  -- | Is or isn't user verification required
   M.UserVerificationRequirement ->
+  -- | The response from the authenticator
   M.AuthenticatorResponse 'M.Create ->
-  Either AttestationError ()
+  -- | Either a nonempty list of validation errors in case the attestation FailedReason
+  -- Or () in case of a result.
+  Validation (NonEmpty AttestationError) ()
 verifyAttestationResponse
   rpOrigin
   rpId
@@ -58,11 +67,11 @@ verifyAttestationResponse
     } = do
     -- 8. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
     let ccdChallenge = M.ccdChallenge arcClientData
-    when (ccdChallenge /= pkcocChallenge) . Left $ AttestationChallengeMismatch ccdChallenge pkcocChallenge
+    when (ccdChallenge /= pkcocChallenge) . failure $ AttestationChallengeMismatch ccdChallenge pkcocChallenge
 
     -- 9. Verify that the value of C.origin matches the Relying Party's origin.
     let ccdOrigin = M.ccdOrigin arcClientData
-    when (ccdOrigin /= rpOrigin) . Left $ AttestationOriginMismatch ccdOrigin rpOrigin
+    when (ccdOrigin /= rpOrigin) . failure $ AttestationOriginMismatch ccdOrigin rpOrigin
 
     -- 10. Verify that the value of C.tokenBinding.status matches the state of Token
     -- Binding for the TLS connection over which the assertion was obtained. If
@@ -82,17 +91,17 @@ verifyAttestationResponse
 
     -- 13. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
     let rpIdHash' = RpIdHash . Hash.hash . Text.encodeUtf8 $ M.unRpId rpId
-    when (rpIdHash' /= adRpIdHash) . Left $ AttestationRpIdHashMismatch rpIdHash' adRpIdHash
+    when (rpIdHash' /= adRpIdHash) . failure $ AttestationRpIdHashMismatch rpIdHash' adRpIdHash
 
     -- 14. Verify that the User Present bit of the flags in authData is set.
-    unless (M.adfUserPresent adFlags) $ Left AttestationUserNotPresent
+    unless (M.adfUserPresent adFlags) $ failure AttestationUserNotPresent
 
     -- 15. If user verification is required for this registration, verify that the User Verified bit of the flags in authData is set.
-    when (userVerificationRequirement == M.UserVerificationRequirementRequired && not (M.adfUserVerified adFlags)) $ Left AttestationUserNotVerified
+    when (userVerificationRequirement == M.UserVerificationRequirementRequired && not (M.adfUserVerified adFlags)) $ failure AttestationUserNotVerified
 
     -- 16. Verify that the "alg" parameter in the credential public key in authData matches the alg attribute of one of the items in options.pubKeyCredParams.
     -- TODO: Remove undefined when the CoseAlgorithmIdentifiers have been unified
-    unless (undefined keyAlgorithm acdCredentialPublicKey `elem` map M.pkcpAlg pkcocPubKeyCredParams) . Left $ AttestationCryptoAlgorithmUnsupported undefined []
+    unless (undefined keyAlgorithm acdCredentialPublicKey `elem` map M.pkcpAlg pkcocPubKeyCredParams) . failure $ AttestationCryptoAlgorithmUnsupported undefined []
 
     -- 17. Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the
     -- extensions in authData are as expected, considering the client extension input values that were given in options.extensions and any specific
@@ -107,7 +116,7 @@ verifyAttestationResponse
 
     -- 19. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature,
     -- by using the attestation statement format fmt’s verification procedure given attStmt, authData and hash.
-    _attType <- first (AttestationFormatError . SomeException) $ M.asfVerify aoFmt aoAttStmt aoAuthData (M.ccdHash arcClientData)
+    _attType <- liftError (pure . AttestationFormatError . SomeException) $ M.asfVerify aoFmt aoAttStmt aoAuthData (M.ccdHash arcClientData)
 
     -- 20. If validation is successful, obtain a list of acceptable trust anchors (i.e. attestation root certificates) for that attestation type and attestation statement format fmt,
     -- from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information,
@@ -126,3 +135,6 @@ verifyAttestationResponse
     -- TODO: This function should result in the trustworthiness of the attestation.
     -- NOTE: Further steps of the procedure are handled by the server side
     pure ()
+    where
+      failure :: AttestationError -> Validation (NonEmpty AttestationError) a
+      failure = Failure . pure
