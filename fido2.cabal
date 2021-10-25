@@ -60,14 +60,7 @@ library
     Crypto.Fido2.Assertion,
     Crypto.Fido2.Attestation,
     Crypto.Fido2.Attestation.AndroidKey,
-    Crypto.Fido2.Attestation.AndroidKey.Statement,
     Crypto.Fido2.Attestation.FidoU2F,
-    Crypto.Fido2.Attestation.FidoU2F.Statement,
-    Crypto.Fido2.Attestation.Packed,
-    Crypto.Fido2.Attestation.Packed.Statement,
-    Crypto.Fido2.AttestationNew,
-    Crypto.Fido2.AttestationNew.None,
-    Crypto.Fido2.AttestationNew.AndroidKey,
     Crypto.Fido2.EncodingUtils,
     Crypto.Fido2.Error,
     Crypto.Fido2.Metadata.Blob,
@@ -78,7 +71,6 @@ library
     Crypto.Fido2.Model.JavaScript.Encoding,
     Crypto.Fido2.Model.JavaScript.Types,
     Crypto.Fido2.Model.WebauthnType,
-    Crypto.Fido2.Protocol,
     Crypto.Fido2.PublicKey,
     Crypto.Fido2.Signature
 

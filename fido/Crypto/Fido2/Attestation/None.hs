@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.Fido2.AttestationNew.None (asfNone, AttestationStatementFormatNone (AttestationStatementFormatNone)) where
+module Crypto.Fido2.Attestation.None (asfNone, AttestationStatementFormatNone (AttestationStatementFormatNone)) where
 
 import qualified Crypto.Fido2.Model as M
 import Data.Void (Void)

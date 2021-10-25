@@ -57,11 +57,11 @@ instance Encode M.AuthenticationExtensionsClientInputs where
   encode M.AuthenticationExtensionsClientInputs {} = Map.empty
 
 -- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
-instance Encode M.COSEAlgorithmIdentifier where
-  encode M.COSEAlgorithmIdentifierES512 = -36
-  encode M.COSEAlgorithmIdentifierES384 = -35
-  encode M.COSEAlgorithmIdentifierEdDSA = -8
-  encode M.COSEAlgorithmIdentifierES256 = -7
+instance Encode PublicKey.COSEAlgorithmIdentifier where
+  encode PublicKey.COSEAlgorithmIdentifierES512 = -36
+  encode PublicKey.COSEAlgorithmIdentifierES384 = -35
+  encode PublicKey.COSEAlgorithmIdentifierEdDSA = -8
+  encode PublicKey.COSEAlgorithmIdentifierES256 = -7
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
 instance Encode M.PublicKeyCredentialType where

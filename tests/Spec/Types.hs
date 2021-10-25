@@ -9,7 +9,7 @@
 
 module Spec.Types () where
 
-import Crypto.Fido2.AttestationNew.None (AttestationStatementFormatNone (AttestationStatementFormatNone))
+import Crypto.Fido2.Attestation.None (AttestationStatementFormatNone (AttestationStatementFormatNone))
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import qualified PublicKeySpec ()
