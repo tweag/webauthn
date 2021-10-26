@@ -4,8 +4,8 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Crypto.Fido2.Attestation.AndroidKey
-  ( asfAndroidKey,
-    AttestationStatementFormatAndroidKey (..),
+  ( format,
+    Format (..),
     DecodingError (..),
     Statement (..),
     VerificationError (..),
@@ -120,7 +120,7 @@ instance Extension ExtAttestation where
             decodeIntSet (Set.insert elem set)
           else pure set
 
-data AttestationStatementFormatAndroidKey = AttestationStatementFormatAndroidKey
+data Format = Format
   deriving (Show)
 
 -- androidStmtFormat (https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation)
@@ -160,12 +160,12 @@ kmOriginGenerated = 0
 kmPurposeSign :: Integer
 kmPurposeSign = 2
 
-instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
-  type AttStmt AttestationStatementFormatAndroidKey = Statement
+instance M.AttestationStatementFormat Format where
+  type AttStmt Format = Statement
 
   asfIdentifier _ = "android-key"
 
-  type AttStmtDecodingError AttestationStatementFormatAndroidKey = DecodingError
+  type AttStmtDecodingError Format = DecodingError
 
   asfDecode _ xs = do
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
@@ -190,7 +190,7 @@ instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
         pure Statement {..}
       _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
 
-  type AttStmtVerificationError AttestationStatementFormatAndroidKey = VerificationError
+  type AttStmtVerificationError Format = VerificationError
 
   asfVerify _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData, adAttestedCredentialData} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to
@@ -237,5 +237,5 @@ instance M.AttestationStatementFormat AttestationStatementFormatAndroidKey where
     -- path x5c.
     pure (M.AttestationTypeBasic x5c)
 
-asfAndroidKey :: M.SomeAttestationStatementFormat
-asfAndroidKey = M.SomeAttestationStatementFormat AttestationStatementFormatAndroidKey
+format :: M.SomeAttestationStatementFormat
+format = M.SomeAttestationStatementFormat Format

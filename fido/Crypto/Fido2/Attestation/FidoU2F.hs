@@ -3,7 +3,7 @@
 
 module Crypto.Fido2.Attestation.FidoU2F
   ( asfFidoU2F,
-    AttestationStatementFormatFidoU2F (AttestationStatementFormatFidoU2F),
+    Format (..),
     DecodingError (..),
     Statement (..),
     VerifyingError (..),
@@ -33,7 +33,7 @@ import qualified Data.HashMap.Strict as Map
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 
-data AttestationStatementFormatFidoU2F = AttestationStatementFormatFidoU2F
+data Format = Format
   deriving (Show)
 
 data DecodingError
@@ -61,11 +61,11 @@ data Statement = Statement
   }
   deriving (Show, Eq)
 
-instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
-  type AttStmt AttestationStatementFormatFidoU2F = Statement
+instance M.AttestationStatementFormat Format where
+  type AttStmt Format = Statement
   asfIdentifier _ = "fido-u2f"
 
-  type AttStmtDecodingError AttestationStatementFormatFidoU2F = DecodingError
+  type AttStmtDecodingError Format = DecodingError
 
   asfDecode _ m = do
     sig <- case Map.lookup "sig" m of
@@ -80,7 +80,7 @@ instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
       _ -> Left NoX5C
     pure $ Statement sig attCert
 
-  type AttStmtVerificationError AttestationStatementFormatFidoU2F = VerifyingError
+  type AttStmtVerificationError Format = VerifyingError
 
   asfVerify _ Statement {attCert, sig} AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above
@@ -153,4 +153,4 @@ instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
     pure AttestationTypeSelf
 
 asfFidoU2F :: M.SomeAttestationStatementFormat
-asfFidoU2F = M.SomeAttestationStatementFormat AttestationStatementFormatFidoU2F
+asfFidoU2F = M.SomeAttestationStatementFormat Format

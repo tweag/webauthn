@@ -1,22 +1,26 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.Fido2.Attestation.None (asfNone, AttestationStatementFormatNone (AttestationStatementFormatNone)) where
+module Crypto.Fido2.Attestation.None
+  ( format,
+    Format (..),
+  )
+where
 
 import qualified Crypto.Fido2.Model as M
 import Data.Void (Void)
 
-data AttestationStatementFormatNone = AttestationStatementFormatNone
+data Format = Format
   deriving (Show)
 
-instance M.AttestationStatementFormat AttestationStatementFormatNone where
-  type AttStmt AttestationStatementFormatNone = ()
+instance M.AttestationStatementFormat Format where
+  type AttStmt Format = ()
   asfIdentifier _ = "none"
 
-  type AttStmtDecodingError AttestationStatementFormatNone = Void
+  type AttStmtDecodingError Format = Void
   asfDecode _ _ = Right ()
 
-  type AttStmtVerificationError AttestationStatementFormatNone = Void
+  type AttStmtVerificationError Format = Void
   asfVerify _ _ _ _ = Right M.AttestationTypeNone
 
-asfNone :: M.SomeAttestationStatementFormat
-asfNone = M.SomeAttestationStatementFormat AttestationStatementFormatNone
+format :: M.SomeAttestationStatementFormat
+format = M.SomeAttestationStatementFormat Format
