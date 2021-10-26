@@ -12,7 +12,7 @@ import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless, when)
 import Crypto.Fido2.Model (RpIdHash (RpIdHash))
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.PublicKey (keyAlgorithm)
+import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Crypto.Hash as Hash
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Text.Encoding as Text
@@ -29,8 +29,11 @@ data AttestationError
     AttestationUserNotPresent
   | -- | The userverified bit in the authdata was not set
     AttestationUserNotVerified
+  | -- | Could not recover COSEAlgorithmIdentifier from AttestedCredentialData
+    -- NOTE: This is an internal error need not be expected
+    AttestationCouldNotDeriveAlg
   | -- | The desired algorithm is not supported by this implementation or by the fido2 specification
-    AttestationCryptoAlgorithmUnsupported M.COSEAlgorithmIdentifier [M.COSEAlgorithmIdentifier]
+    AttestationCryptoAlgorithmUnsupported PublicKey.COSEAlgorithmIdentifier [PublicKey.COSEAlgorithmIdentifier]
   | -- | There was some exception in the statement format specific section
     AttestationFormatError SomeException
   deriving (Show)
@@ -100,8 +103,9 @@ verifyAttestationResponse
     when (userVerificationRequirement == M.UserVerificationRequirementRequired && not (M.adfUserVerified adFlags)) $ failure AttestationUserNotVerified
 
     -- 16. Verify that the "alg" parameter in the credential public key in authData matches the alg attribute of one of the items in options.pubKeyCredParams.
-    -- TODO: Remove undefined when the CoseAlgorithmIdentifiers have been unified
-    unless (undefined keyAlgorithm acdCredentialPublicKey `elem` map M.pkcpAlg pkcocPubKeyCredParams) . failure $ AttestationCryptoAlgorithmUnsupported undefined []
+    case PublicKey.toCOSEAlgorithmIdentifier acdCredentialPublicKey of
+      Nothing -> failure AttestationCouldNotDeriveAlg
+      Just acdAlg -> unless (acdAlg `elem` map M.pkcpAlg pkcocPubKeyCredParams) . failure $ AttestationCryptoAlgorithmUnsupported acdAlg []
 
     -- 17. Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the
     -- extensions in authData are as expected, considering the client extension input values that were given in options.extensions and any specific

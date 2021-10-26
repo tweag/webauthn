@@ -19,6 +19,7 @@ where
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
+import qualified Crypto.Fido2.PublicKey as PublicKey
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Map as Map
 

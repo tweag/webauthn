@@ -13,6 +13,7 @@ module Crypto.Fido2.PublicKey
     decodePublicKey,
     toAlg,
     toPublicKey,
+    toCOSEAlgorithmIdentifier,
   )
 where
 
@@ -186,6 +187,16 @@ coseEcdsaHash COSEAlgorithmIdentifierES256 = pure $ SomeHashAlgorithm Hash.SHA25
 coseEcdsaHash COSEAlgorithmIdentifierES384 = pure $ SomeHashAlgorithm Hash.SHA384
 coseEcdsaHash COSEAlgorithmIdentifierES512 = pure $ SomeHashAlgorithm Hash.SHA512
 coseEcdsaHash COSEAlgorithmIdentifierEdDSA = fail "Not an ECDSA identifier"
+
+toCOSEAlgorithmIdentifier :: MonadFail f => PublicKey -> f COSEAlgorithmIdentifier
+toCOSEAlgorithmIdentifier (ECDSAPublicKey hash _)
+  | hashTy == typeOf (SomeHashAlgorithm Hash.SHA256) = pure COSEAlgorithmIdentifierES256
+  | hashTy == typeOf (SomeHashAlgorithm Hash.SHA384) = pure COSEAlgorithmIdentifierES384
+  | hashTy == typeOf (SomeHashAlgorithm Hash.SHA512) = pure COSEAlgorithmIdentifierES512
+  | otherwise = fail "Not a recognised hash algorithm"
+  where
+    hashTy = typeOf hash
+toCOSEAlgorithmIdentifier (Ed25519PublicKey _) = pure COSEAlgorithmIdentifierEdDSA
 
 toPublicKey :: MonadFail f => COSEAlgorithmIdentifier -> X509.PubKey -> f PublicKey
 toPublicKey COSEAlgorithmIdentifierEdDSA (X509.PubKeyEd25519 key) = pure $ Ed25519PublicKey key

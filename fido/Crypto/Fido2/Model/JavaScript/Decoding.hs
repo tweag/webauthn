@@ -4,6 +4,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -22,6 +23,7 @@ module Crypto.Fido2.Model.JavaScript.Decoding
   )
 where
 
+import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.Serialise as CBOR
@@ -98,7 +100,7 @@ runBinary get bytes = case Binary.runGetOrFail get bytes of
   Right (rest, _offset, result) -> Right (rest, result)
 
 -- | A 'PartialBinaryDecoder' for a CBOR encoding specified using the given Decoder
-runCBOR :: CBOR.Decoder s a -> PartialBinaryDecoder a
+runCBOR :: (forall s. CBOR.Decoder s a) -> PartialBinaryDecoder a
 runCBOR decoder bytes = first DecodingErrorCBOR $ CBOR.deserialiseFromBytes decoder bytes
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
