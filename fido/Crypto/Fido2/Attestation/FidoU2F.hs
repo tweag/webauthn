@@ -22,7 +22,7 @@ import Crypto.Fido2.Model
     RpIdHash (unRpIdHash),
   )
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.PublicKey (PublicKey (ECDSAPublicKey))
+import Crypto.Fido2.PublicKey (PublicKey (ES256PublicKey))
 import Crypto.Number.Serialize (i2osp)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1), Point (Point))
@@ -117,7 +117,7 @@ instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
     -- return an appropriate error.
     -- NOTE: The decoding already happened in the decoding step
     (x, y) <- case acdCredentialPublicKey of
-      ECDSAPublicKey _ (ECDSA.PublicKey _ (Point x y)) -> pure (x, y)
+      ES256PublicKey (ECDSA.PublicKey _ (Point x y)) -> pure (x, y)
       _ -> Left ASFFidoU2FNoECKeyInAttestedCredentialData
 
     -- We decode the x and y values in an earlier stage of the process. In order to construct the publicKeyU2F, we have to reencode the value.

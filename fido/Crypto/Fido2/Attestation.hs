@@ -29,9 +29,6 @@ data AttestationError
     AttestationUserNotPresent
   | -- | The userverified bit in the authdata was not set
     AttestationUserNotVerified
-  | -- | Could not recover COSEAlgorithmIdentifier from AttestedCredentialData
-    -- NOTE: This is an internal error need not be expected
-    AttestationCouldNotDeriveAlg
   | -- | The desired algorithm is not supported by this implementation or by the fido2 specification
     AttestationCryptoAlgorithmUnsupported PublicKey.COSEAlgorithmIdentifier [PublicKey.COSEAlgorithmIdentifier]
   | -- | There was some exception in the statement format specific section
@@ -103,9 +100,8 @@ verifyAttestationResponse
     when (userVerificationRequirement == M.UserVerificationRequirementRequired && not (M.adfUserVerified adFlags)) $ failure AttestationUserNotVerified
 
     -- 16. Verify that the "alg" parameter in the credential public key in authData matches the alg attribute of one of the items in options.pubKeyCredParams.
-    case PublicKey.toCOSEAlgorithmIdentifier acdCredentialPublicKey of
-      Nothing -> failure AttestationCouldNotDeriveAlg
-      Just acdAlg -> unless (acdAlg `elem` map M.pkcpAlg pkcocPubKeyCredParams) . failure $ AttestationCryptoAlgorithmUnsupported acdAlg []
+    let acdAlg = PublicKey.toCOSEAlgorithmIdentifier acdCredentialPublicKey
+    unless (acdAlg `elem` map M.pkcpAlg pkcocPubKeyCredParams) . failure $ AttestationCryptoAlgorithmUnsupported acdAlg []
 
     -- 17. Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the
     -- extensions in authData are as expected, considering the client extension input values that were given in options.extensions and any specific

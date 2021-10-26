@@ -31,10 +31,8 @@ import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1
 import Data.ByteString (ByteString)
-import Data.Typeable (Typeable)
 import qualified Data.X509 as X509
 import qualified Data.X509.EC as X509
-import Type.Reflection (eqTypeRep, typeOf, type (:~~:) (HRefl))
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier)
 -- A 'COSEAlgorithmIdentifier''s value is a number identifying a cryptographic algorithm.
@@ -49,19 +47,11 @@ data COSEAlgorithmIdentifier
   deriving (Eq, Show, Bounded, Enum, Ord)
 
 data PublicKey
-  = ECDSAPublicKey SomeHashAlgorithm ECDSA.PublicKey
+  = ES256PublicKey ECDSA.PublicKey
+  | ES384PublicKey ECDSA.PublicKey
+  | ES512PublicKey ECDSA.PublicKey
   | Ed25519PublicKey Ed25519.PublicKey
   deriving (Eq, Show)
-
-data SomeHashAlgorithm = forall hash. (Show hash, Typeable hash, HashAlgorithm hash) => SomeHashAlgorithm hash
-
-deriving instance Show SomeHashAlgorithm
-
-instance Eq SomeHashAlgorithm where
-  SomeHashAlgorithm lHash == SomeHashAlgorithm rHash =
-    case eqTypeRep (typeOf lHash) (typeOf rHash) of
-      Just HRefl -> True
-      Nothing -> False
 
 data KeyType = OKP | ECC
 
@@ -99,7 +89,6 @@ decodePublicKey = do
     decodeECDSAPublicKey = do
       decodeMapKey Alg
       alg <- decodeCOSEAlgorithmIdentifier
-      hash <- coseEcdsaHash alg
       decodeMapKey Crv
       curveIdentifier <- decodeCurveIdentifier
       curveIdentifier' <- curveForAlg alg
@@ -121,7 +110,7 @@ decodePublicKey = do
         _ -> fail "Unexpected token type"
       let point = ECC.Point x y
       unless (ECC.isPointValid curve point) $ fail "point not on curve"
-      pure $ ECDSAPublicKey hash (ECDSA.PublicKey curve point)
+      toECDSAKey alg (ECDSA.PublicKey curve point)
 
     mapKeyToInt :: MapKey -> Int
     mapKeyToInt key = case key of
@@ -181,27 +170,15 @@ toAlg (-36) = pure COSEAlgorithmIdentifierES512
 toAlg (-8) = pure COSEAlgorithmIdentifierEdDSA
 toAlg _ = fail "Unsupported `alg`"
 
--- https://www.iana.org/assignments/cose/cose.xhtml#algorithms
-coseEcdsaHash :: MonadFail f => COSEAlgorithmIdentifier -> f SomeHashAlgorithm
-coseEcdsaHash COSEAlgorithmIdentifierES256 = pure $ SomeHashAlgorithm Hash.SHA256
-coseEcdsaHash COSEAlgorithmIdentifierES384 = pure $ SomeHashAlgorithm Hash.SHA384
-coseEcdsaHash COSEAlgorithmIdentifierES512 = pure $ SomeHashAlgorithm Hash.SHA512
-coseEcdsaHash COSEAlgorithmIdentifierEdDSA = fail "Not an ECDSA identifier"
-
-toCOSEAlgorithmIdentifier :: MonadFail f => PublicKey -> f COSEAlgorithmIdentifier
-toCOSEAlgorithmIdentifier (ECDSAPublicKey hash _)
-  | hashTy == typeOf (SomeHashAlgorithm Hash.SHA256) = pure COSEAlgorithmIdentifierES256
-  | hashTy == typeOf (SomeHashAlgorithm Hash.SHA384) = pure COSEAlgorithmIdentifierES384
-  | hashTy == typeOf (SomeHashAlgorithm Hash.SHA512) = pure COSEAlgorithmIdentifierES512
-  | otherwise = fail "Not a recognised hash algorithm"
-  where
-    hashTy = typeOf hash
-toCOSEAlgorithmIdentifier (Ed25519PublicKey _) = pure COSEAlgorithmIdentifierEdDSA
+toCOSEAlgorithmIdentifier :: PublicKey -> COSEAlgorithmIdentifier
+toCOSEAlgorithmIdentifier (ES256PublicKey _) = COSEAlgorithmIdentifierES256
+toCOSEAlgorithmIdentifier (ES384PublicKey _) = COSEAlgorithmIdentifierES384
+toCOSEAlgorithmIdentifier (ES512PublicKey _) = COSEAlgorithmIdentifierES512
+toCOSEAlgorithmIdentifier (Ed25519PublicKey _) = COSEAlgorithmIdentifierEdDSA
 
 toPublicKey :: MonadFail f => COSEAlgorithmIdentifier -> X509.PubKey -> f PublicKey
 toPublicKey COSEAlgorithmIdentifierEdDSA (X509.PubKeyEd25519 key) = pure $ Ed25519PublicKey key
 toPublicKey alg (X509.PubKeyEC key) = do
-  hashAlg <- coseEcdsaHash alg
   curveName <-
     maybe
       (fail "Non-recognized curve")
@@ -214,7 +191,7 @@ toPublicKey alg (X509.PubKeyEC key) = do
       pure
       (X509.unserializePoint curve (X509.pubkeyEC_pub key))
   let key = ECDSA.PublicKey curve point
-  pure $ ECDSAPublicKey hashAlg key
+  toECDSAKey alg key
 toPublicKey alg pubkey =
   fail $
     "Unsupported combination of COSE alg "
@@ -222,22 +199,26 @@ toPublicKey alg pubkey =
       <> " and X509 public key "
       <> show pubkey
 
--- | Decodes a signature for a specific public key's type
--- Signatures are a bit weird in Webauthn.  For ES256 and RS256 they're ASN.1
--- and for EdDSA they're COSE
-decodeECDSASignature :: ByteString -> Maybe ECDSA.Signature
-decodeECDSASignature sigbs =
-  case ASN1.decodeASN1' ASN1.BER sigbs of
-    Left _ -> Nothing
-    Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
-      Just (ECDSA.Signature r s)
-    Right _ -> Nothing
+toECDSAKey :: MonadFail f => COSEAlgorithmIdentifier -> ECDSA.PublicKey -> f PublicKey
+toECDSAKey COSEAlgorithmIdentifierES256 = pure . ES256PublicKey
+toECDSAKey COSEAlgorithmIdentifierES384 = pure . ES384PublicKey
+toECDSAKey COSEAlgorithmIdentifierES512 = pure . ES512PublicKey
+toECDSAKey _ = const $ fail "Not a ECDSA key identifier"
 
 verify :: PublicKey -> ByteString -> ByteString -> Bool
-verify (ECDSAPublicKey (SomeHashAlgorithm hash) key) msg sig = case decodeECDSASignature sig of
-  Nothing -> False
-  Just sig -> ECDSA.verify hash key sig msg
+verify (ES256PublicKey key) msg sig = verifyESKey Hash.SHA256 key sig msg
+verify (ES384PublicKey key) msg sig = verifyESKey Hash.SHA384 key sig msg
+verify (ES512PublicKey key) msg sig = verifyESKey Hash.SHA512 key sig msg
 verify (Ed25519PublicKey key) msg sig =
   case Ed25519.signature sig of
     CryptoPassed sig -> Ed25519.verify key msg sig
     CryptoFailed _ -> False
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types)
+verifyESKey :: HashAlgorithm hash => hash -> ECDSA.PublicKey -> ByteString -> ByteString -> Bool
+verifyESKey hash key sig msg =
+  case ASN1.decodeASN1' ASN1.BER sig of
+    Left _ -> False
+    Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
+      ECDSA.verify hash key (ECDSA.Signature r s) msg
+    Right _ -> False
