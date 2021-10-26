@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Crypto.Fido2.Attestation.Packed
+module Crypto.Fido2.Operations.Attestation.Packed
   ( format,
     Format (..),
     DecodingError (..),

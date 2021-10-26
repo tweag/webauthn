@@ -1,8 +1,8 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.Fido2.Attestation.FidoU2F
-  ( asfFidoU2F,
+module Crypto.Fido2.Operations.Attestation.FidoU2F
+  ( format,
     Format (..),
     DecodingError (..),
     Statement (..),
@@ -152,5 +152,5 @@ instance M.AttestationStatementFormat Format where
     -- TODO: Metadata
     pure AttestationTypeSelf
 
-asfFidoU2F :: M.SomeAttestationStatementFormat
-asfFidoU2F = M.SomeAttestationStatementFormat Format
+format :: M.SomeAttestationStatementFormat
+format = M.SomeAttestationStatementFormat Format

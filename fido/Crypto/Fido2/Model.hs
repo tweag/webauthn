@@ -661,7 +661,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
       -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
       -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
-      pkcogUserVerification :: UserVerificationRequirement,
+      pkcogUserVerification :: Maybe UserVerificationRequirement,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.

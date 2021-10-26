@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.Fido2.Attestation.None
+module Crypto.Fido2.Operations.Attestation.None
   ( format,
     Format (..),
   )

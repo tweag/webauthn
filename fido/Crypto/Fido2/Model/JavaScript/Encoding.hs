@@ -161,7 +161,7 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
         timeout = encode pkcogTimeout,
         rpId = encode pkcogRpId,
         allowCredentials = encode pkcogAllowCredentials,
-        userVerification = Just $ encode pkcogUserVerification,
+        userVerification = encode pkcogUserVerification,
         extensions = Just $ encode pkcogExtensions
       }
 

@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Crypto.Fido2.Attestation.AndroidKey
+module Crypto.Fido2.Operations.Attestation.AndroidKey
   ( format,
     Format (..),
     DecodingError (..),
