@@ -4,9 +4,9 @@
 module Crypto.Fido2.Attestation.FidoU2F
   ( asfFidoU2F,
     AttestationStatementFormatFidoU2F (AttestationStatementFormatFidoU2F),
-    ASFFidoU2FDecodingError (..),
-    ASFFidoU2FStatement (..),
-    ASFFidoU2FVerifyingError (..),
+    DecodingError (..),
+    Statement (..),
+    VerifyingError (..),
   )
 where
 
@@ -36,53 +36,53 @@ import qualified Data.X509.Validation as X509
 data AttestationStatementFormatFidoU2F = AttestationStatementFormatFidoU2F
   deriving (Show)
 
-data ASFFidoU2FDecodingError
+data DecodingError
   = -- | No Signature field was present
-    ASFFidoU2FNoSig
+    NoSig
   | -- | No x5c certificate was present
-    ASFFidoU2FNoX5C
+    NoX5C
   | -- | Multiple x5c certificates were found where only one was expected
-    ASFFidoU2FMultipleX5C
+    MultipleX5C
   | -- | There was an error decoding the x5c certificate, string is the error resulted by the `Data.X509.decodeSignedCertificate` function
-    ASFFidoU2FDecodingErrorX5C String
+    DecodingErrorX5C String
   deriving (Show, Exception)
 
-data ASFFidoU2FVerifyingError
-  = ASFFidoU2FNoECKeyInCertificate
-  | ASFFidoU2FCredentialDataMissing
-  | ASFFidoU2FNoECKeyInAttestedCredentialData
-  | ASFFidoU2FUnexpectedCoordinateLength
-  | ASFFidoU2FInvalidSignature
+data VerifyingError
+  = NoECKeyInCertificate
+  | CredentialDataMissing
+  | NoECKeyInAttestedCredentialData
+  | UnexpectedCoordinateLength
+  | InvalidSignature
   deriving (Show, Exception)
 
-data ASFFidoU2FStatement = ASFFidoU2FStatement
+data Statement = Statement
   { sig :: ByteString,
     attCert :: X509.SignedCertificate
   }
   deriving (Show, Eq)
 
 instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
-  type AttStmt AttestationStatementFormatFidoU2F = ASFFidoU2FStatement
+  type AttStmt AttestationStatementFormatFidoU2F = Statement
   asfIdentifier _ = "fido-u2f"
 
-  type AttStmtDecodingError AttestationStatementFormatFidoU2F = ASFFidoU2FDecodingError
+  type AttStmtDecodingError AttestationStatementFormatFidoU2F = DecodingError
 
   asfDecode _ m = do
     sig <- case Map.lookup "sig" m of
       Just (TBytes sig) -> pure sig
-      _ -> Left ASFFidoU2FNoSig
+      _ -> Left NoSig
     -- 2. Check that x5c has exactly one element and let attCert be that element.
     attCert <- case Map.lookup "x5c" m of
       Just (TList [TBytes certBytes]) ->
-        either (Left . ASFFidoU2FDecodingErrorX5C) pure $ X509.decodeSignedCertificate certBytes
-      Just (TList []) -> Left ASFFidoU2FNoX5C
-      Just (TList _) -> Left ASFFidoU2FMultipleX5C
-      _ -> Left ASFFidoU2FNoX5C
-    pure $ ASFFidoU2FStatement sig attCert
+        either (Left . DecodingErrorX5C) pure $ X509.decodeSignedCertificate certBytes
+      Just (TList []) -> Left NoX5C
+      Just (TList _) -> Left MultipleX5C
+      _ -> Left NoX5C
+    pure $ Statement sig attCert
 
-  type AttStmtVerificationError AttestationStatementFormatFidoU2F = ASFFidoU2FVerifyingError
+  type AttStmtVerificationError AttestationStatementFormatFidoU2F = VerifyingError
 
-  asfVerify _ ASFFidoU2FStatement {attCert, sig} AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
+  asfVerify _ Statement {attCert, sig} AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above
     -- and perform CBOR decoding on it to extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -97,7 +97,7 @@ instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
     case certPubKey of
       -- TODO: Will we only get named curves?
       (X509.PubKeyEC X509.PubKeyEC_Named {X509.pubkeyEC_name = SEC_p256r1}) -> pure ()
-      _ -> Left ASFFidoU2FNoECKeyInCertificate
+      _ -> Left NoECKeyInCertificate
 
     -- 3. Extract the claimed rpIdHash from authenticatorData, and the claimed
     -- credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
@@ -118,13 +118,13 @@ instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
     -- NOTE: The decoding already happened in the decoding step
     (x, y) <- case acdCredentialPublicKey of
       ES256PublicKey (ECDSA.PublicKey _ (Point x y)) -> pure (x, y)
-      _ -> Left ASFFidoU2FNoECKeyInAttestedCredentialData
+      _ -> Left NoECKeyInAttestedCredentialData
 
     -- We decode the x and y values in an earlier stage of the process. In order to construct the publicKeyU2F, we have to reencode the value.
     -- TODO: This is suboptimal, and we might consider not decoding, or keeping the undecoded values as an additional field.
     let xb = i2osp x
         yb = i2osp y
-    unless (BS.length xb == 32 && BS.length yb == 32) $ Left ASFFidoU2FUnexpectedCoordinateLength
+    unless (BS.length xb == 32 && BS.length yb == 32) $ Left UnexpectedCoordinateLength
 
     -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
     let publicKeyU2F = BS.singleton 0x04 <> xb <> yb
@@ -140,7 +140,7 @@ instance M.AttestationStatementFormat AttestationStatementFormatFidoU2F where
     case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) certPubKey verificationData sig of
       X509.SignaturePass -> pure ()
       -- TODO: Pass along SignatureFailure to error
-      X509.SignatureFailed _ -> Left ASFFidoU2FInvalidSignature
+      X509.SignatureFailed _ -> Left InvalidSignature
 
     -- 7. Optionally, inspect x5c and consult externally provided knowledge to
     -- determine whether attStmt conveys a Basic or AttCA attestation.
