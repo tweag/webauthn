@@ -9,17 +9,14 @@
 
 module Spec.Types () where
 
-import Crypto.Fido2.Attestation.None (AttestationStatementFormatNone (AttestationStatementFormatNone))
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
+import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified PublicKeySpec ()
 import Test.QuickCheck (Arbitrary (arbitrary), arbitraryBoundedEnum, elements)
 import Test.QuickCheck.Instances.Text ()
 
 instance Arbitrary M.PublicKeyCredentialType where
-  arbitrary = arbitraryBoundedEnum
-
-instance Arbitrary M.COSEAlgorithmIdentifier where
   arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary M.AuthenticatorTransport where
@@ -59,8 +56,11 @@ data ArbitraryAttestationStatementFormat
 instance Arbitrary ArbitraryAttestationStatementFormat where
   arbitrary =
     elements
-      [ ArbitraryAttestationStatementFormat AttestationStatementFormatNone
+      [ ArbitraryAttestationStatementFormat None.Format
       ]
+
+instance Arbitrary M.SignatureCounter where
+  arbitrary = M.SignatureCounter <$> arbitrary
 
 instance SingI t => Arbitrary (M.AuthenticatorData t) where
   arbitrary = M.AuthenticatorData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary

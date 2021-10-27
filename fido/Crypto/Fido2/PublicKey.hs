@@ -11,9 +11,11 @@ module Crypto.Fido2.PublicKey
     PublicKey (..),
     verify,
     decodePublicKey,
+    decodeCOSEAlgorithmIdentifier,
     toAlg,
     toPublicKey,
     toCOSEAlgorithmIdentifier,
+    toECDSAKey,
   )
 where
 
@@ -153,15 +155,15 @@ decodePublicKey = do
       key' <- CBOR.decodeIntCanonical
       when (mapKeyToInt key /= key') $ fail $ "Expected " ++ show key
 
-    -- All CBOR is encoded using
-    -- https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-client-to-authenticator-protocol-v2.0-id-20180227.html#ctap2-canonical-cbor-encoding-form
+-- All CBOR is encoded using
+-- https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-client-to-authenticator-protocol-v2.0-id-20180227.html#ctap2-canonical-cbor-encoding-form
 
-    --
-    -- a signature decoding uniquely belongs to an algorithm identifier. how do we
-    -- encode this correspondence?
-    decodeCOSEAlgorithmIdentifier :: CBOR.Decoder s COSEAlgorithmIdentifier
-    decodeCOSEAlgorithmIdentifier =
-      toAlg =<< CBOR.decodeIntCanonical
+--
+-- a signature decoding uniquely belongs to an algorithm identifier. how do we
+-- encode this correspondence?
+decodeCOSEAlgorithmIdentifier :: CBOR.Decoder s COSEAlgorithmIdentifier
+decodeCOSEAlgorithmIdentifier =
+  toAlg =<< CBOR.decodeIntCanonical
 
 toAlg :: (Eq a, Num a, MonadFail f) => a -> f COSEAlgorithmIdentifier
 toAlg (-7) = pure COSEAlgorithmIdentifierES256
