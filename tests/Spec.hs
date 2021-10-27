@@ -12,10 +12,8 @@ module Main
   )
 where
 
-import qualified AttestationSpec
-import qualified Crypto.Fido2.Assertion as Fido2
-import qualified Crypto.Fido2.Attestation as Fido2
-import qualified Crypto.Fido2.Protocol as Fido2
+import qualified Crypto.Fido2.Operations.Assertion as Fido2
+import qualified Crypto.Fido2.Operations.Attestation as Fido2
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as ByteString
@@ -66,10 +64,6 @@ main = Hspec.hspec $ do
         ignoreDecodedValue
   -- Test public key related tests
   describe "PublicKey" PublicKeySpec.spec
-  -- Attestation related tests
-  describe
-    "Attestation"
-    AttestationSpec.spec
   describe
     "Metadata"
     MetadataSpec.spec
