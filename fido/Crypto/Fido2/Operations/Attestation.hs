@@ -6,15 +6,29 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.Fido2.Operations.Attestation (AttestationError, verifyAttestationResponse) where
+module Crypto.Fido2.Operations.Attestation (AttestationError, verifyAttestationResponse, allSupportedFormats) where
 
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
+import Crypto.Fido2.Model (SupportedAttestationStatementFormats, mkSupportedAttestationStatementFormats)
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, cePublicKey, ceSignCounter, ceUserHandle), failure)
+import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
+import qualified Crypto.Fido2.Operations.Attestation.FidoU2F as FidoU2F
+import qualified Crypto.Fido2.Operations.Attestation.None as None
+import qualified Crypto.Fido2.Operations.Attestation.Packed as Packed
+import Crypto.Fido2.Operations.Common (CredentialEntryRaw (CredentialEntryRaw, cerCredentialId, cerPublicKeyBytes, cerSignCounter, cerUserHandle), failure)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (Validation, liftError)
+
+allSupportedFormats :: SupportedAttestationStatementFormats
+allSupportedFormats =
+  mkSupportedAttestationStatementFormats
+    [ None.format,
+      Packed.format,
+      AndroidKey.format,
+      FidoU2F.format
+    ]
 
 data AttestationError
   = -- | The returned challenge does not match the desired one
@@ -48,12 +62,12 @@ verifyAttestationResponse ::
   M.PublicKeyCredential 'M.Create ->
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
   -- Or () in case of a result.
-  Validation (NonEmpty AttestationError) CredentialEntry
+  Validation (NonEmpty AttestationError) CredentialEntryRaw
 verifyAttestationResponse
   rpOrigin
   rpIdHash
   options@M.PublicKeyCredentialCreationOptions {pkcocChallenge, pkcocPubKeyCredParams}
-  M.PublicKeyCredential
+  credential@M.PublicKeyCredential
     { M.pkcResponse =
         M.AuthenticatorAttestationResponse
           { arcClientData = c,
@@ -142,7 +156,7 @@ verifyAttestationResponse
     -- NOTE: The spec is interpreted to mean that the userVerification option
     -- from authenticatorSelection being set to "required" is what is meant by
     -- whether user verification is required
-    case ( M.ascUserVerification <$> M.pkcocAuthenticatorSelection options,
+    case ( M.ascUserVerification =<< M.pkcocAuthenticatorSelection options,
            M.adfUserVerified (M.adFlags authData)
          ) of
       (Nothing, _) -> pure ()
@@ -205,8 +219,9 @@ verifyAttestationResponse
     -- TODO: This function should result in the trustworthiness of the attestation.
     -- NOTE: Further steps of the procedure are handled by the server side
     pure $
-      CredentialEntry
-        { ceUserHandle = M.pkcueId $ M.pkcocUser options,
-          cePublicKey = acdCredentialPublicKey,
-          ceSignCounter = M.adSignCount authData
+      CredentialEntryRaw
+        { cerUserHandle = M.pkcueId $ M.pkcocUser options,
+          cerCredentialId = M.pkcIdentifier credential,
+          cerPublicKeyBytes = acdCredentialPublicKeyBytes,
+          cerSignCounter = M.adSignCount authData
         }

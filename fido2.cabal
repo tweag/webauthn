@@ -62,6 +62,7 @@ library
     Crypto.Fido2.Operations.Attestation,
     Crypto.Fido2.Operations.Attestation.AndroidKey,
     Crypto.Fido2.Operations.Attestation.None,
+    Crypto.Fido2.Operations.Attestation.Packed,
     Crypto.Fido2.Operations.Attestation.FidoU2F,
     Crypto.Fido2.Operations.Common,
     Crypto.Fido2.EncodingUtils,

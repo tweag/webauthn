@@ -32,6 +32,7 @@ data AssertionError
   | AssertionUserNotVerified
   | AssertionInvalidSignature PublicKey BS.ByteString M.AssertionSignature
   | AssertionPolicyRejected
+  deriving (Show)
 
 data SignatureCounterResult
   = -- | There is no signature counter being used, the database entry doesn't
