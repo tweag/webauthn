@@ -1001,7 +1001,7 @@ data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
     -- [extension identifier](https://www.w3.org/TR/webauthn-2/#extension-identifier) →
     -- [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output) entries produced
     -- by the extension’s [client extension processing](https://www.w3.org/TR/webauthn-2/#client-extension-processing).
-    pkcClientExtensionResults :: AuthenticationExtensionsClientOutputs
+    pkcClientExtensionResults :: Maybe AuthenticationExtensionsClientOutputs
   }
 
 deriving instance Eq (PublicKeyCredential t)

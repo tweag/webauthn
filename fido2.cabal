@@ -100,7 +100,7 @@ executable server
     uuid,
     wai,
     wai-middleware-static,
-    warp,
+    warp
 
 test-suite tests
   import: sanity
@@ -108,7 +108,6 @@ test-suite tests
   hs-source-dirs: tests
   main-is: Spec.hs
   other-modules:
-    AttestationSpec,
     PublicKeySpec,
     MetadataSpec,
     Spec.Types,
