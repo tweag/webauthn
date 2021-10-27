@@ -150,7 +150,7 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
         timeout = encode pkcocTimeout,
         excludeCredentials = Just $ encode pkcocExcludeCredentials,
         authenticatorSelection = encode pkcocAuthenticatorSelection,
-        attestation = Just $ encode pkcocAttestation,
+        attestation = encode pkcocAttestation,
         extensions = encode pkcocExtensions
       }
 

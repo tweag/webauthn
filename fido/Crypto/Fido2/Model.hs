@@ -620,7 +620,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
-      pkcocAttestation :: AttestationConveyancePreference,
+      pkcocAttestation :: Maybe AttestationConveyancePreference,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
       -- This member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, the caller may request that only authenticators with certain capabilities be used to create the credential,

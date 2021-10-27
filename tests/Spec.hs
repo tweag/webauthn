@@ -1,4 +1,4 @@
-{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -12,15 +12,22 @@ module Main
   )
 where
 
+import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
-import qualified Crypto.Fido2.Operations.Assertion as Fido2
+import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
+import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
+import qualified Crypto.Fido2.Operations.Attestation.FidoU2F as FidoU2F
+import qualified Crypto.Fido2.Operations.Attestation.None as None
+import qualified Crypto.Fido2.PublicKey as PublicKey
+import Crypto.Hash (hash)
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
-import Data.Either (isRight)
+import Data.Either (fromRight, isRight)
 import Data.Foldable (for_)
+import Data.Validation (toEither)
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
 import qualified PublicKeySpec
@@ -68,40 +75,37 @@ main = Hspec.hspec $ do
   describe
     "Metadata"
     MetadataSpec.spec
+  describe "RegisterAndLogin" $
+    it "tests whether the fixed register and login responses are matching" $
+      do
+        pkCredential <-
+          JS.decodeCreatedPublicKeyCredential allSupportedAttestationStatementFormats
+            <$> decodeFile
+              "tests/responses/attestation/01-none.json"
+        let registerResult =
+              Fido2.verifyAttestationResponse
+                (M.Origin "http://localhost:8080")
+                (rpIdHash "localhost")
+                defaultPublicKeyCredentialOptions
+                (either (error . show) id pkCredential)
+        toEither registerResult `shouldSatisfy` isRight
 
--- describe "RegisterAndLogin" $
---   it "tests whether the fixed register and login responses are matching" $
---     do
---       Fido2.PublicKeyCredential {response} <-
---         decodeFile
---           @(Fido2.PublicKeyCredential Fido2.AuthenticatorAttestationResponse)
---           "tests/responses/attestation/01-none.json"
---       let Fido2.AuthenticatorAttestationResponse {clientData} = response
---           Fido2.ClientData {challenge} = clientData
---       let registerResult =
---             Fido2.verifyAttestationResponse
---               (Fido2.Origin "http://localhost:8080")
---               (Fido2.RpId "localhost")
---               challenge
---               Fido2.UserVerificationPreferred
---               response
---       registerResult `shouldSatisfy` isRight
---       let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
---       loginReq <-
---         decodeFile
---           @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
---           "tests/responses/assertion/01-none.json"
---       let Fido2.PublicKeyCredential {response} = loginReq
---       let Fido2.AuthenticatorAssertionResponse {clientData} = response
---       let Fido2.ClientData {challenge} = clientData
---       let signInResult =
---             Fido2.verifyAssertionResponse
---               Fido2.RelyingPartyConfig {origin = Fido2.Origin "http://localhost:8080", rpId = Fido2.RpId "localhost"}
---               challenge
---               [Fido2.Credential {id = credentialId, publicKey = credentialPublicKey}]
---               Fido2.UserVerificationPreferred
---               loginReq
---       signInResult `shouldSatisfy` isRight
+-- let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
+-- loginReq <-
+--   decodeFile
+--     @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
+--     "tests/responses/assertion/01-none.json"
+-- let Fido2.PublicKeyCredential {response} = loginReq
+-- let Fido2.AuthenticatorAssertionResponse {clientData} = response
+-- let Fido2.ClientData {challenge} = clientData
+-- let signInResult =
+--       Fido2.verifyAssertionResponse
+--         Fido2.RelyingPartyConfig {origin = Fido2.Origin "http://localhost:8080", rpId = Fido2.RpId "localhost"}
+--         challenge
+--         [Fido2.Credential {id = credentialId, publicKey = credentialPublicKey}]
+--         Fido2.UserVerificationPreferred
+--         loginReq
+-- signInResult `shouldSatisfy` isRight
 -- describe "Packed register" $
 --   it "tests whether the fixed packed register has a valid attestation" $
 --     do
@@ -175,3 +179,42 @@ main = Hspec.hspec $ do
           loginReq
   signInResult `shouldSatisfy` isRight
 -}
+
+defaultPublicKeyCredentialOptions :: M.PublicKeyCredentialOptions 'M.Create
+defaultPublicKeyCredentialOptions =
+  M.PublicKeyCredentialCreationOptions
+    { M.pkcocRp =
+        M.PublicKeyCredentialRpEntity
+          { M.pkcreId = Just "localhost",
+            M.pkcreName = "Tweag I/O Test Server"
+          },
+      M.pkcocUser =
+        M.PublicKeyCredentialUserEntity
+          { M.pkcueId = M.UserHandle "UserId",
+            M.pkcueDisplayName = "UserDisplayName",
+            M.pkcueName = "UserAccountName"
+          },
+      M.pkcocChallenge = M.Challenge "This is the Challenge",
+      M.pkcocPubKeyCredParams =
+        [ M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
+            }
+        ],
+      M.pkcocTimeout = Nothing,
+      M.pkcocExcludeCredentials = [],
+      M.pkcocAuthenticatorSelection = Nothing,
+      M.pkcocAttestation = Nothing,
+      M.pkcocExtensions = Nothing
+    }
+
+allSupportedAttestationStatementFormats :: M.SupportedAttestationStatementFormats
+allSupportedAttestationStatementFormats =
+  M.mkSupportedAttestationStatementFormats
+    [ M.SomeAttestationStatementFormat None.Format,
+      M.SomeAttestationStatementFormat AndroidKey.Format,
+      M.SomeAttestationStatementFormat FidoU2F.Format
+    ]
+
+rpIdHash :: ByteString.ByteString -> M.RpIdHash
+rpIdHash = M.RpIdHash . hash

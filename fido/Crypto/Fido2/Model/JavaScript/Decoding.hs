@@ -45,7 +45,7 @@ import Data.Bifunctor (first, second)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base64 as Base64
+import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import Data.Coerce (Coercible, coerce)
 import Data.HashMap.Strict (HashMap, (!?))

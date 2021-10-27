@@ -14,6 +14,7 @@ data CredentialEntry = CredentialEntry
     cePublicKey :: PublicKey,
     ceSignCounter :: M.SignatureCounter
   }
+  deriving (Show)
 
 failure :: e -> Validation (NonEmpty e) a
 failure = Failure . pure
