@@ -133,11 +133,11 @@ instance Encode M.AuthenticatorSelectionCriteria where
   encode M.AuthenticatorSelectionCriteria {..} =
     JS.AuthenticatorSelectionCriteria
       { authenticatorAttachment = encode ascAuthenticatorAttachment,
-        residentKey = Just $ encode ascResidentKey,
+        residentKey = encode ascResidentKey,
         -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
         -- Relying Parties SHOULD set it to true if, and only if, residentKey is set to required.
-        requireResidentKey = Just (ascResidentKey == M.ResidentKeyRequirementRequired),
-        userVerification = Just $ encode ascUserVerification
+        requireResidentKey = Just (ascResidentKey == Just M.ResidentKeyRequirementRequired),
+        userVerification = encode ascUserVerification
       }
 
 instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
@@ -148,7 +148,7 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
         challenge = encode pkcocChallenge,
         pubKeyCredParams = encode pkcocPubKeyCredParams,
         timeout = encode pkcocTimeout,
-        excludeCredentials = Just $ encode pkcocExcludeCredentials,
+        excludeCredentials = encode pkcocExcludeCredentials,
         authenticatorSelection = encode pkcocAuthenticatorSelection,
         attestation = encode pkcocAttestation,
         extensions = encode pkcocExtensions
@@ -162,7 +162,7 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
         rpId = encode pkcogRpId,
         allowCredentials = encode pkcogAllowCredentials,
         userVerification = encode pkcogUserVerification,
-        extensions = Just $ encode pkcogExtensions
+        extensions = encode pkcogExtensions
       }
 
 -- | Encodes a 'JS.PublicKeyCredentialCreationOptions', corresponding to the

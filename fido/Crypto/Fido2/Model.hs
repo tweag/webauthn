@@ -33,6 +33,7 @@ module Crypto.Fido2.Model
     ClientDataHash (..),
     Origin (..),
     SignatureCounter (..),
+    PublicKeyBytes (..),
 
     -- * Extensions (unimplemented)
     AuthenticationExtensionsClientInputs (..),
@@ -84,6 +85,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word32)
 import qualified Data.X509 as X509
+import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
 import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-publickeycredentialtype)
@@ -344,6 +346,12 @@ newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
 newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
   deriving (Eq, Show)
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
+-- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
+-- with a maximum size of 64 bytes, and is not meant to be displayed to the user.
+instance Uniform UserHandle where
+  uniformM g = UserHandle <$> uniformByteStringM 64 g
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) name for the user account,
 -- intended only for display. For example, "Alex Müller" or "田中倫". The Relying Party SHOULD
@@ -387,6 +395,12 @@ newtype CredentialId = CredentialId {unCredentialId :: BS.ByteString}
 -- security consideration.
 newtype Challenge = Challenge {unChallenge :: BS.ByteString}
   deriving (Eq, Show)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
+-- In order to prevent replay attacks, the challenges MUST contain enough entropy
+-- to make guessing them infeasible. Challenges SHOULD therefore be at least 16 bytes long.
+instance Uniform Challenge where
+  uniformM g = Challenge <$> uniformByteStringM 16 g
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
 -- This member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
@@ -437,6 +451,10 @@ newtype Origin = Origin {unOrigin :: Text}
 newtype SignatureCounter = SignatureCounter {unSignatureCounter :: Word32}
   deriving (Eq, Show)
   deriving newtype (Num, Ord)
+
+-- | The encoding of a 'PublicKey'
+newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
@@ -555,7 +573,7 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- Specifies the extent to which the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- desires to create a [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential).
     -- For historical reasons the naming retains the deprecated “resident” terminology.
-    ascResidentKey :: ResidentKeyRequirement,
+    ascResidentKey :: Maybe ResidentKeyRequirement,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-userverification)
     -- This member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
     -- requirements regarding [user verification](https://www.w3.org/TR/webauthn-2/#user-verification)
@@ -564,7 +582,7 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- The value SHOULD be a member of 'UserVerificationRequirement' but
     -- [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values,
     -- treating an unknown value as if the [member does not exist](https://infra.spec.whatwg.org/#map-exists).
-    ascUserVerification :: UserVerificationRequirement
+    ascUserVerification :: Maybe UserVerificationRequirement
   }
   deriving (Eq, Show)
 
@@ -612,7 +630,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
       -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
-      pkcocExcludeCredentials :: [PublicKeyCredentialDescriptor],
+      pkcocExcludeCredentials :: Maybe [PublicKeyCredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to select the appropriate authenticators to participate in the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
@@ -665,7 +683,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
-      pkcogExtensions :: AuthenticationExtensionsClientInputs
+      pkcogExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     PublicKeyCredentialOptions 'Get
 
@@ -711,7 +729,9 @@ data AttestedCredentialData (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialid)
       acdCredentialId :: CredentialId,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
-      acdCredentialPublicKey :: PublicKey
+      acdCredentialPublicKey :: PublicKey,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
+      acdCredentialPublicKeyBytes :: PublicKeyBytes
     } ->
     AttestedCredentialData 'Create
   NoAttestedCredentialData ::
@@ -834,6 +854,8 @@ data SomeAttestationStatementFormat
 newtype SupportedAttestationStatementFormats
   = -- HashMap invariant: asfIdentifier (hm ! k) == k
     SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
+
+-- TODO: Make SupportedAttestationStatementFormats a Monoid and Semigroup
 
 -- | Creates a valid 'SupportedAttestationStatementFormats' from a list of 'SomeAttestationStatementFormat's.
 mkSupportedAttestationStatementFormats :: [SomeAttestationStatementFormat] -> SupportedAttestationStatementFormats

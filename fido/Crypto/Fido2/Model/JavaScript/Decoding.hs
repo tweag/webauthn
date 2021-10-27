@@ -100,8 +100,10 @@ runBinary get bytes = case Binary.runGetOrFail get bytes of
   Right (rest, _offset, result) -> Right (rest, result)
 
 -- | A 'PartialBinaryDecoder' for a CBOR encoding specified using the given Decoder
-runCBOR :: (forall s. CBOR.Decoder s a) -> PartialBinaryDecoder a
-runCBOR decoder bytes = first DecodingErrorCBOR $ CBOR.deserialiseFromBytes decoder bytes
+runCBOR :: (forall s. CBOR.Decoder s a) -> PartialBinaryDecoder (LBS.ByteString, a)
+runCBOR decoder bytes = case CBOR.deserialiseFromBytesWithSize decoder bytes of
+  Left err -> Left $ DecodingErrorCBOR err
+  Right (rest, consumed, a) -> return (rest, (LBS.take (fromIntegral consumed) bytes, a))
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 decodeAuthenticatorData ::
@@ -170,8 +172,9 @@ decodeAttestedCredentialData bytes = do
       <$> runBinary (Binary.getByteString (fromIntegral credentialLength)) bytes
 
   -- https://www.w3.org/TR/webauthn-2/#credentialpublickey
-  (bytes, acdCredentialPublicKey) <-
+  (bytes, (usedBytes, acdCredentialPublicKey)) <-
     runCBOR decodePublicKey bytes
+  let acdCredentialPublicKeyBytes = M.PublicKeyBytes $ LBS.toStrict usedBytes
 
   pure (bytes, M.AttestedCredentialData {..})
 
@@ -179,7 +182,7 @@ decodeAttestedCredentialData bytes = do
 decodeExtensions :: PartialBinaryDecoder M.AuthenticatorExtensionOutputs
 decodeExtensions bytes = do
   -- TODO
-  (bytes, _extensions :: HashMap Text CBOR.Term) <- runCBOR CBOR.decode bytes
+  (bytes, (_, _extensions :: HashMap Text CBOR.Term)) <- runCBOR CBOR.decode bytes
   pure (bytes, M.AuthenticatorExtensionOutputs {})
 
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be

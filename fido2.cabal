@@ -44,6 +44,7 @@ library
     unordered-containers,
     x509,
     x509-validation,
+    random,
     scientific,
     singletons,
     vector,
