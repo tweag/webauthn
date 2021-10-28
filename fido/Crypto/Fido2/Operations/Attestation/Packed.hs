@@ -33,11 +33,14 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 
 data Format = Format
-  deriving (Show)
+
+instance Show Format where
+  show = Text.unpack . M.asfIdentifier
 
 -- packedStmtFormat (https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation)
 data Statement = Statement

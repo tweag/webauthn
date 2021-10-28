@@ -30,11 +30,14 @@ import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.HashMap.Strict as Map
+import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 
 data Format = Format
-  deriving (Show)
+
+instance Show Format where
+  show = Text.unpack . M.asfIdentifier
 
 data DecodingError
   = -- | No Signature field was present

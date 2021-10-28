@@ -31,6 +31,7 @@ import Data.Maybe (isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.X509 (Extension (extDecode, extEncode, extHasNestedASN1, extOID))
 import qualified Data.X509 as X509
 
@@ -121,7 +122,9 @@ instance Extension ExtAttestation where
           else pure set
 
 data Format = Format
-  deriving (Show)
+
+instance Show Format where
+  show = Text.unpack . M.asfIdentifier
 
 -- androidStmtFormat (https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation)
 data Statement = Statement

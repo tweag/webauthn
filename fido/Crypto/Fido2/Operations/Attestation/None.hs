@@ -7,10 +7,13 @@ module Crypto.Fido2.Operations.Attestation.None
 where
 
 import qualified Crypto.Fido2.Model as M
+import qualified Data.Text as Text
 import Data.Void (Void)
 
 data Format = Format
-  deriving (Show)
+
+instance Show Format where
+  show = Text.unpack . M.asfIdentifier
 
 instance M.AttestationStatementFormat Format where
   type AttStmt Format = ()
