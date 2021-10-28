@@ -10,7 +10,7 @@ module Crypto.Fido2.Operations.Attestation (AttestationError, verifyAttestationR
 
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
-import Crypto.Fido2.Model (SupportedAttestationStatementFormats, mkSupportedAttestationStatementFormats)
+import Crypto.Fido2.Model (SupportedAttestationStatementFormats, sasfSingleton)
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
 import qualified Crypto.Fido2.Operations.Attestation.FidoU2F as FidoU2F
@@ -23,7 +23,8 @@ import Data.Validation (Validation, liftError)
 
 allSupportedFormats :: SupportedAttestationStatementFormats
 allSupportedFormats =
-  mkSupportedAttestationStatementFormats
+  foldMap
+    sasfSingleton
     [ None.format,
       Packed.format,
       AndroidKey.format,

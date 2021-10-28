@@ -11,7 +11,11 @@ module Spec.Types () where
 
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
+import Crypto.Fido2.Operations.Attestation (allSupportedFormats)
+import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
+import qualified Crypto.Fido2.Operations.Attestation.FidoU2F as FidoU2F
 import qualified Crypto.Fido2.Operations.Attestation.None as None
+import qualified Crypto.Fido2.Operations.Attestation.Packed as Packed
 import qualified PublicKeySpec ()
 import Test.QuickCheck (Arbitrary (arbitrary), arbitraryBoundedEnum, elements)
 import Test.QuickCheck.Instances.Text ()
@@ -57,6 +61,9 @@ instance Arbitrary ArbitraryAttestationStatementFormat where
   arbitrary =
     elements
       [ ArbitraryAttestationStatementFormat None.Format
+      --ArbitraryAttestationStatementFormat Packed.Format,
+      --ArbitraryAttestationStatementFormat FidoU2F.Format,
+      --ArbitraryAttestationStatementFormat AndroidKey.Format
       ]
 
 instance Arbitrary M.SignatureCounter where

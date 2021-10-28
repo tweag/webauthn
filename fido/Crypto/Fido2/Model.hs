@@ -54,10 +54,11 @@ module Crypto.Fido2.Model
     AuthenticatorResponse (..),
     AttestationStatementFormat (..),
     SomeAttestationStatementFormat (..),
-    SupportedAttestationStatementFormats (..),
+    SupportedAttestationStatementFormats,
 
     -- * Utility functions
-    mkSupportedAttestationStatementFormats,
+    sasfSingleton,
+    sasfLookup,
 
     -- * Top-level types
     PublicKeyCredentialOptions (..),
@@ -75,14 +76,13 @@ import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import qualified Data.ByteString as BS
-import Data.HashMap.Strict (HashMap)
+import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Data.Word (Word32)
 import qualified Data.X509 as X509
 import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
@@ -850,29 +850,24 @@ data SomeAttestationStatementFormat
 
 -- | A type representing the set of supported attestation statement formats.
 -- The constructor is intentionally not exported, use
--- 'mkSupportedAttestationStatementFormats' instead
+-- 'sasfSingleton' instead to construct it and
+-- 'sasfLookup' to look up formats. This types 'Semigroup'
+-- instance can be used to combine multiple formats
 newtype SupportedAttestationStatementFormats
   = -- HashMap invariant: asfIdentifier (hm ! k) == k
     SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
+  deriving newtype (Semigroup, Monoid)
 
--- TODO: Make SupportedAttestationStatementFormats a Monoid and Semigroup
+sasfSingleton :: SomeAttestationStatementFormat -> SupportedAttestationStatementFormats
+sasfSingleton someFormat@(SomeAttestationStatementFormat format) =
+  SupportedAttestationStatementFormats $ HashMap.singleton (asfIdentifier format) someFormat
 
--- | Creates a valid 'SupportedAttestationStatementFormats' from a list of 'SomeAttestationStatementFormat's.
-mkSupportedAttestationStatementFormats :: [SomeAttestationStatementFormat] -> SupportedAttestationStatementFormats
-mkSupportedAttestationStatementFormats formats = SupportedAttestationStatementFormats asfMap
-  where
-    asfMap = HashMap.fromListWithKey merge (map withIdentifier formats)
-    merge ident _ _ =
-      error $
-        "mkSupportedAttestationStatementFormats: Duplicate attestation statement format identifier \""
-          <> Text.unpack ident
-          <> "\""
-    withIdentifier someFormat@(SomeAttestationStatementFormat format) =
-      (asfIdentifier format, someFormat)
+sasfLookup :: Text -> SupportedAttestationStatementFormats -> Maybe SomeAttestationStatementFormat
+sasfLookup id (SupportedAttestationStatementFormats sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
 data AttestationObject = forall a.
-  (AttestationStatementFormat a) =>
+  AttestationStatementFormat a =>
   AttestationObject
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     -- The authenticator data structure encodes contextual bindings made by the

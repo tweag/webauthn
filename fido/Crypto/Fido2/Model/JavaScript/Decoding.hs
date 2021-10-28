@@ -32,7 +32,8 @@ import Control.Monad (forM, unless)
 import Crypto.Fido2.Model
   ( AttestationStatementFormat (asfDecode),
     SomeAttestationStatementFormat (SomeAttestationStatementFormat),
-    SupportedAttestationStatementFormats (SupportedAttestationStatementFormats),
+    SupportedAttestationStatementFormats,
+    sasfLookup,
   )
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
@@ -279,13 +280,13 @@ instance Decode (M.PublicKeyCredential 'M.Get) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated M.AttestationObject where
-  decodeCreated (SupportedAttestationStatementFormats asfMap) (JS.URLEncodedBase64 bytes) = do
+  decodeCreated supportedFormats (JS.URLEncodedBase64 bytes) = do
     map :: HashMap Text CBOR.Term <- first CreatedDecodingErrorCBOR $ CBOR.deserialiseOrFail $ LBS.fromStrict bytes
     case (map !? "authData", map !? "fmt", map !? "attStmt") of
       (Just (CBOR.TBytes authDataBytes), Just (CBOR.TString fmt), Just (CBOR.TMap attStmtPairs)) -> do
         aoAuthData <- first CreatedDecodingErrorCommon $ decodeAuthenticatorData authDataBytes
 
-        case asfMap !? fmt of
+        case sasfLookup fmt supportedFormats of
           Nothing -> Left $ CreatedDecodingErrorUnknownAttestationStatementFormat fmt
           Just (SomeAttestationStatementFormat aoFmt) -> do
             attStmtMap <-
