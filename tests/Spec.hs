@@ -19,9 +19,6 @@ import qualified Crypto.Fido2.Model.JavaScript as JS
 import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
 import qualified Crypto.Fido2.Operations.Assertion as Fido2
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
-import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
-import qualified Crypto.Fido2.Operations.Attestation.FidoU2F as FidoU2F
-import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.Operations.Common as Common
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
@@ -83,7 +80,7 @@ main = Hspec.hspec $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
-          JS.decodeCreatedPublicKeyCredential allSupportedAttestationStatementFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/01-none.json"
         let registerResult = do
@@ -91,20 +88,20 @@ main = Hspec.hspec $ do
                 Fido2.verifyAttestationResponse
                   (M.Origin "http://localhost:8080")
                   (rpIdHash "localhost")
-                  defaultPublicKeyCredentialCreationOptions
-                  (either (error . show) id pkCredential)
+                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  pkCredential
         registerResult `shouldSatisfy` isRight
         let (Right raw) = registerResult
             credentialEntry' = Common.decodeCredentialEntry raw
         credentialEntry' `shouldSatisfy` isRight
         let Right credentialEntry = credentialEntry'
-        let Common.CredentialEntry {Common.ceCredentialId = ceCredentialId} = credentialEntry
+        let Common.CredentialEntry {Common.ceCredentialId} = credentialEntry
         loginReq <-
-          JS.decodeRequestedPublicKeyCredential
+          either (error . show) id . JS.decodeRequestedPublicKeyCredential
             <$> decodeFile
               @(JS.PublicKeyCredential JS.AuthenticatorAssertionResponse)
               "tests/responses/assertion/01-none.json"
-        let Right M.PublicKeyCredential {M.pkcResponse = pkcResponse} = loginReq
+        let M.PublicKeyCredential {M.pkcResponse = pkcResponse} = loginReq
             signInResult =
               toEither $
                 Fido2.verifyAssertionResponse
@@ -112,7 +109,7 @@ main = Hspec.hspec $ do
                   (rpIdHash "localhost")
                   (Just (M.UserHandle "UserId"))
                   credentialEntry
-                  defaultPublicKeyCredentialRequestOptions
+                  (defaultPublicKeyCredentialRequestOptions loginReq)
                   M.PublicKeyCredential
                     { pkcIdentifier = ceCredentialId,
                       pkcResponse = pkcResponse,
@@ -123,16 +120,17 @@ main = Hspec.hspec $ do
     it "tests whether the fixed packed register has a valid attestation" $
       do
         pkCredential <-
-          JS.decodeCreatedPublicKeyCredential allSupportedAttestationStatementFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/02-packed.json"
         let registerResult = do
               toEither $
                 Fido2.verifyAttestationResponse
-                  (M.Origin "http://localhost:8080")
+                  (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
-                  defaultPublicKeyCredentialCreationOptions
-                  (either (error . show) id pkCredential)
+                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  pkCredential
+        registerResult `shouldSatisfy` isRight
         registerResult `shouldSatisfy` isRight
         let (Right raw) = registerResult
             credentialEntry' = Common.decodeCredentialEntry raw
@@ -141,16 +139,16 @@ main = Hspec.hspec $ do
     it "tests whether the fixed android key register has a valid attestation" $
       do
         pkCredential <-
-          JS.decodeCreatedPublicKeyCredential allSupportedAttestationStatementFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/03-android-key.json"
         let registerResult = do
               toEither $
                 Fido2.verifyAttestationResponse
-                  (M.Origin "http://localhost:8080")
+                  (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
-                  defaultPublicKeyCredentialCreationOptions
-                  (either (error . show) id pkCredential)
+                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  pkCredential
         registerResult `shouldSatisfy` isRight
         let (Right raw) = registerResult
             credentialEntry' = Common.decodeCredentialEntry raw
@@ -159,16 +157,16 @@ main = Hspec.hspec $ do
     it "tests whether the fixed fido-u2f register has a valid attestation" $
       do
         pkCredential <-
-          JS.decodeCreatedPublicKeyCredential allSupportedAttestationStatementFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/04-u2f.json"
         let registerResult = do
               toEither $
                 Fido2.verifyAttestationResponse
-                  (M.Origin "http://localhost:8080")
+                  (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
-                  defaultPublicKeyCredentialCreationOptions
-                  (either (error . show) id pkCredential)
+                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  pkCredential
         registerResult `shouldSatisfy` isRight
         let (Right raw) = registerResult
             credentialEntry' = Common.decodeCredentialEntry raw
@@ -193,8 +191,8 @@ main = Hspec.hspec $ do
   signInResult `shouldSatisfy` isRight
 -}
 
-defaultPublicKeyCredentialCreationOptions :: M.PublicKeyCredentialOptions 'M.Create
-defaultPublicKeyCredentialCreationOptions =
+defaultPublicKeyCredentialCreationOptions :: M.PublicKeyCredential 'M.Create -> M.PublicKeyCredentialOptions 'M.Create
+defaultPublicKeyCredentialCreationOptions pkc =
   M.PublicKeyCredentialCreationOptions
     { M.pkcocRp =
         M.PublicKeyCredentialRpEntity
@@ -207,7 +205,7 @@ defaultPublicKeyCredentialCreationOptions =
             M.pkcueDisplayName = "UserDisplayName",
             M.pkcueName = "UserAccountName"
           },
-      M.pkcocChallenge = M.Challenge "This is the Challenge",
+      M.pkcocChallenge = M.ccdChallenge . M.arcClientData $ M.pkcResponse pkc,
       M.pkcocPubKeyCredParams =
         [ M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
@@ -221,24 +219,16 @@ defaultPublicKeyCredentialCreationOptions =
       M.pkcocExtensions = Nothing
     }
 
-defaultPublicKeyCredentialRequestOptions :: M.PublicKeyCredentialOptions 'M.Get
-defaultPublicKeyCredentialRequestOptions =
+defaultPublicKeyCredentialRequestOptions :: M.PublicKeyCredential 'M.Get -> M.PublicKeyCredentialOptions 'M.Get
+defaultPublicKeyCredentialRequestOptions pkc =
   M.PublicKeyCredentialRequestOptions
-    { M.pkcogChallenge = M.Challenge "This is the Challenge",
+    { M.pkcogChallenge = M.ccdChallenge . M.argClientData $ M.pkcResponse pkc,
       M.pkcogTimeout = Nothing,
       M.pkcogRpId = Just "localhost",
       M.pkcogAllowCredentials = Nothing,
       M.pkcogUserVerification = Nothing,
       M.pkcogExtensions = Nothing
     }
-
-allSupportedAttestationStatementFormats :: M.SupportedAttestationStatementFormats
-allSupportedAttestationStatementFormats =
-  M.mkSupportedAttestationStatementFormats
-    [ M.SomeAttestationStatementFormat None.Format,
-      M.SomeAttestationStatementFormat AndroidKey.Format,
-      M.SomeAttestationStatementFormat FidoU2F.Format
-    ]
 
 rpIdHash :: ByteString.ByteString -> M.RpIdHash
 rpIdHash = M.RpIdHash . hash
