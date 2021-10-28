@@ -19,6 +19,7 @@ where
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
+import qualified Crypto.Fido2.PublicKey as PublicKey
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Map as Map
 
@@ -57,11 +58,11 @@ instance Encode M.AuthenticationExtensionsClientInputs where
   encode M.AuthenticationExtensionsClientInputs {} = Map.empty
 
 -- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
-instance Encode M.COSEAlgorithmIdentifier where
-  encode M.COSEAlgorithmIdentifierES512 = -36
-  encode M.COSEAlgorithmIdentifierES384 = -35
-  encode M.COSEAlgorithmIdentifierEdDSA = -8
-  encode M.COSEAlgorithmIdentifierES256 = -7
+instance Encode PublicKey.COSEAlgorithmIdentifier where
+  encode PublicKey.COSEAlgorithmIdentifierES512 = -36
+  encode PublicKey.COSEAlgorithmIdentifierES384 = -35
+  encode PublicKey.COSEAlgorithmIdentifierEdDSA = -8
+  encode PublicKey.COSEAlgorithmIdentifierES256 = -7
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
 instance Encode M.PublicKeyCredentialType where
@@ -132,11 +133,11 @@ instance Encode M.AuthenticatorSelectionCriteria where
   encode M.AuthenticatorSelectionCriteria {..} =
     JS.AuthenticatorSelectionCriteria
       { authenticatorAttachment = encode ascAuthenticatorAttachment,
-        residentKey = Just $ encode ascResidentKey,
+        residentKey = encode ascResidentKey,
         -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
         -- Relying Parties SHOULD set it to true if, and only if, residentKey is set to required.
-        requireResidentKey = Just (ascResidentKey == M.ResidentKeyRequirementRequired),
-        userVerification = Just $ encode ascUserVerification
+        requireResidentKey = Just (ascResidentKey == Just M.ResidentKeyRequirementRequired),
+        userVerification = encode ascUserVerification
       }
 
 instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
@@ -147,9 +148,9 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
         challenge = encode pkcocChallenge,
         pubKeyCredParams = encode pkcocPubKeyCredParams,
         timeout = encode pkcocTimeout,
-        excludeCredentials = Just $ encode pkcocExcludeCredentials,
+        excludeCredentials = encode pkcocExcludeCredentials,
         authenticatorSelection = encode pkcocAuthenticatorSelection,
-        attestation = Just $ encode pkcocAttestation,
+        attestation = encode pkcocAttestation,
         extensions = encode pkcocExtensions
       }
 
@@ -159,9 +160,9 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
       { challenge = encode pkcogChallenge,
         timeout = encode pkcogTimeout,
         rpId = encode pkcogRpId,
-        allowCredentials = Just $ encode pkcogAllowCredentials,
-        userVerification = Just $ encode pkcogUserVerification,
-        extensions = Just $ encode pkcogExtensions
+        allowCredentials = encode pkcogAllowCredentials,
+        userVerification = encode pkcogUserVerification,
+        extensions = encode pkcogExtensions
       }
 
 -- | Encodes a 'JS.PublicKeyCredentialCreationOptions', corresponding to the

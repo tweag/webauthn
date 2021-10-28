@@ -1,6 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
-
 module Database
   ( Connection,
     Transaction (), -- Constructor deliberately not exposed.
@@ -9,24 +6,13 @@ module Database
     withTransaction,
     connect,
     getUserByCredentialId,
-    getCredentialIdsByUserId,
     getCredentialsByUserId,
     initialize,
   )
 where
 
-import qualified Codec.CBOR.Read as CBOR
-import qualified Codec.CBOR.Write as CBOR
-import qualified Codec.Serialise as Serialise
-import qualified Crypto.Fido2.Assertion as Assertion
-import Crypto.Fido2.Protocol
-  ( CredentialId (CredentialId),
-    URLEncodedBase64 (URLEncodedBase64),
-    UserId (UserId),
-  )
-import qualified Crypto.Fido2.Protocol as Fido2
-import qualified Crypto.Fido2.PublicKey as Fido2
-import qualified Data.Maybe as Maybe
+import qualified Crypto.Fido2.Model as M
+import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import qualified Database.SQLite.Simple as Sqlite
 
 type Connection = Sqlite.Connection
@@ -57,6 +43,7 @@ initialize conn = do
     \ ( id               blob    primary key                                   \
     \ , user_id          blob    not null                                      \
     \ , public_key       blob    not null                                      \
+    \ , sign_counter     integer not null                                      \
     \ , created          text    not null                                      \
     \                    default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))       \
     \ , foreign key (user_id) references users (id)                            \
@@ -82,13 +69,13 @@ withTransaction conn action = Sqlite.withTransaction conn (action (Transaction c
 
 addUser ::
   Transaction ->
-  Fido2.PublicKeyCredentialUserEntity ->
+  M.PublicKeyCredentialUserEntity ->
   IO ()
 addUser (Transaction conn) user =
-  let Fido2.PublicKeyCredentialUserEntity
-        { id = (UserId (URLEncodedBase64 userId)),
-          name = username,
-          displayName = displayName
+  let M.PublicKeyCredentialUserEntity
+        { M.pkcueId = M.UserHandle userId,
+          M.pkcueName = M.UserAccountName username,
+          M.pkcueDisplayName = M.UserAccountDisplayName displayName
         } = user
    in Sqlite.execute
         conn
@@ -97,30 +84,33 @@ addUser (Transaction conn) user =
 
 addAttestedCredentialData ::
   Transaction ->
-  Fido2.UserId ->
-  Fido2.CredentialId ->
-  Fido2.PublicKey ->
+  CredentialEntry ->
   IO ()
 addAttestedCredentialData
   (Transaction conn)
-  (UserId (URLEncodedBase64 userId))
-  (CredentialId (URLEncodedBase64 credentialId))
-  publicKey = do
-    Sqlite.execute
-      conn
-      " insert into attested_credential_data                        \
-      \ (id, user_id, public_key)                                   \
-      \ values                                                      \
-      \ (?, ?, ?);                                                  "
-      ( credentialId,
-        userId,
-        CBOR.toStrictByteString (Serialise.encode publicKey)
-      )
+  CredentialEntry
+    { ceUserHandle = M.UserHandle userId,
+      ceCredentialId = M.CredentialId credentialId,
+      cePublicKeyBytes = M.PublicKeyBytes pubKeyBytes,
+      ceSignCounter = M.SignatureCounter signCounter
+    } =
+    do
+      Sqlite.execute
+        conn
+        " insert into attested_credential_data                        \
+        \ (id, user_id, public_key, sign_counter)                     \
+        \ values                                                      \
+        \ (?, ?, ?, ?);                                               "
+        ( credentialId,
+          userId,
+          pubKeyBytes,
+          signCounter
+        )
 
-getUserByCredentialId :: Transaction -> Fido2.CredentialId -> IO (Maybe Fido2.UserId)
+getUserByCredentialId :: Transaction -> M.CredentialId -> IO (Maybe M.UserHandle)
 getUserByCredentialId
   (Transaction conn)
-  (CredentialId (URLEncodedBase64 credentialId)) = do
+  (M.CredentialId credentialId) = do
     result <-
       Sqlite.query
         conn
@@ -128,35 +118,22 @@ getUserByCredentialId
         [credentialId]
     case result of
       [] -> pure Nothing
-      [Sqlite.Only userId] -> pure $ Just $ UserId $ URLEncodedBase64 $ userId
+      [Sqlite.Only userId] -> pure $ Just $ M.UserHandle userId
       _ -> fail "Unreachable: attested_credential_data.id has a unique index."
 
-getCredentialsByUserId :: Transaction -> Fido2.UserId -> IO [Assertion.Credential]
-getCredentialsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
-  credentialRows <-
+getCredentialsByUserId :: Transaction -> M.UserHandle -> IO [CredentialEntry]
+getCredentialsByUserId (Transaction conn) (M.UserHandle userId) = do
+  entries <-
     Sqlite.query
       conn
-      "select id, public_key from attested_credential_data where user_id = ?;"
+      "select user_id, id, public_key, sign_counter from attested_credential_data where user_id = ?;"
       [userId]
-  pure $ Maybe.catMaybes $ fmap (mkCredential) $ credentialRows
+  pure $ map toCredentialEntry entries
   where
-    mkCredential (id, publicKey) = do
-      -- TODO(#22): Convert to the compressed representation so we don't need
-      --  the Maybe.
-      case snd <$> CBOR.deserialiseFromBytes Serialise.decode publicKey of
-        Left _ -> Nothing
-        Right publicKey ->
-          pure $
-            Assertion.Credential
-              { id = CredentialId $ URLEncodedBase64 id,
-                publicKey = publicKey
-              }
-
-getCredentialIdsByUserId :: Transaction -> Fido2.UserId -> IO [Fido2.CredentialId]
-getCredentialIdsByUserId (Transaction conn) (UserId (URLEncodedBase64 userId)) = do
-  credentialIds <-
-    Sqlite.query
-      conn
-      "select id from attested_credential_data where user_id = ?;"
-      [userId]
-  pure $ fmap (CredentialId . URLEncodedBase64 . Sqlite.fromOnly) $ credentialIds
+    toCredentialEntry (userHandle, credentialId, publicKey, signCounter) =
+      CredentialEntry
+        { ceUserHandle = M.UserHandle userHandle,
+          ceCredentialId = M.CredentialId credentialId,
+          cePublicKeyBytes = M.PublicKeyBytes publicKey,
+          ceSignCounter = M.SignatureCounter signCounter
+        }

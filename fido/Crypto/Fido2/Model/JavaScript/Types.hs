@@ -9,6 +9,7 @@ where
 
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
+import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Data.Aeson as Aeson
 import Data.Map (Map)
 import Data.Text (Text)
@@ -51,8 +52,8 @@ instance Convert M.Challenge where
 instance Convert M.PublicKeyCredentialType where
   type JS M.PublicKeyCredentialType = JS.DOMString
 
-instance Convert M.COSEAlgorithmIdentifier where
-  type JS M.COSEAlgorithmIdentifier = JS.COSEAlgorithmIdentifier
+instance Convert PublicKey.COSEAlgorithmIdentifier where
+  type JS PublicKey.COSEAlgorithmIdentifier = JS.COSEAlgorithmIdentifier
 
 instance Convert M.PublicKeyCredentialParameters where
   type JS M.PublicKeyCredentialParameters = JS.PublicKeyCredentialParameters

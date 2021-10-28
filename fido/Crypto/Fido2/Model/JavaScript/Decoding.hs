@@ -1,12 +1,12 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
 
 -- | This module handles the decoding of structures returned by the
 -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
@@ -14,13 +14,7 @@
 -- methods while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
 module Crypto.Fido2.Model.JavaScript.Decoding
-  ( -- * Decoding attestation statement formats
-    DecodableAttestationStatementFormat (..),
-    SomeAttestationStatementFormat (..),
-    SupportedAttestationStatementFormats,
-    mkSupportedAttestationStatementFormats,
-
-    -- * Decoding PublicKeyCredential results
+  ( -- * Decoding PublicKeyCredential results
     DecodingError (..),
     CreatedDecodingError (..),
     decodeCreatedPublicKeyCredential,
@@ -28,82 +22,40 @@ module Crypto.Fido2.Model.JavaScript.Decoding
   )
 where
 
+import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.Serialise as CBOR
 import Control.Exception (Exception, SomeException (SomeException))
 import Control.Monad (forM, unless)
+import Crypto.Fido2.Model
+  ( AttestationStatementFormat (asfDecode),
+    SomeAttestationStatementFormat (SomeAttestationStatementFormat),
+    SupportedAttestationStatementFormats,
+    sasfLookup,
+  )
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
+import Crypto.Fido2.PublicKey (decodePublicKey)
 import qualified Crypto.Hash as Hash
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first, second)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base64 as Base64
+import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Lazy as LBS
 import Data.Coerce (Coercible, coerce)
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
-import Data.Kind (Type)
 import Data.Maybe (fromJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Deriving.Aeson as Aeson
 import GHC.Generics (Generic)
-
--- | Extends the 'M.AttestationStatementFormat' class with the ability for the
--- attestation statement to be decoded from a CBOR map.
-class
-  ( M.AttestationStatementFormat a,
-    Exception (AttStmtDecodingError a)
-  ) =>
-  DecodableAttestationStatementFormat a
-  where
-  -- | The type of decoding errors that can occur when decoding this
-  -- attestation statement using 'asfDecode'
-  type AttStmtDecodingError a :: Type
-
-  -- | A decoder for the attestation statement [syntax](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
-  -- The @attStmt@ CBOR map is given as an input. See
-  -- [Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
-  asfDecode ::
-    a ->
-    HashMap Text CBOR.Term ->
-    Either (AttStmtDecodingError a) (M.AttStmt a)
-
--- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
--- In contrast to 'DecodingAttestationStatementFormat', this type can be put into a list.
--- This is used for 'mkSupportedAttestationStatementFormats'
-data SomeAttestationStatementFormat
-  = forall a.
-    DecodableAttestationStatementFormat a =>
-    SomeAttestationStatementFormat a
-
--- | A type representing the set of supported attestation statement formats.
--- The constructor is intentionally not exported, use
--- 'mkSupportedAttestationStatementFormats' instead
-newtype SupportedAttestationStatementFormats
-  = -- HashMap invariant: asfIdentifier (hm ! k) == k
-    SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
-
--- | Creates a valid 'SupportedAttestationStatementFormats' from a list of 'SomeAttestationStatementFormat's.
-mkSupportedAttestationStatementFormats :: [SomeAttestationStatementFormat] -> SupportedAttestationStatementFormats
-mkSupportedAttestationStatementFormats formats = SupportedAttestationStatementFormats asfMap
-  where
-    asfMap = HashMap.fromListWithKey merge (map withIdentifier formats)
-    merge ident _ _ =
-      error $
-        "mkSupportedAttestationStatementFormats: Duplicate attestation statement format identifier \""
-          <> Text.unpack ident
-          <> "\""
-    withIdentifier someFormat@(SomeAttestationStatementFormat format) =
-      (M.asfIdentifier format, someFormat)
 
 -- | Decoding errors that can only occur when decoding a
 -- 'JS.CreatedPublicKeyCredential' result with 'decodeCreatedPublicKeyCredential'
@@ -147,9 +99,11 @@ runBinary get bytes = case Binary.runGetOrFail get bytes of
   Left (_rest, _offset, err) -> Left $ DecodingErrorBinary err
   Right (rest, _offset, result) -> Right (rest, result)
 
--- | A 'PartialBinaryDecoder' for a CBOR encoding specified using 'CBOR.Serialise'
-runCBOR :: CBOR.Serialise a => PartialBinaryDecoder a
-runCBOR bytes = first DecodingErrorCBOR $ CBOR.deserialiseFromBytes CBOR.decode bytes
+-- | A 'PartialBinaryDecoder' for a CBOR encoding specified using the given Decoder
+runCBOR :: (forall s. CBOR.Decoder s a) -> PartialBinaryDecoder (LBS.ByteString, a)
+runCBOR decoder bytes = case CBOR.deserialiseFromBytesWithSize decoder bytes of
+  Left err -> Left $ DecodingErrorCBOR err
+  Right (rest, consumed, a) -> return (rest, (LBS.take (fromIntegral consumed) bytes, a))
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 decodeAuthenticatorData ::
@@ -175,7 +129,8 @@ decodeAuthenticatorData adRawData = do
 
   -- https://www.w3.org/TR/webauthn-2/#signcount
   (bytes, adSignCount) <-
-    runBinary Binary.getWord32be bytes
+    second M.SignatureCounter
+      <$> runBinary Binary.getWord32be bytes
 
   -- https://www.w3.org/TR/webauthn-2/#attestedcredentialdata
   (bytes, adAttestedCredentialData) <- case (sing @t, Bits.testBit bitFlags 6) of
@@ -217,8 +172,9 @@ decodeAttestedCredentialData bytes = do
       <$> runBinary (Binary.getByteString (fromIntegral credentialLength)) bytes
 
   -- https://www.w3.org/TR/webauthn-2/#credentialpublickey
-  (bytes, acdCredentialPublicKey) <-
-    runCBOR bytes
+  (bytes, (usedBytes, acdCredentialPublicKey)) <-
+    runCBOR decodePublicKey bytes
+  let acdCredentialPublicKeyBytes = M.PublicKeyBytes $ LBS.toStrict usedBytes
 
   pure (bytes, M.AttestedCredentialData {..})
 
@@ -226,7 +182,7 @@ decodeAttestedCredentialData bytes = do
 decodeExtensions :: PartialBinaryDecoder M.AuthenticatorExtensionOutputs
 decodeExtensions bytes = do
   -- TODO
-  (bytes, _extensions :: HashMap Text CBOR.Term) <- runCBOR bytes
+  (bytes, (_, _extensions :: HashMap Text CBOR.Term)) <- runCBOR CBOR.decode bytes
   pure (bytes, M.AuthenticatorExtensionOutputs {})
 
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be
@@ -323,13 +279,13 @@ instance Decode (M.PublicKeyCredential 'M.Get) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated M.AttestationObject where
-  decodeCreated (SupportedAttestationStatementFormats asfMap) (JS.URLEncodedBase64 bytes) = do
+  decodeCreated supportedFormats (JS.URLEncodedBase64 bytes) = do
     map :: HashMap Text CBOR.Term <- first CreatedDecodingErrorCBOR $ CBOR.deserialiseOrFail $ LBS.fromStrict bytes
     case (map !? "authData", map !? "fmt", map !? "attStmt") of
       (Just (CBOR.TBytes authDataBytes), Just (CBOR.TString fmt), Just (CBOR.TMap attStmtPairs)) -> do
         aoAuthData <- first CreatedDecodingErrorCommon $ decodeAuthenticatorData authDataBytes
 
-        case asfMap !? fmt of
+        case sasfLookup fmt supportedFormats of
           Nothing -> Left $ CreatedDecodingErrorUnknownAttestationStatementFormat fmt
           Just (SomeAttestationStatementFormat aoFmt) -> do
             attStmtMap <-

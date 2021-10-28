@@ -1,71 +1,98 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Spec.Types () where
 
-import qualified Crypto.Fido2.Error as Fido2
-import Crypto.Fido2.Protocol (AttestationFormat (FormatNone))
-import qualified Crypto.Fido2.Protocol as Fido2
-import Data.ByteString (ByteString)
-import Data.Coerce (coerce)
-import Data.Text (Text)
+import qualified Crypto.Fido2.Model as M
+import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
+import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified PublicKeySpec ()
-import Test.QuickCheck.Arbitrary (Arbitrary (arbitrary))
-import Test.QuickCheck.Gen (elements)
+import Test.QuickCheck (Arbitrary (arbitrary), arbitraryBoundedEnum, elements)
 import Test.QuickCheck.Instances.Text ()
 
-instance Arbitrary Fido2.AuthenticatorAttestationResponse where
-  arbitrary = Fido2.AuthenticatorAttestationResponse <$> arbitrary <*> arbitrary
+instance Arbitrary M.PublicKeyCredentialType where
+  arbitrary = arbitraryBoundedEnum
 
-instance Arbitrary Fido2.ClientData where
-  arbitrary =
-    Fido2.ClientData
-      <$> arbitrary
-      <*> arbitrary
-      <*> arbitrary
-      <*> pure undefined -- TODO: How to generate sha256?
+instance Arbitrary M.AuthenticatorTransport where
+  arbitrary = arbitraryBoundedEnum
 
-instance Arbitrary Fido2.AttestationObject where
-  arbitrary = Fido2.AttestationObject <$> arbitrary <*> pure FormatNone
+instance Arbitrary M.AuthenticatorAttachment where
+  arbitrary = arbitraryBoundedEnum
 
-instance Arbitrary Fido2.AuthenticatorData where
-  arbitrary =
-    Fido2.AuthenticatorData undefined <$> arbitrary
-      <*> arbitrary
-      <*> arbitrary
-      <*> arbitrary
-      <*> arbitrary
+instance Arbitrary M.ResidentKeyRequirement where
+  arbitrary = arbitraryBoundedEnum
 
-instance Arbitrary Fido2.CommonError where
+instance Arbitrary M.UserVerificationRequirement where
+  arbitrary = arbitraryBoundedEnum
+
+instance Arbitrary M.AttestationConveyancePreference where
+  arbitrary = arbitraryBoundedEnum
+
+instance Arbitrary (M.AuthenticatorResponse 'M.Create) where
+  arbitrary = M.AuthenticatorAttestationResponse <$> arbitrary <*> arbitrary <*> arbitrary
+
+instance Arbitrary (M.CollectedClientData t) where
+  arbitrary = M.CollectedClientData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+
+instance Arbitrary M.AttestationObject where
+  arbitrary = do
+    aoAuthData <- arbitrary
+    ArbitraryAttestationStatementFormat aoFmt <- arbitrary
+    aoAttStmt <- arbitrary
+    pure M.AttestationObject {..}
+
+-- Like SomeAttestationStatementFormat, but with an Arbitrary constraint on the AttStmt
+data ArbitraryAttestationStatementFormat
+  = forall a.
+    (Arbitrary (M.AttStmt a), M.AttestationStatementFormat a) =>
+    ArbitraryAttestationStatementFormat a
+
+instance Arbitrary ArbitraryAttestationStatementFormat where
   arbitrary =
     elements
-      [ Fido2.InvalidWebauthnType,
-        Fido2.ChallengeMismatch,
-        Fido2.RpOriginMismatch,
-        Fido2.RpIdHashMismatch,
-        Fido2.UserNotPresent,
-        Fido2.UserNotVerified,
-        Fido2.CryptoCurveUnsupported,
-        Fido2.CryptoAlgorithmUnsupported,
-        Fido2.CryptoKeyTypeUnsupported
+      [ ArbitraryAttestationStatementFormat None.Format
+      --ArbitraryAttestationStatementFormat Packed.Format,
+      --ArbitraryAttestationStatementFormat FidoU2F.Format,
+      --ArbitraryAttestationStatementFormat AndroidKey.Format
       ]
 
-instance Arbitrary Fido2.CredentialId where
-  arbitrary = coerce (arbitrary @ByteString)
+instance Arbitrary M.SignatureCounter where
+  arbitrary = M.SignatureCounter <$> arbitrary
 
-instance Arbitrary Fido2.RpId where
-  arbitrary = coerce (arbitrary @Text)
+instance SingI t => Arbitrary (M.AuthenticatorData t) where
+  arbitrary = M.AuthenticatorData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
-instance Arbitrary Fido2.UserVerificationRequirement where
-  arbitrary = elements [Fido2.UserVerificationDiscouraged, Fido2.UserVerificationPreferred, Fido2.UserVerificationRequired]
+instance Arbitrary M.Challenge where
+  arbitrary = M.Challenge <$> arbitrary
 
-instance Arbitrary Fido2.AttestedCredentialData where
-  arbitrary = Fido2.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary
+instance Arbitrary M.Origin where
+  arbitrary = M.Origin <$> arbitrary
 
-instance Arbitrary Fido2.WebauthnType where
-  arbitrary = elements [Fido2.Get, Fido2.Create]
+instance Arbitrary M.ClientDataHash where
+  arbitrary = undefined
 
-instance Arbitrary Fido2.Challenge where
-  arbitrary = coerce (arbitrary @ByteString)
+instance Arbitrary M.RpIdHash where
+  arbitrary = undefined
 
-instance Arbitrary Fido2.Origin where
-  arbitrary = coerce (arbitrary @Text)
+instance Arbitrary M.AuthenticatorDataFlags where
+  arbitrary = M.AuthenticatorDataFlags <$> arbitrary <*> arbitrary
+
+instance SingI t => Arbitrary (M.AttestedCredentialData t) where
+  arbitrary = case sing @t of
+    SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> undefined
+    SGet -> pure M.NoAttestedCredentialData
+
+instance Arbitrary M.AAGUID where
+  arbitrary = M.AAGUID <$> arbitrary
+
+instance Arbitrary M.CredentialId where
+  arbitrary = M.CredentialId <$> arbitrary
+
+instance Arbitrary M.AuthenticatorExtensionOutputs where
+  arbitrary = pure M.AuthenticatorExtensionOutputs {}

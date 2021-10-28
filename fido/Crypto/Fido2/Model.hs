@@ -10,7 +10,6 @@
 module Crypto.Fido2.Model
   ( -- * Enumerations
     PublicKeyCredentialType (..),
-    COSEAlgorithmIdentifier (..),
     AuthenticatorTransport (..),
     AuthenticatorAttachment (..),
     ResidentKeyRequirement (..),
@@ -33,6 +32,8 @@ module Crypto.Fido2.Model
     RpIdHash (..),
     ClientDataHash (..),
     Origin (..),
+    SignatureCounter (..),
+    PublicKeyBytes (..),
 
     -- * Extensions (unimplemented)
     AuthenticationExtensionsClientInputs (..),
@@ -49,9 +50,15 @@ module Crypto.Fido2.Model
     CollectedClientData (..),
     AttestedCredentialData (..),
     AuthenticatorData (..),
-    AttestationStatementFormat (..),
     AttestationObject (..),
     AuthenticatorResponse (..),
+    AttestationStatementFormat (..),
+    SomeAttestationStatementFormat (..),
+    SupportedAttestationStatementFormats,
+
+    -- * Utility functions
+    sasfSingleton,
+    sasfLookup,
 
     -- * Top-level types
     PublicKeyCredentialOptions (..),
@@ -62,17 +69,23 @@ module Crypto.Fido2.Model
   )
 where
 
+import qualified Codec.CBOR.Term as CBOR
+import Control.Exception (Exception)
 import Crypto.Fido2.Model.WebauthnType (WebauthnType (Create, Get))
-import Crypto.Fido2.PublicKey (PublicKey)
+import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import qualified Data.ByteString as BS
+import Data.HashMap.Strict (HashMap, (!?))
+import qualified Data.HashMap.Strict as HashMap
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
+import Data.String (IsString)
 import Data.Text (Text)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
+import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
 import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-publickeycredentialtype)
@@ -81,19 +94,7 @@ import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 -- The values of this enumeration are used for versioning the Authentication Assertion
 -- and attestation structures according to the type of the authenticator.
 data PublicKeyCredentialType = PublicKeyCredentialTypePublicKey
-  deriving (Eq, Show)
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier)
--- A 'COSEAlgorithmIdentifier''s value is a number identifying a cryptographic algorithm.
--- The algorithm identifiers SHOULD be values registered in the IANA COSE Algorithms
--- registry [IANA-COSE-ALGS-REG](https://www.w3.org/TR/webauthn-2/#biblio-iana-cose-algs-reg),
--- for instance, -7 for "ES256" and -257 for "RS256".
-data COSEAlgorithmIdentifier
-  = COSEAlgorithmIdentifierES256
-  | COSEAlgorithmIdentifierES384
-  | COSEAlgorithmIdentifierES512
-  | COSEAlgorithmIdentifierEdDSA
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
 -- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) may implement various [transports](https://www.w3.org/TR/webauthn-2/#enum-transport) for communicating with [clients](https://www.w3.org/TR/webauthn-2/#client). This enumeration defines hints as to how clients might communicate with a particular authenticator in order to obtain an assertion for a specific credential. Note that these hints represent the [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)'s best belief as to how an authenticator may be reached. A [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) will typically learn of the supported transports for a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) via [getTransports()](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports).
@@ -110,7 +111,7 @@ data AuthenticatorTransport
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-internal)
     -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) is contacted using a [client device](https://www.w3.org/TR/webauthn-2/#client-device)-specific transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators). These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
     AuthenticatorTransportInternal
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
 -- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)' [attachment modalities](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality). [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) use this to express a preferred [authenticator attachment modality](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality) when calling [@navigator.credentials.create()@](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) to [create a credential](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
@@ -121,7 +122,7 @@ data AuthenticatorAttachment
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattachment-cross-platform)
     -- This value indicates [cross-platform attachment](https://www.w3.org/TR/webauthn-2/#cross-platform-attachment).
     AuthenticatorAttachmentCrossPlatform
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-residentkeyrequirement)
 -- This enumeration’s values describe the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
@@ -148,7 +149,7 @@ data ResidentKeyRequirement
     -- and is prepared to receive an error if a
     -- [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential) cannot be created.
     ResidentKeyRequirementRequired
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement)
 -- A [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may
@@ -172,7 +173,7 @@ data UserVerificationRequirement
     -- does not want [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) employed
     -- during the operation (e.g., in the interest of minimizing disruption to the user interaction flow).
     UserVerificationRequirementDiscouraged
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-attestation-convey)
 -- [WebAuthn Relying Parties](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may use
@@ -225,7 +226,7 @@ data AttestationConveyancePreference
     -- and [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement), unaltered,
     -- to the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
     AttestationConveyancePreferenceEnterprise
-  deriving (Eq, Show)
+  deriving (Eq, Show, Bounded, Enum, Ord)
 
 type NonEmptyCertificateChain = NonEmpty X509.SignedCertificate
 
@@ -325,6 +326,7 @@ newtype AAGUID = AAGUID {unAAGUID :: BS.ByteString}
 -- uses DOMString, while the latter uses USVString. Is this a bug in the spec or is there an actual difference?
 newtype RpId = RpId {unRpId :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability)
@@ -335,6 +337,7 @@ newtype RpId = RpId {unRpId :: Text}
 -- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir) about how this metadata is encoded.
 newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- The user handle is specified by a [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party),
@@ -342,6 +345,12 @@ newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
 -- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence) with a maximum size of 64 bytes, and is not meant to be displayed to the user.
 newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
   deriving (Eq, Show)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
+-- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
+-- with a maximum size of 64 bytes, and is not meant to be displayed to the user.
+instance Uniform UserHandle where
+  uniformM g = UserHandle <$> uniformByteStringM 64 g
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) name for the user account,
@@ -352,6 +361,7 @@ newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
 -- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir) about how this metadata is encoded.
 newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayName :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) identifier for a user account.
@@ -370,6 +380,7 @@ newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayNam
 --   about how this metadata is encoded.
 newtype UserAccountName = UserAccountName {unUserAccountName :: Text}
   deriving (Eq, Show)
+  deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credential-id)
 -- A probabilistically-unique [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
@@ -384,6 +395,12 @@ newtype CredentialId = CredentialId {unCredentialId :: BS.ByteString}
 -- security consideration.
 newtype Challenge = Challenge {unChallenge :: BS.ByteString}
   deriving (Eq, Show)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
+-- In order to prevent replay attacks, the challenges MUST contain enough entropy
+-- to make guessing them infeasible. Challenges SHOULD therefore be at least 16 bytes long.
+instance Uniform Challenge where
+  uniformM g = Challenge <$> uniformByteStringM 16 g
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
 -- This member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
@@ -426,6 +443,17 @@ newtype ClientDataHash = ClientDataHash {unClientDataHash :: Digest SHA256}
 
 -- | [(spec)](https://html.spec.whatwg.org/multipage/origin.html#concept-origin)
 newtype Origin = Origin {unOrigin :: Text}
+  deriving (Eq, Show)
+  deriving newtype (IsString)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#signcount)
+-- [Signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
+newtype SignatureCounter = SignatureCounter {unSignatureCounter :: Word32}
+  deriving (Eq, Show)
+  deriving newtype (Num, Ord)
+
+-- | The encoding of a 'PublicKey'
+newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
   deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
@@ -545,7 +573,7 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- Specifies the extent to which the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- desires to create a [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential).
     -- For historical reasons the naming retains the deprecated “resident” terminology.
-    ascResidentKey :: ResidentKeyRequirement,
+    ascResidentKey :: Maybe ResidentKeyRequirement,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-userverification)
     -- This member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
     -- requirements regarding [user verification](https://www.w3.org/TR/webauthn-2/#user-verification)
@@ -554,7 +582,7 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- The value SHOULD be a member of 'UserVerificationRequirement' but
     -- [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values,
     -- treating an unknown value as if the [member does not exist](https://infra.spec.whatwg.org/#map-exists).
-    ascUserVerification :: UserVerificationRequirement
+    ascUserVerification :: Maybe UserVerificationRequirement
   }
   deriving (Eq, Show)
 
@@ -602,7 +630,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
       -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
-      pkcocExcludeCredentials :: [PublicKeyCredentialDescriptor],
+      pkcocExcludeCredentials :: Maybe [PublicKeyCredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to select the appropriate authenticators to participate in the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
@@ -610,7 +638,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
-      pkcocAttestation :: AttestationConveyancePreference,
+      pkcocAttestation :: Maybe AttestationConveyancePreference,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
       -- This member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, the caller may request that only authenticators with certain capabilities be used to create the credential,
@@ -646,16 +674,16 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- This OPTIONAL member contains a list of 'PublicKeyCredentialDescriptor'
       -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
       -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
-      pkcogAllowCredentials :: [PublicKeyCredentialDescriptor],
+      pkcogAllowCredentials :: Maybe [PublicKeyCredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
       -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
       -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
       -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
-      pkcogUserVerification :: UserVerificationRequirement,
+      pkcogUserVerification :: Maybe UserVerificationRequirement,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
-      pkcogExtensions :: AuthenticationExtensionsClientInputs
+      pkcogExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     PublicKeyCredentialOptions 'Get
 
@@ -701,7 +729,9 @@ data AttestedCredentialData (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialid)
       acdCredentialId :: CredentialId,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
-      acdCredentialPublicKey :: PublicKey
+      acdCredentialPublicKey :: PublicKey,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
+      acdCredentialPublicKeyBytes :: PublicKeyBytes
     } ->
     AttestedCredentialData 'Create
   NoAttestedCredentialData ::
@@ -734,7 +764,7 @@ data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
     adFlags :: AuthenticatorDataFlags,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#signcount)
     -- [Signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
-    adSignCount :: Word32,
+    adSignCount :: SignatureCounter,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)
     -- [attested credential data](https://www.w3.org/TR/webauthn-2/#attested-credential-data) (if present)
     adAttestedCredentialData :: AttestedCredentialData t,
@@ -751,7 +781,7 @@ data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
 -- [identifier](https://www.w3.org/TR/webauthn-2/#sctn-attstn-fmt-ids)
 -- and [attestation statement structure](https://www.w3.org/TR/webauthn-2/#attestation-statement)
 class
-  (Eq (AttStmt a), Show (AttStmt a), Typeable a, Show a) =>
+  (Eq (AttStmt a), Show (AttStmt a), Typeable a, Show a, Exception (AttStmtDecodingError a), Exception (AttStmtVerificationError a)) =>
   AttestationStatementFormat a
   where
   -- | The type of a fully-decoded and structurally valid attestation statement
@@ -784,6 +814,56 @@ class
   -- thus treated as different formats, e.g., `packed2` as a new version of the
   -- [§ 8.2 Packed Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation).
   asfIdentifier :: a -> Text
+
+  -- | The type of verification errors that can occur when verifying this
+  -- attestation statement using 'asfVerify'
+  type AttStmtVerificationError a :: Type
+
+  -- | [(spec)](https://www.w3.org/TR/webauthn-2/#verification-procedure)
+  -- The procedure to verify an [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+  asfVerify ::
+    a ->
+    AttStmt a ->
+    AuthenticatorData 'Create ->
+    ClientDataHash ->
+    Either (AttStmtVerificationError a) AttestationType
+
+  -- | The type of decoding errors that can occur when decoding this
+  -- attestation statement using 'asfDecode'
+  type AttStmtDecodingError a :: Type
+
+  -- | A decoder for the attestation statement [syntax](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+  -- The @attStmt@ CBOR map is given as an input. See
+  -- [Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
+  asfDecode ::
+    a ->
+    HashMap Text CBOR.Term ->
+    Either (AttStmtDecodingError a) (AttStmt a)
+
+-- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+-- In contrast to 'DecodingAttestationStatementFormat', this type can be put into a list.
+-- This is used for 'mkSupportedAttestationStatementFormats'
+data SomeAttestationStatementFormat
+  = forall a.
+    AttestationStatementFormat a =>
+    SomeAttestationStatementFormat a
+
+-- | A type representing the set of supported attestation statement formats.
+-- The constructor is intentionally not exported, use
+-- 'sasfSingleton' instead to construct it and
+-- 'sasfLookup' to look up formats. This types 'Semigroup'
+-- instance can be used to combine multiple formats
+newtype SupportedAttestationStatementFormats
+  = -- HashMap invariant: asfIdentifier (hm ! k) == k
+    SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
+  deriving newtype (Semigroup, Monoid)
+
+sasfSingleton :: SomeAttestationStatementFormat -> SupportedAttestationStatementFormats
+sasfSingleton someFormat@(SomeAttestationStatementFormat format) =
+  SupportedAttestationStatementFormats $ HashMap.singleton (asfIdentifier format) someFormat
+
+sasfLookup :: Text -> SupportedAttestationStatementFormats -> Maybe SomeAttestationStatementFormat
+sasfLookup id (SupportedAttestationStatementFormats sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
 data AttestationObject = forall a.
@@ -938,7 +1018,7 @@ data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
     -- [extension identifier](https://www.w3.org/TR/webauthn-2/#extension-identifier) →
     -- [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output) entries produced
     -- by the extension’s [client extension processing](https://www.w3.org/TR/webauthn-2/#client-extension-processing).
-    pkcClientExtensionResults :: AuthenticationExtensionsClientOutputs
+    pkcClientExtensionResults :: Maybe AuthenticationExtensionsClientOutputs
   }
 
 deriving instance Eq (PublicKeyCredential t)

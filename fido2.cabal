@@ -44,9 +44,8 @@ library
     unordered-containers,
     x509,
     x509-validation,
-    scientific,
+    random,
     singletons,
-    vector,
     time,
     x509,
     x509-validation,
@@ -55,28 +54,25 @@ library
     jose >= 0.8.5,
     lens,
     mtl,
+    validation,
   exposed-modules:
+    Crypto.Fido2.Operations.Assertion,
+    Crypto.Fido2.Operations.Attestation,
+    Crypto.Fido2.Operations.Attestation.AndroidKey,
+    Crypto.Fido2.Operations.Attestation.None,
+    Crypto.Fido2.Operations.Attestation.Packed,
+    Crypto.Fido2.Operations.Attestation.FidoU2F,
+    Crypto.Fido2.Operations.Common,
     Crypto.Fido2.EncodingUtils,
-    Crypto.Fido2.Assertion,
-    Crypto.Fido2.Attestation,
-    Crypto.Fido2.Attestation.AndroidKey,
-    Crypto.Fido2.Attestation.AndroidKey.Statement,
-    Crypto.Fido2.Attestation.Packed,
-    Crypto.Fido2.Attestation.Packed.Statement,
-    Crypto.Fido2.Attestation.FidoU2F,
-    Crypto.Fido2.Attestation.FidoU2F.Statement,
+    Crypto.Fido2.Metadata.Blob,
+    Crypto.Fido2.Metadata.Model,
     Crypto.Fido2.Model,
-    Crypto.Fido2.Model.WebauthnType,
     Crypto.Fido2.Model.JavaScript,
     Crypto.Fido2.Model.JavaScript.Decoding,
     Crypto.Fido2.Model.JavaScript.Encoding,
     Crypto.Fido2.Model.JavaScript.Types,
-    Crypto.Fido2.Error,
-    Crypto.Fido2.Protocol,
-    Crypto.Fido2.PublicKey,
-    Crypto.Fido2.Signature,
-    Crypto.Fido2.Metadata.Model,
-    Crypto.Fido2.Metadata.Blob
+    Crypto.Fido2.Model.WebauthnType,
+    Crypto.Fido2.PublicKey
 
 executable server
   import: sanity
@@ -86,10 +82,8 @@ executable server
 
   build-depends:
     aeson,
-    aeson-qq,
     base64-bytestring,
     cborg,
-    serialise,
     bytestring,
     containers,
     cookie,
@@ -97,28 +91,28 @@ executable server
     fido2,
     http-types,
     mtl,
+    random,
     scotty,
     sqlite-simple,
     stm,
     text,
     transformers,
     uuid,
+    validation,
     wai,
     wai-middleware-static,
-    warp,
+    warp
 
 test-suite tests
   import: sanity
   type: exitcode-stdio-1.0
   hs-source-dirs: tests
-  main-is: Spec.hs
+  main-is: Main.hs
   other-modules:
-    AttestationSpec,
     PublicKeySpec,
     MetadataSpec,
     Spec.Types,
-    Spec.Util,
-    Util
+    Spec.Util
   build-depends:
     aeson,
     bytestring,
@@ -138,4 +132,5 @@ test-suite tests
     memory,
     mtl,
     x509,
-    pem
+    pem,
+    validation

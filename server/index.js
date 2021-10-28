@@ -20,16 +20,9 @@ window.addEventListener("load", () => {
     });
     const params = await response.json();
 
-
     userHandle.value = params.user.id;
 
-    const publicKey = {
-      rp: params.rp,
-      challenge: params.challenge,
-      pubKeyCredParams: params.pubKeyCredParams,
-      user: params.user,
-      authenticatorSelection: params.authenticatorSelection,
-    };
+    const publicKey = params;
 
     const credentialCreationOptions = { publicKey };
 
@@ -42,8 +35,6 @@ window.addEventListener("load", () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credential),
     });
-
-    console.log(await result.text());
 
   });
   const loginForm = document.getElementById("loginForm");
