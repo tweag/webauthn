@@ -21,6 +21,7 @@ data CredentialEntryRaw = CredentialEntryRaw
     cerPublicKeyBytes :: M.PublicKeyBytes,
     cerSignCounter :: M.SignatureCounter
   }
+  deriving (Show)
 
 decodeCredentialEntry :: CredentialEntryRaw -> Either CBOR.DeserialiseFailure CredentialEntry
 decodeCredentialEntry CredentialEntryRaw {..} = do

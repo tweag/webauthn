@@ -43,6 +43,7 @@ data SignatureCounterResult
   | -- | The signature counter decreased, the authenticator was potentially
     -- cloned
     SignatureCounterPotentiallyCloned
+  deriving (Show)
 
 verifyAssertionResponse ::
   -- | The origin of the server
