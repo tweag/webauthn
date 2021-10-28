@@ -82,7 +82,7 @@ instance Arbitrary M.AuthenticatorDataFlags where
 
 instance SingI t => Arbitrary (M.AttestedCredentialData t) where
   arbitrary = case sing @t of
-    SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary
+    SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> undefined
     SGet -> pure M.NoAttestedCredentialData
 
 instance Arbitrary M.AAGUID where

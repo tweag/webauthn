@@ -10,13 +10,15 @@ module Crypto.Fido2.Operations.Assertion
   )
 where
 
+import qualified Codec.CBOR.Read as CBOR
 import Control.Monad (unless)
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Operations.Common (CredentialEntry (cePublicKey, ceSignCounter, ceUserHandle), failure)
-import Crypto.Fido2.PublicKey (PublicKey)
+import Crypto.Fido2.Operations.Common (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
+import Crypto.Fido2.PublicKey (PublicKey, decodePublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (Validation)
 
@@ -30,7 +32,7 @@ data AssertionError
   | AssertionRpIdHashMismatch M.RpIdHash M.RpIdHash
   | AssertionUserNotPresent
   | AssertionUserNotVerified
-  | AssertionInvalidSignature PublicKey BS.ByteString M.AssertionSignature
+  | AssertionInvalidSignature (Either CBOR.DeserialiseFailure (PublicKey, BS.ByteString, M.AssertionSignature))
   | AssertionPolicyRejected
   deriving (Show)
 
@@ -218,10 +220,13 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
 
   -- 20. Using credentialPublicKey, verify that sig is a valid signature over
   -- the binary concatenation of authData and hash.
-  let pubKey = cePublicKey entry
+  let pubKeyBytes = cePublicKeyBytes entry
       message = M.adRawData authData <> hash
-  unless (PublicKey.verify pubKey message (M.unAssertionSignature sig)) $
-    failure $ AssertionInvalidSignature pubKey message sig
+  case CBOR.deserialiseFromBytes decodePublicKey (LBS.fromStrict (M.unPublicKeyBytes pubKeyBytes)) of
+    Left err -> failure $ AssertionInvalidSignature (Left err)
+    Right (_, pubKey) ->
+      unless (PublicKey.verify pubKey message (M.unAssertionSignature sig)) $
+        failure $ AssertionInvalidSignature $ Right (pubKey, message, sig)
 
   -- 21. Let storedSignCount be the stored signature counter value associated
   -- with credential.id. If authData.signCount is nonzero or storedSignCount

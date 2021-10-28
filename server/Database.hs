@@ -16,8 +16,7 @@ module Database
 where
 
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Operations.Common (CredentialEntry, CredentialEntryRaw (CredentialEntryRaw, cerCredentialId, cerPublicKeyBytes, cerSignCounter, cerUserHandle), decodeCredentialEntry)
-import qualified Data.Maybe as Maybe
+import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import qualified Database.SQLite.Simple as Sqlite
 
 type Connection = Sqlite.Connection
@@ -89,15 +88,15 @@ addUser (Transaction conn) user =
 
 addAttestedCredentialData ::
   Transaction ->
-  CredentialEntryRaw ->
+  CredentialEntry ->
   IO ()
 addAttestedCredentialData
   (Transaction conn)
-  CredentialEntryRaw
-    { cerUserHandle = M.UserHandle userId,
-      cerCredentialId = M.CredentialId credentialId,
-      cerPublicKeyBytes = M.PublicKeyBytes pubKeyBytes,
-      cerSignCounter = M.SignatureCounter signCounter
+  CredentialEntry
+    { ceUserHandle = M.UserHandle userId,
+      ceCredentialId = M.CredentialId credentialId,
+      cePublicKeyBytes = M.PublicKeyBytes pubKeyBytes,
+      ceSignCounter = M.SignatureCounter signCounter
     } =
     do
       Sqlite.execute
@@ -126,9 +125,9 @@ getUserByCredentialId
       [Sqlite.Only userId] -> pure $ Just $ M.UserHandle userId
       _ -> fail "Unreachable: attested_credential_data.id has a unique index."
 
-instance Sqlite.FromRow CredentialEntryRaw where
+instance Sqlite.FromRow CredentialEntry where
   fromRow =
-    CredentialEntryRaw
+    CredentialEntry
       <$> (M.UserHandle <$> Sqlite.field)
       <*> (M.CredentialId <$> Sqlite.field)
       <*> (M.PublicKeyBytes <$> Sqlite.field)
@@ -136,13 +135,7 @@ instance Sqlite.FromRow CredentialEntryRaw where
 
 getCredentialsByUserId :: Transaction -> M.UserHandle -> IO [CredentialEntry]
 getCredentialsByUserId (Transaction conn) (M.UserHandle userId) = do
-  credentialRows <-
-    Sqlite.query
-      conn
-      "select user_id, id, public_key, sign_counter from attested_credential_data where user_id = ?;"
-      [userId]
-  pure $ Maybe.mapMaybe mkCredential credentialRows
-  where
-    mkCredential :: CredentialEntryRaw -> Maybe CredentialEntry
-    -- TODO: Don't discard public key decoding error
-    mkCredential raw = either (const Nothing) Just (decodeCredentialEntry raw)
+  Sqlite.query
+    conn
+    "select user_id, id, public_key, sign_counter from attested_credential_data where user_id = ?;"
+    [userId]

@@ -91,11 +91,7 @@ main = Hspec.hspec $ do
                   (defaultPublicKeyCredentialCreationOptions pkCredential)
                   pkCredential
         registerResult `shouldSatisfy` isRight
-        let (Right raw) = registerResult
-            credentialEntry' = Common.decodeCredentialEntry raw
-        credentialEntry' `shouldSatisfy` isRight
-        let Right credentialEntry = credentialEntry'
-        let Common.CredentialEntry {Common.ceCredentialId} = credentialEntry
+        let Right credentialEntry@Common.CredentialEntry {Common.ceCredentialId} = registerResult
         loginReq <-
           either (error . show) id . JS.decodeRequestedPublicKeyCredential
             <$> decodeFile
@@ -131,10 +127,6 @@ main = Hspec.hspec $ do
                   (defaultPublicKeyCredentialCreationOptions pkCredential)
                   pkCredential
         registerResult `shouldSatisfy` isRight
-        registerResult `shouldSatisfy` isRight
-        let (Right raw) = registerResult
-            credentialEntry' = Common.decodeCredentialEntry raw
-        credentialEntry' `shouldSatisfy` isRight
   describe "AndroidKey register" $
     it "tests whether the fixed android key register has a valid attestation" $
       do
@@ -150,9 +142,6 @@ main = Hspec.hspec $ do
                   (defaultPublicKeyCredentialCreationOptions pkCredential)
                   pkCredential
         registerResult `shouldSatisfy` isRight
-        let (Right raw) = registerResult
-            credentialEntry' = Common.decodeCredentialEntry raw
-        credentialEntry' `shouldSatisfy` isRight
   describe "U2F register" $
     it "tests whether the fixed fido-u2f register has a valid attestation" $
       do
@@ -168,9 +157,6 @@ main = Hspec.hspec $ do
                   (defaultPublicKeyCredentialCreationOptions pkCredential)
                   pkCredential
         registerResult `shouldSatisfy` isRight
-        let (Right raw) = registerResult
-            credentialEntry' = Common.decodeCredentialEntry raw
-        credentialEntry' `shouldSatisfy` isRight
 
 {- Disabled because we can't yet reproduce a login response for the register-complete/02.json
   let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult

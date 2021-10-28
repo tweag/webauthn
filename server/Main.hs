@@ -25,7 +25,7 @@ import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential,
 import Crypto.Fido2.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
 import Crypto.Fido2.Operations.Assertion (verifyAssertionResponse)
 import Crypto.Fido2.Operations.Attestation (AttestationError, allSupportedFormats, verifyAttestationResponse)
-import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId), CredentialEntryRaw (cerCredentialId))
+import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Crypto.Hash (hash)
 import Data.Aeson (FromJSON)
@@ -172,7 +172,7 @@ data RegisterBeginReq = RegisterBeginReq
   { userName :: Text,
     displayName :: Text
   }
-  deriving (FromJSON)
+  deriving (Show, FromJSON)
   deriving stock (Generic)
 
 app :: M.Origin -> M.RpIdHash -> Database.Connection -> TVar Sessions -> ScottyM ()
@@ -276,7 +276,8 @@ beginRegistration db sessions = do
   where
     generateRegistrationChallenge :: SessionId -> Session -> Scotty.ActionM ()
     generateRegistrationChallenge sessionId session = do
-      RegisterBeginReq {userName, displayName} <- Scotty.jsonData @RegisterBeginReq
+      req@RegisterBeginReq {userName, displayName} <- Scotty.jsonData @RegisterBeginReq
+      liftIO $ putStrLn $ "/register/begin, received " <> show req
       challenge <- liftIO $ uniformM globalStdGen
       userId <- liftIO $ uniformM globalStdGen
       let user =
@@ -286,6 +287,7 @@ beginRegistration db sessions = do
                 pkcueName = M.UserAccountName userName
               }
       let options = defaultPkcco user challenge
+      liftIO $ putStrLn $ "/register/begin, sending " <> show options
       Scotty.json $ encodePublicKeyCredentialCreationOptions options
       liftIO $
         Database.withTransaction db $ \tx -> do
@@ -310,6 +312,7 @@ completeRegistration origin rpIdHash db sessions = do
       cred <- case decodeCreatedPublicKeyCredential allSupportedFormats credential of
         Left err -> fail $ show err
         Right result -> pure result
+      liftIO $ putStrLn $ "/register/complete, received " <> show cred
       -- step 1 to 17
       -- We abort if we couldn't attest the credential
       -- FIXME
@@ -323,7 +326,7 @@ completeRegistration origin rpIdHash db sessions = do
           -- If a credential with this id existed already, it must belong to the
           -- current user, otherwise it's an error. The spec allows removing the
           -- credential from the old user instead, but we don't do that.
-          existingUserId <- Database.getUserByCredentialId tx (cerCredentialId entry)
+          existingUserId <- Database.getUserByCredentialId tx (ceCredentialId entry)
           case existingUserId of
             Nothing -> do
               Database.addAttestedCredentialData tx entry
@@ -350,7 +353,7 @@ defaultPkcco userEntity challenge =
               ascResidentKey = Just M.ResidentKeyRequirementDiscouraged,
               ascUserVerification = Just M.UserVerificationRequirementPreferred
             },
-      pkcocAttestation = Nothing,
+      pkcocAttestation = Just M.AttestationConveyancePreferenceDirect,
       pkcocExtensions = Nothing
     }
 

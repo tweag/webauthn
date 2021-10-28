@@ -36,8 +36,6 @@ window.addEventListener("load", () => {
       body: JSON.stringify(credential),
     });
 
-    console.log(await result.text());
-
   });
   const loginForm = document.getElementById("loginForm");
   loginForm.addEventListener("submit", async (e) => {
