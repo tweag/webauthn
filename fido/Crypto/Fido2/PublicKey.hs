@@ -64,6 +64,7 @@ data CurveIdentifier = P256 | P384 | P521
 
 decodePublicKey :: CBOR.Decoder s PublicKey
 decodePublicKey = do
+  _n <- CBOR.decodeMapLenCanonical
   decodeMapKey Kty
   kty <- decodeKeyType
   case kty of
