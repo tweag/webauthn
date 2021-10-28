@@ -1,7 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 module Database
   ( Connection,
     Transaction (), -- Constructor deliberately not exposed.
@@ -77,9 +73,9 @@ addUser ::
   IO ()
 addUser (Transaction conn) user =
   let M.PublicKeyCredentialUserEntity
-        { pkcueId = M.UserHandle userId,
-          pkcueName = M.UserAccountName username,
-          pkcueDisplayName = M.UserAccountDisplayName displayName
+        { M.pkcueId = M.UserHandle userId,
+          M.pkcueName = M.UserAccountName username,
+          M.pkcueDisplayName = M.UserAccountDisplayName displayName
         } = user
    in Sqlite.execute
         conn
@@ -125,17 +121,19 @@ getUserByCredentialId
       [Sqlite.Only userId] -> pure $ Just $ M.UserHandle userId
       _ -> fail "Unreachable: attested_credential_data.id has a unique index."
 
-instance Sqlite.FromRow CredentialEntry where
-  fromRow =
-    CredentialEntry
-      <$> (M.UserHandle <$> Sqlite.field)
-      <*> (M.CredentialId <$> Sqlite.field)
-      <*> (M.PublicKeyBytes <$> Sqlite.field)
-      <*> (M.SignatureCounter <$> Sqlite.field)
-
 getCredentialsByUserId :: Transaction -> M.UserHandle -> IO [CredentialEntry]
 getCredentialsByUserId (Transaction conn) (M.UserHandle userId) = do
-  Sqlite.query
-    conn
-    "select user_id, id, public_key, sign_counter from attested_credential_data where user_id = ?;"
-    [userId]
+  entries <-
+    Sqlite.query
+      conn
+      "select user_id, id, public_key, sign_counter from attested_credential_data where user_id = ?;"
+      [userId]
+  pure $ map toCredentialEntry entries
+  where
+    toCredentialEntry (userHandle, credentialId, publicKey, signCounter) =
+      CredentialEntry
+        { ceUserHandle = M.UserHandle userHandle,
+          ceCredentialId = M.CredentialId credentialId,
+          cePublicKeyBytes = M.PublicKeyBytes publicKey,
+          ceSignCounter = M.SignatureCounter signCounter
+        }

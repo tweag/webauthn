@@ -49,6 +49,7 @@ data AuthorisationList = AuthorisationList
   }
   deriving (Eq, Show)
 
+-- | [(spec)](https://source.android.com/security/keystore/attestation#tbscertificate-sequence)
 instance Extension ExtAttestation where
   extOID = const [1, 3, 6, 1, 4, 1, 11129, 2, 1, 17]
   extHasNestedASN1 = const True
@@ -126,7 +127,7 @@ data Format = Format
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
 
--- androidStmtFormat (https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation)
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation)
 data Statement = Statement
   { sig :: ByteString,
     x5c :: NonEmpty X509.SignedCertificate,
@@ -155,11 +156,11 @@ data VerificationError
   | VerificationErrorAndroidKeyPurposeFieldInvalid
   deriving (Show, Exception)
 
--- https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h
+-- | [(spec)](https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h)
 kmOriginGenerated :: Integer
 kmOriginGenerated = 0
 
--- https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h
+-- | [(spec)](https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h)
 kmPurposeSign :: Integer
 kmPurposeSign = 2
 

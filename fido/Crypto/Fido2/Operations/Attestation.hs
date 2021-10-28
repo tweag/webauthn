@@ -203,18 +203,26 @@ verifyAttestationResponse
       liftError (pure . AttestationFormatError . SomeException) $
         M.asfVerify aoFmt aoAttStmt authData (M.ccdHash c)
 
-    -- 20. If validation is successful, obtain a list of acceptable trust anchors (i.e. attestation root certificates) for that attestation type and attestation statement format fmt,
-    -- from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information,
-    -- using the aaguid in the attestedCredentialData in authData.
+    -- 20. If validation is successful, obtain a list of acceptable trust
+    -- anchors (i.e. attestation root certificates) for that attestation type
+    -- and attestation statement format fmt, from a trusted source or from
+    -- policy. For example, the FIDO Metadata Service [FIDOMetadataService]
+    -- provides one way to obtain such information, using the aaguid in the
+    -- attestedCredentialData in authData.
     -- TODO: The metadata service is not currently implemented
 
-    -- 21. Assess the attestation trustworthiness using the outputs of the verification procedure in step 19, as follows:
+    -- 21. Assess the attestation trustworthiness using the outputs of the
+    -- verification procedure in step 19, as follows:
     --
-    -- -   If no attestation was provided, verify that None attestation is acceptable under Relying Party policy.
-    -- -   If self attestation was used, verify that self attestation is acceptable under Relying Party policy.
-    -- -   Otherwise, use the X.509 certificates returned as the attestation trust path from the verification procedure
-    --     to verify that the attestation public key either correctly chains up to an acceptable root certificate,
-    --     or is itself an acceptable certificate (i.e., it and the root certificate obtained in Step 20 may be the same).
+    -- -> If no attestation was provided, verify that None attestation is
+    --    acceptable under Relying Party policy.
+    -- -> If self attestation was used, verify that self attestation is
+    --    acceptable under Relying Party policy.
+    -- -> Otherwise, use the X.509 certificates returned as the attestation
+    --    trust path from the verification procedure to verify that the
+    --    attestation public key either correctly chains up to an acceptable
+    --    root certificate, or is itself an acceptable certificate (i.e., it
+    --    and the root certificate obtained in Step 20 may be the same).
     -- TODO: A policy is not currently implement, as is the metadata service.
 
     -- TODO: This function should result in the trustworthiness of the attestation.

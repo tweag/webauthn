@@ -42,7 +42,7 @@ data Format = Format
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
 
--- packedStmtFormat (https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation)
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation)
 data Statement = Statement
   { alg :: COSEAlgorithmIdentifier,
     sig :: BS.ByteString,

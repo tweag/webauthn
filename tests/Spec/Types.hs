@@ -11,11 +11,7 @@ module Spec.Types () where
 
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
-import Crypto.Fido2.Operations.Attestation (allSupportedFormats)
-import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
-import qualified Crypto.Fido2.Operations.Attestation.FidoU2F as FidoU2F
 import qualified Crypto.Fido2.Operations.Attestation.None as None
-import qualified Crypto.Fido2.Operations.Attestation.Packed as Packed
 import qualified PublicKeySpec ()
 import Test.QuickCheck (Arbitrary (arbitrary), arbitraryBoundedEnum, elements)
 import Test.QuickCheck.Instances.Text ()

@@ -1,13 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main
   ( main,
@@ -43,7 +34,7 @@ import Test.QuickCheck.Instances.Text ()
 -- decoded. The caller can pass in a function to run further checks on the
 -- decoded value, but this is mainly there to ensure that `a` occurs after the
 -- fat arrow.
-canDecodeAllToJSRepr :: forall a. (FromJSON a, HasCallStack) => FilePath -> (a -> IO ()) -> Spec
+canDecodeAllToJSRepr :: (FromJSON a, HasCallStack) => FilePath -> (a -> IO ()) -> Spec
 canDecodeAllToJSRepr path inspect = do
   files <- Hspec.runIO $ Directory.listDirectory path
   for_ files $ \fname ->
@@ -91,7 +82,7 @@ main = Hspec.hspec $ do
                   (defaultPublicKeyCredentialCreationOptions pkCredential)
                   pkCredential
         registerResult `shouldSatisfy` isRight
-        let Right credentialEntry@Common.CredentialEntry {Common.ceCredentialId} = registerResult
+        let Right credentialEntry = registerResult
         loginReq <-
           either (error . show) id . JS.decodeRequestedPublicKeyCredential
             <$> decodeFile
@@ -107,9 +98,9 @@ main = Hspec.hspec $ do
                   credentialEntry
                   (defaultPublicKeyCredentialRequestOptions loginReq)
                   M.PublicKeyCredential
-                    { pkcIdentifier = ceCredentialId,
-                      pkcResponse = pkcResponse,
-                      pkcClientExtensionResults = Nothing
+                    { M.pkcIdentifier = Common.ceCredentialId credentialEntry,
+                      M.pkcResponse = pkcResponse,
+                      M.pkcClientExtensionResults = Nothing
                     }
         signInResult `shouldSatisfy` isRight
   describe "Packed register" $

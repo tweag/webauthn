@@ -138,7 +138,7 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   -- 7. Using credential.id (or credential.rawId, if base64url encoding is
   -- inappropriate for your use case), look up the corresponding credential
   -- public key and let credentialPublicKey be that credential public key.
-  -- NOTE: Done with lookupCredential above
+  -- NOTE: Done by the caller, passed with entry
 
   -- 8. Let cData, authData and sig denote the value of response’s
   -- clientDataJSON, authenticatorData, and signature respectively.
@@ -245,7 +245,6 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
     (0, 0) -> pure SignatureCounterZero
     (returned, stored)
       | returned > stored -> pure $ SignatureCounterUpdated returned
-      | otherwise -> pure SignatureCounterPotentiallyCloned
       | otherwise -> pure SignatureCounterPotentiallyCloned
 
   -- 22. If all the above steps are successful, continue with the

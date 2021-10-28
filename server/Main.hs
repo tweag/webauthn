@@ -1,12 +1,5 @@
-{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Main
@@ -190,9 +183,9 @@ app origin rpIdHash db sessions = do
 mkCredentialDescriptor :: CredentialEntry -> M.PublicKeyCredentialDescriptor
 mkCredentialDescriptor CredentialEntry {ceCredentialId} =
   M.PublicKeyCredentialDescriptor
-    { pkcdTyp = M.PublicKeyCredentialTypePublicKey,
-      pkcdId = ceCredentialId,
-      pkcdTransports = Nothing
+    { M.pkcdTyp = M.PublicKeyCredentialTypePublicKey,
+      M.pkcdId = ceCredentialId,
+      M.pkcdTransports = Nothing
     }
 
 data RegistrationResult
@@ -222,12 +215,12 @@ beginLogin db sessions = do
   challenge <- liftIO $ uniformM globalStdGen
   let options =
         M.PublicKeyCredentialRequestOptions
-          { pkcogRpId = Nothing,
-            pkcogTimeout = Nothing,
-            pkcogChallenge = challenge,
-            pkcogAllowCredentials = Just (map mkCredentialDescriptor credentials),
-            pkcogUserVerification = Nothing,
-            pkcogExtensions = Nothing
+          { M.pkcogRpId = Nothing,
+            M.pkcogTimeout = Nothing,
+            M.pkcogChallenge = challenge,
+            M.pkcogAllowCredentials = Just (map mkCredentialDescriptor credentials),
+            M.pkcogUserVerification = Nothing,
+            M.pkcogExtensions = Nothing
           }
   liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating userId options)
   Scotty.json $ encodePublicKeyCredentialRequestOptions options
@@ -282,9 +275,9 @@ beginRegistration db sessions = do
       userId <- liftIO $ uniformM globalStdGen
       let user =
             M.PublicKeyCredentialUserEntity
-              { pkcueId = userId,
-                pkcueDisplayName = M.UserAccountDisplayName displayName,
-                pkcueName = M.UserAccountName userName
+              { M.pkcueId = userId,
+                M.pkcueDisplayName = M.UserAccountDisplayName displayName,
+                M.pkcueName = M.UserAccountName userName
               }
       let options = defaultPkcco user challenge
       liftIO $ putStrLn $ "/register/begin, sending " <> show options
@@ -321,7 +314,7 @@ completeRegistration origin rpIdHash db sessions = do
         Success result -> pure result
       -- if the credential was succesfully attested, we will see if the
       -- credential doesn't exist yet, and if it doesn't, insert it.
-      result :: Either RegistrationResult () <- liftIO $
+      result <- liftIO $
         Database.withTransaction db $ \tx -> do
           -- If a credential with this id existed already, it must belong to the
           -- current user, otherwise it's an error. The spec allows removing the
@@ -339,22 +332,27 @@ completeRegistration origin rpIdHash db sessions = do
 defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
 defaultPkcco userEntity challenge =
   M.PublicKeyCredentialCreationOptions
-    { pkcocRp = M.PublicKeyCredentialRpEntity {pkcreId = Nothing, pkcreName = "ACME"},
-      pkcocUser = userEntity,
-      pkcocChallenge = challenge,
+    { M.pkcocRp = M.PublicKeyCredentialRpEntity {M.pkcreId = Nothing, M.pkcreName = "ACME"},
+      M.pkcocUser = userEntity,
+      M.pkcocChallenge = challenge,
       -- Empty credentialparameters are not supported.
-      pkcocPubKeyCredParams = [M.PublicKeyCredentialParameters {pkcpTyp = M.PublicKeyCredentialTypePublicKey, pkcpAlg = COSEAlgorithmIdentifierES256}],
-      pkcocTimeout = Nothing,
-      pkcocExcludeCredentials = Nothing,
-      pkcocAuthenticatorSelection =
+      M.pkcocPubKeyCredParams =
+        [ M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = COSEAlgorithmIdentifierES256
+            }
+        ],
+      M.pkcocTimeout = Nothing,
+      M.pkcocExcludeCredentials = Nothing,
+      M.pkcocAuthenticatorSelection =
         Just
           M.AuthenticatorSelectionCriteria
-            { ascAuthenticatorAttachment = Nothing,
-              ascResidentKey = Just M.ResidentKeyRequirementDiscouraged,
-              ascUserVerification = Just M.UserVerificationRequirementPreferred
+            { M.ascAuthenticatorAttachment = Nothing,
+              M.ascResidentKey = Just M.ResidentKeyRequirementDiscouraged,
+              M.ascUserVerification = Just M.UserVerificationRequirementPreferred
             },
-      pkcocAttestation = Just M.AttestationConveyancePreferenceDirect,
-      pkcocExtensions = Nothing
+      M.pkcocAttestation = Just M.AttestationConveyancePreferenceDirect,
+      M.pkcocExtensions = Nothing
     }
 
 main :: IO ()

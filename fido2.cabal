@@ -45,9 +45,7 @@ library
     x509,
     x509-validation,
     random,
-    scientific,
     singletons,
-    vector,
     time,
     x509,
     x509-validation,
@@ -84,10 +82,8 @@ executable server
 
   build-depends:
     aeson,
-    aeson-qq,
     base64-bytestring,
     cborg,
-    serialise,
     bytestring,
     containers,
     cookie,
@@ -111,7 +107,7 @@ test-suite tests
   import: sanity
   type: exitcode-stdio-1.0
   hs-source-dirs: tests
-  main-is: Spec.hs
+  main-is: Main.hs
   other-modules:
     PublicKeySpec,
     MetadataSpec,
