@@ -112,7 +112,9 @@ test-suite tests
     PublicKeySpec,
     MetadataSpec,
     Spec.Types,
-    Spec.Util
+    Spec.Util,
+    Client,
+    Client.PrivateKey
   build-depends:
     aeson,
     bytestring,
@@ -133,4 +135,6 @@ test-suite tests
     mtl,
     x509,
     pem,
-    validation
+    validation,
+    containers,
+    binary

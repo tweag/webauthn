@@ -1,5 +1,6 @@
 module Client.PrivateKey
-  ( sign,
+  ( PrivateKey,
+    sign,
   )
 where
 
@@ -26,3 +27,4 @@ sign (ES256PublicKey _) (ES512PrivateKey key) msg = ESSignature <$> ECDSA.sign k
 sign (ES384PublicKey _) (ES512PrivateKey key) msg = ESSignature <$> ECDSA.sign key Hash.SHA384 msg
 sign (ES512PublicKey _) (ES512PrivateKey key) msg = ESSignature <$> ECDSA.sign key Hash.SHA512 msg
 sign (Ed25519PublicKey publicKey) (Ed25519PrivateKey privateKey) msg = pure . Ed25519Signature $ Ed25519.sign privateKey publicKey msg
+sign _ _ _ = error "Unknown or incorrect private/public keypair"
