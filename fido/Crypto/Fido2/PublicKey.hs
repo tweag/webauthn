@@ -12,6 +12,7 @@ module Crypto.Fido2.PublicKey
     verify,
     decodePublicKey,
     decodeCOSEAlgorithmIdentifier,
+    encodePublicKey,
     toAlg,
     toPublicKey,
     toCOSEAlgorithmIdentifier,
@@ -20,11 +21,12 @@ module Crypto.Fido2.PublicKey
 where
 
 import qualified Codec.CBOR.Decoding as CBOR
+import qualified Codec.CBOR.Encoding as CBOR
 import Control.Monad (unless, when)
 import Crypto.Error (CryptoFailable (CryptoFailed, CryptoPassed))
 import Crypto.Hash (HashAlgorithm)
 import qualified Crypto.Hash.Algorithms as Hash
-import Crypto.Number.Serialize (os2ip)
+import Crypto.Number.Serialize (i2osp, os2ip)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
@@ -32,6 +34,7 @@ import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1
+import qualified Data.ByteArray as ByteArray
 import Data.ByteString (ByteString)
 import qualified Data.X509 as X509
 import qualified Data.X509.EC as X509
@@ -115,14 +118,6 @@ decodePublicKey = do
       unless (ECC.isPointValid curve point) $ fail "point not on curve"
       toECDSAKey alg (ECDSA.PublicKey curve point)
 
-    mapKeyToInt :: MapKey -> Int
-    mapKeyToInt key = case key of
-      Kty -> 1
-      Alg -> 3
-      Crv -> -1
-      X -> -2
-      Y -> -3
-
     decodeKeyType :: CBOR.Decoder s KeyType
     decodeKeyType = do
       kty <- CBOR.decodeIntCanonical
@@ -156,6 +151,14 @@ decodePublicKey = do
       key' <- CBOR.decodeIntCanonical
       when (mapKeyToInt key /= key') $ fail $ "Expected " ++ show key
 
+mapKeyToInt :: MapKey -> Int
+mapKeyToInt key = case key of
+  Kty -> 1
+  Alg -> 3
+  Crv -> -1
+  X -> -2
+  Y -> -3
+
 -- All CBOR is encoded using
 -- https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-client-to-authenticator-protocol-v2.0-id-20180227.html#ctap2-canonical-cbor-encoding-form
 
@@ -165,6 +168,53 @@ decodePublicKey = do
 decodeCOSEAlgorithmIdentifier :: CBOR.Decoder s COSEAlgorithmIdentifier
 decodeCOSEAlgorithmIdentifier =
   toAlg =<< CBOR.decodeIntCanonical
+
+encodePublicKey :: PublicKey -> CBOR.Encoding
+encodePublicKey pk@(ES256PublicKey ecdsaPk) = encodeECDSA (toCOSEAlgorithmIdentifier pk) ecdsaPk
+encodePublicKey pk@(ES384PublicKey ecdsaPk) = encodeECDSA (toCOSEAlgorithmIdentifier pk) ecdsaPk
+encodePublicKey pk@(ES512PublicKey ecdsaPk) = encodeECDSA (toCOSEAlgorithmIdentifier pk) ecdsaPk
+encodePublicKey pk@(Ed25519PublicKey edPk) =
+  CBOR.encodeMapLen 4
+    <> encodeMapKey Kty
+    <> encodeKeyType OKP
+    <> encodeMapKey Alg
+    <> encodeCOSEAlgorithm (toCOSEAlgorithmIdentifier pk)
+    <> encodeMapKey Crv
+    <> CBOR.encodeInt 6
+    <> encodeMapKey X
+    <> CBOR.encodeBytes (ByteArray.convert edPk)
+
+encodeECDSA :: COSEAlgorithmIdentifier -> ECDSA.PublicKey -> CBOR.Encoding
+encodeECDSA ident ECDSA.PublicKey {ECDSA.public_q = ECC.Point x y} =
+  CBOR.encodeMapLen 5
+    <> encodeMapKey Kty
+    <> encodeKeyType ECC
+    <> encodeMapKey Alg
+    <> encodeCOSEAlgorithm ident
+    <> encodeMapKey Crv
+    <> encodeCurve ident
+    <> encodeMapKey X
+    <> CBOR.encodeBytes (i2osp x)
+    <> encodeMapKey Y
+    <> CBOR.encodeBytes (i2osp y)
+
+encodeKeyType :: KeyType -> CBOR.Encoding
+encodeKeyType OKP = CBOR.encodeInt 1
+encodeKeyType ECC = CBOR.encodeInt 2
+
+encodeMapKey :: MapKey -> CBOR.Encoding
+encodeMapKey = CBOR.encodeInt . mapKeyToInt
+
+encodeCOSEAlgorithm :: COSEAlgorithmIdentifier -> CBOR.Encoding
+encodeCOSEAlgorithm COSEAlgorithmIdentifierES256 = CBOR.encodeInt (-7)
+encodeCOSEAlgorithm COSEAlgorithmIdentifierES384 = CBOR.encodeInt (-35)
+encodeCOSEAlgorithm COSEAlgorithmIdentifierES512 = CBOR.encodeInt (-36)
+encodeCOSEAlgorithm COSEAlgorithmIdentifierEdDSA = CBOR.encodeInt (-8)
+
+encodeCurve :: COSEAlgorithmIdentifier -> CBOR.Encoding
+encodeCurve COSEAlgorithmIdentifierES256 = CBOR.encodeInt 1
+encodeCurve COSEAlgorithmIdentifierES384 = CBOR.encodeInt 2
+encodeCurve COSEAlgorithmIdentifierES512 = CBOR.encodeInt 3
 
 toAlg :: (Eq a, Num a, MonadFail f) => a -> f COSEAlgorithmIdentifier
 toAlg (-7) = pure COSEAlgorithmIdentifierES256

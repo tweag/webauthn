@@ -61,7 +61,7 @@ clientAttestation (AuthenticatorNone sc pk) options =
                                   { M.acdAaguid = M.AAGUID "0000000000000000",
                                     M.acdCredentialId = credentialId,
                                     M.acdCredentialPublicKey = pk, -- This is selfsigned
-                                    M.acdCredentialPublicKeyBytes = M.PublicKeyBytes . CBOR.toStrictByteString $ undefined {- TODO: encode to CBOR -} pk
+                                    M.acdCredentialPublicKeyBytes = M.PublicKeyBytes . CBOR.toStrictByteString $ PublicKey.encodePublicKey pk
                                   },
                               M.adExtensions = Nothing,
                               M.adRawData = undefined
