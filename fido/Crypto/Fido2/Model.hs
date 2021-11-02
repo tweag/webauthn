@@ -6,7 +6,8 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- |
--- This module contains the same top-level definitions as 'Crypto.Fido2.Client.JavaScript', but with the types containing a more Haskell-friendly structure
+-- This module contains the same top-level definitions as 'Crypto.Fido2.Client.JavaScript',
+-- but with the types containing a more Haskell-friendly structure
 module Crypto.Fido2.Model
   ( -- * Enumerations
     PublicKeyCredentialType (..),
@@ -97,24 +98,43 @@ data PublicKeyCredentialType = PublicKeyCredentialTypePublicKey
   deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
--- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) may implement various [transports](https://www.w3.org/TR/webauthn-2/#enum-transport) for communicating with [clients](https://www.w3.org/TR/webauthn-2/#client). This enumeration defines hints as to how clients might communicate with a particular authenticator in order to obtain an assertion for a specific credential. Note that these hints represent the [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)'s best belief as to how an authenticator may be reached. A [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) will typically learn of the supported transports for a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) via [getTransports()](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports).
+-- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) may implement
+-- various [transports](https://www.w3.org/TR/webauthn-2/#enum-transport) for communicating
+-- with [clients](https://www.w3.org/TR/webauthn-2/#client). This enumeration defines
+-- hints as to how clients might communicate with a particular authenticator in order
+-- to obtain an assertion for a specific credential. Note that these hints represent
+-- the [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)'s
+-- best belief as to how an authenticator may be reached. A [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
+-- will typically learn of the supported transports for a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
+-- via [getTransports()](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports).
 data AuthenticatorTransport
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-usb)
-    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) can be contacted over removable USB.
+    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- can be contacted over removable USB.
     AuthenticatorTransportUSB
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-nfc)
-    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) can be contacted over Near Field Communication (NFC).
+    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- can be contacted over Near Field Communication (NFC).
     AuthenticatorTransportNFC
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-ble)
-    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) can be contacted over Bluetooth Smart (Bluetooth Low Energy / BLE).
+    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- can be contacted over Bluetooth Smart (Bluetooth Low Energy / BLE).
     AuthenticatorTransportBLE
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-internal)
-    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) is contacted using a [client device](https://www.w3.org/TR/webauthn-2/#client-device)-specific transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators). These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
+    -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- is contacted using a [client device](https://www.w3.org/TR/webauthn-2/#client-device)-specific
+    -- transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators).
+    -- These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
     AuthenticatorTransportInternal
   deriving (Eq, Show, Bounded, Enum, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
--- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)' [attachment modalities](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality). [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) use this to express a preferred [authenticator attachment modality](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality) when calling [@navigator.credentials.create()@](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) to [create a credential](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
+-- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)'
+-- [attachment modalities](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality).
+-- [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) use this to
+-- express a preferred [authenticator attachment modality](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality)
+-- when calling [@navigator.credentials.create()@](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
+-- to [create a credential](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
 data AuthenticatorAttachment
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattachment-platform)
     -- This value indicates [platform attachment](https://www.w3.org/TR/webauthn-2/#platform-attachment).
@@ -319,7 +339,8 @@ newtype AAGUID = AAGUID {unAAGUID :: BS.ByteString}
 -- [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
 -- This default MAY be overridden by the caller, as long as the caller-specified 'RpId' value
 -- [is a registrable domain suffix of or is equal to](https://html.spec.whatwg.org/multipage/origin.html#is-a-registrable-domain-suffix-of-or-is-equal-to)
--- the caller’s [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
+-- the caller’s [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s
+-- [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
 --
 -- TODO: 'RpId' is used for both https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrpentity-id
 -- and https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid, but the former
@@ -333,16 +354,26 @@ newtype RpId = RpId {unRpId :: Text}
 -- identifier for the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party),
 -- intended only for display. For example, "ACME Corporation", "Wonderful Widgets, Inc." or "ОАО Примертех".
 --
--- - [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform enforcement, as prescribed in Section 2.3 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266) for the Nickname Profile of the PRECIS FreeformClass [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264), when setting 'RelyingPartyName''s value, or displaying the value to the user.
--- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir) about how this metadata is encoded.
+-- - [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform
+-- enforcement, as prescribed in Section 2.3 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266)
+-- for the Nickname Profile of the PRECIS FreeformClass [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264),
+-- when setting 'RelyingPartyName''s value, or displaying the value to the user.
+-- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
+-- SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir)
+-- about how this metadata is encoded.
 newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
   deriving (Eq, Show)
   deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- The user handle is specified by a [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party),
--- as the value of 'id', and used to [map](https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map) a specific [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) to a specific user account with the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party). Authenticators in turn [map](https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map) [RP IDs](https://www.w3.org/TR/webauthn-2/#rp-id) and user handle pairs to [public key credential sources](https://www.w3.org/TR/webauthn-2/#public-key-credential-source).
--- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence) with a maximum size of 64 bytes, and is not meant to be displayed to the user.
+-- as the value of 'id', and used to [map](https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map)
+-- a specific [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
+-- to a specific user account with the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
+-- Authenticators in turn [map](https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map)
+-- [RP IDs](https://www.w3.org/TR/webauthn-2/#rp-id) and user handle pairs to [public key credential sources](https://www.w3.org/TR/webauthn-2/#public-key-credential-source).
+-- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
+-- with a maximum size of 64 bytes, and is not meant to be displayed to the user.
 newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
   deriving (Eq, Show)
 
@@ -357,8 +388,13 @@ instance Uniform UserHandle where
 -- intended only for display. For example, "Alex Müller" or "田中倫". The Relying Party SHOULD
 -- let the user choose this, and SHOULD NOT restrict the choice more than necessary.
 --
--- - [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform enforcement, as prescribed in Section 2.3 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266) for the Nickname Profile of the PRECIS FreeformClass [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264), when setting 'displayName''s value, or displaying the value to the user.
--- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir) about how this metadata is encoded.
+-- - [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform
+-- enforcement, as prescribed in Section 2.3 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266)
+-- for the Nickname Profile of the PRECIS FreeformClass [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264),
+-- when setting 'displayName''s value, or displaying the value to the user.
+-- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
+-- SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir)
+-- about how this metadata is encoded.
 newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayName :: Text}
   deriving (Eq, Show)
   deriving newtype (IsString)
@@ -437,7 +473,8 @@ newtype RpIdHash = RpIdHash {unRpIdHash :: Digest SHA256}
   deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data)
--- This is the hash (computed using SHA-256) of the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data), as constructed by the client.
+-- This is the hash (computed using SHA-256) of the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data),
+-- as constructed by the client.
 newtype ClientDataHash = ClientDataHash {unClientDataHash :: Digest SHA256}
   deriving (Eq, Show)
 
@@ -508,7 +545,8 @@ data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
     -- The 'UserHandle' MUST NOT contain personally identifying information about the user, such as a username
     -- or e-mail address; see [§ 14.6.1 User Handle Contents](https://www.w3.org/TR/webauthn-2/#sctn-user-handle-privacy)
     -- for details. The user handle MUST NOT be empty, though it MAY be null.
-    -- FIXME: We don't allow encoding it as null here, because it doesn't seem to be an allowed value in the client, see <https://www.w3.org/TR/webauthn-2/#sctn-createCredential>
+    -- FIXME: We don't allow encoding it as null here, because it doesn't seem
+    -- to be an allowed value in the client, see <https://www.w3.org/TR/webauthn-2/#sctn-createCredential>
     pkcueId :: UserHandle,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
     -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) name for the user account,
@@ -633,7 +671,8 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       pkcocExcludeCredentials :: Maybe [PublicKeyCredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
-      -- that wish to select the appropriate authenticators to participate in the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
+      -- that wish to select the appropriate authenticators to participate in the
+      -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
       pkcocAuthenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -710,7 +749,8 @@ data CollectedClientData (t :: WebauthnType) = CollectedClientData
     -- that was passed into the [internal method](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots).
     ccdCrossOrigin :: Maybe Bool,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data)
-    -- This is the hash (computed using SHA-256) of the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data), as constructed by the client.
+    -- This is the hash (computed using SHA-256) of the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data),
+    -- as constructed by the client.
     ccdHash :: ClientDataHash
     -- TODO: Implement this
     -- tokenBinding :: Maybe TokenBinding,
