@@ -17,6 +17,7 @@ module Crypto.Fido2.PublicKey
     toPublicKey,
     toCOSEAlgorithmIdentifier,
     toECDSAKey,
+    fromAlg,
   )
 where
 
@@ -222,6 +223,12 @@ toAlg (-35) = pure COSEAlgorithmIdentifierES384
 toAlg (-36) = pure COSEAlgorithmIdentifierES512
 toAlg (-8) = pure COSEAlgorithmIdentifierEdDSA
 toAlg _ = fail "Unsupported `alg`"
+
+fromAlg :: Num a => COSEAlgorithmIdentifier -> a
+fromAlg COSEAlgorithmIdentifierES256 = -7
+fromAlg COSEAlgorithmIdentifierES384 = -35
+fromAlg COSEAlgorithmIdentifierES512 = -36
+fromAlg COSEAlgorithmIdentifierEdDSA = -8
 
 toCOSEAlgorithmIdentifier :: PublicKey -> COSEAlgorithmIdentifier
 toCOSEAlgorithmIdentifier (ES256PublicKey _) = COSEAlgorithmIdentifierES256

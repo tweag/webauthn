@@ -29,6 +29,7 @@ import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1), Point (Point))
 import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
@@ -82,6 +83,12 @@ instance M.AttestationStatementFormat Format where
       Just (TList _) -> Left MultipleX5C
       _ -> Left NoX5C
     pure $ Statement sig attCert
+
+  asfEncode _ Statement {sig, attCert} =
+    HashMap.fromList
+      [ ("sig", TBytes sig),
+        ("x5c", TList [TBytes $ X509.encodeSignedObject attCert])
+      ]
 
   type AttStmtVerificationError Format = VerifyingError
 

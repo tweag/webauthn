@@ -880,6 +880,14 @@ class
     HashMap Text CBOR.Term ->
     Either (AttStmtDecodingError a) (AttStmt a)
 
+  -- | An encoder for the attestation statement [syntax](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+  -- The @attStmt@ CBOR map is expected as the result. See
+  -- [Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
+  asfEncode ::
+    a ->
+    AttStmt a ->
+    HashMap Text CBOR.Term
+
 -- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
 -- In contrast to 'DecodingAttestationStatementFormat', this type can be put into a list.
 -- This is used for 'mkSupportedAttestationStatementFormats'

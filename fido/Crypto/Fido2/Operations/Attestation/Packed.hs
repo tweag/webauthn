@@ -16,7 +16,7 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, toAlg, toCOSEAlgorithmIdentifier)
+import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, fromAlg, toAlg, toCOSEAlgorithmIdentifier)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Data.ASN1.BinaryEncoding (DER (DER))
 import Data.ASN1.Encoding (ASN1Decoding (decodeASN1))
@@ -28,8 +28,9 @@ import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (fromStrict)
 import Data.HashMap.Strict (HashMap, (!?))
+import qualified Data.HashMap.Strict as HashMap
 import Data.List (find)
-import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 import Data.Text (Text)
@@ -88,6 +89,16 @@ instance M.AttestationStatementFormat Format where
           _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
         pure $ Statement {..}
       _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
+
+  asfEncode _ Statement {alg, sig, x5c} =
+    let encodedx5c = case x5c of
+          Nothing -> []
+          Just certChain -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
+     in HashMap.fromList
+          [ ("sig", CBOR.TBytes sig),
+            ("alg", CBOR.TInt $ fromAlg alg),
+            ("x5c", CBOR.TList encodedx5c)
+          ]
 
   type AttStmtVerificationError Format = VerificationError
 
