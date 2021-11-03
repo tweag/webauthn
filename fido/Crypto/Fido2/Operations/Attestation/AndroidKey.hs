@@ -25,7 +25,6 @@ import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
 import Data.HashMap.Strict (HashMap, (!?))
-import qualified Data.HashMap.Strict as HashMap
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
@@ -195,11 +194,11 @@ instance M.AttestationStatementFormat Format where
         pure Statement {..}
       _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
 
-  asfEncode _ Statement {sig, x5c, pubKey, attExt} =
-    HashMap.fromList
-      [ ("sig", CBOR.TBytes sig),
-        ("alg", CBOR.TInt $ fromAlg $ toCOSEAlgorithmIdentifier pubKey),
-        ( "x5c",
+  asfEncode _ Statement {sig, x5c, pubKey} =
+    CBOR.TMap
+      [ (CBOR.TString "sig", CBOR.TBytes sig),
+        (CBOR.TString "alg", CBOR.TInt $ fromAlg $ toCOSEAlgorithmIdentifier pubKey),
+        ( CBOR.TString "x5c",
           CBOR.TList $
             map (CBOR.TBytes . X509.encodeSignedObject) $ toList x5c
         )

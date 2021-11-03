@@ -886,7 +886,7 @@ class
   asfEncode ::
     a ->
     AttStmt a ->
-    HashMap Text CBOR.Term
+    CBOR.Term
 
 -- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
 -- In contrast to 'DecodingAttestationStatementFormat', this type can be put into a list.

@@ -6,8 +6,8 @@ module Crypto.Fido2.Operations.Attestation.None
   )
 where
 
+import qualified Codec.CBOR.Term as CBOR
 import qualified Crypto.Fido2.Model as M
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as Text
 import Data.Void (Void)
 
@@ -22,7 +22,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtDecodingError Format = Void
   asfDecode _ _ = Right ()
-  asfEncode _ _ = HashMap.empty
+  asfEncode _ _ = CBOR.TMap []
 
   type AttStmtVerificationError Format = Void
   asfVerify _ _ _ _ = Right M.AttestationTypeNone

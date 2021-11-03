@@ -28,7 +28,6 @@ import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (fromStrict)
 import Data.HashMap.Strict (HashMap, (!?))
-import qualified Data.HashMap.Strict as HashMap
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
@@ -94,10 +93,10 @@ instance M.AttestationStatementFormat Format where
     let encodedx5c = case x5c of
           Nothing -> []
           Just certChain -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
-     in HashMap.fromList
-          [ ("sig", CBOR.TBytes sig),
-            ("alg", CBOR.TInt $ fromAlg alg),
-            ("x5c", CBOR.TList encodedx5c)
+     in CBOR.TMap
+          [ (CBOR.TString "sig", CBOR.TBytes sig),
+            (CBOR.TString "alg", CBOR.TInt $ fromAlg alg),
+            (CBOR.TString "x5c", CBOR.TList encodedx5c)
           ]
 
   type AttStmtVerificationError Format = VerificationError
