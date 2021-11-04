@@ -218,8 +218,8 @@ beginLogin db sessions = do
           { M.pkcogRpId = Nothing,
             M.pkcogTimeout = Nothing,
             M.pkcogChallenge = challenge,
-            M.pkcogAllowCredentials = Just (map mkCredentialDescriptor credentials),
-            M.pkcogUserVerification = Nothing,
+            M.pkcogAllowCredentials = map mkCredentialDescriptor credentials,
+            M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
             M.pkcogExtensions = Nothing
           }
   liftIO $ STM.atomically $ casSession sessions sessionId session (Authenticating userId options)
@@ -343,15 +343,15 @@ defaultPkcco userEntity challenge =
             }
         ],
       M.pkcocTimeout = Nothing,
-      M.pkcocExcludeCredentials = Nothing,
+      M.pkcocExcludeCredentials = [],
       M.pkcocAuthenticatorSelection =
         Just
           M.AuthenticatorSelectionCriteria
             { M.ascAuthenticatorAttachment = Nothing,
-              M.ascResidentKey = Just M.ResidentKeyRequirementDiscouraged,
-              M.ascUserVerification = Just M.UserVerificationRequirementPreferred
+              M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
+              M.ascUserVerification = M.UserVerificationRequirementPreferred
             },
-      M.pkcocAttestation = Just M.AttestationConveyancePreferenceDirect,
+      M.pkcocAttestation = M.AttestationConveyancePreferenceDirect,
       M.pkcocExtensions = Nothing
     }
 

@@ -100,7 +100,7 @@ main = Hspec.hspec $ do
                   M.PublicKeyCredential
                     { M.pkcIdentifier = Common.ceCredentialId credentialEntry,
                       M.pkcResponse = pkcResponse,
-                      M.pkcClientExtensionResults = Nothing
+                      M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
                     }
         signInResult `shouldSatisfy` isRight
   describe "Packed register" $
@@ -190,9 +190,9 @@ defaultPublicKeyCredentialCreationOptions pkc =
             }
         ],
       M.pkcocTimeout = Nothing,
-      M.pkcocExcludeCredentials = Just [],
+      M.pkcocExcludeCredentials = [],
       M.pkcocAuthenticatorSelection = Nothing,
-      M.pkcocAttestation = Nothing,
+      M.pkcocAttestation = M.AttestationConveyancePreferenceNone,
       M.pkcocExtensions = Nothing
     }
 
@@ -202,8 +202,8 @@ defaultPublicKeyCredentialRequestOptions pkc =
     { M.pkcogChallenge = M.ccdChallenge . M.argClientData $ M.pkcResponse pkc,
       M.pkcogTimeout = Nothing,
       M.pkcogRpId = Just "localhost",
-      M.pkcogAllowCredentials = Nothing,
-      M.pkcogUserVerification = Nothing,
+      M.pkcogAllowCredentials = [],
+      M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
       M.pkcogExtensions = Nothing
     }
 

@@ -190,15 +190,14 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   case ( M.pkcogUserVerification options,
          M.adfUserVerified (M.adFlags authData)
        ) of
-    (Nothing, _) -> pure ()
-    (Just M.UserVerificationRequirementRequired, True) -> pure ()
-    (Just M.UserVerificationRequirementRequired, False) -> failure AssertionUserNotVerified
-    (Just M.UserVerificationRequirementPreferred, True) -> pure ()
+    (M.UserVerificationRequirementRequired, True) -> pure ()
+    (M.UserVerificationRequirementRequired, False) -> failure AssertionUserNotVerified
+    (M.UserVerificationRequirementPreferred, True) -> pure ()
     -- TODO: Maybe throw warning that user verification was preferred but not provided
-    (Just M.UserVerificationRequirementPreferred, False) -> pure ()
+    (M.UserVerificationRequirementPreferred, False) -> pure ()
     -- TODO: Maybe throw warning that user verification was discouraged but provided
-    (Just M.UserVerificationRequirementDiscouraged, True) -> pure ()
-    (Just M.UserVerificationRequirementDiscouraged, False) -> pure ()
+    (M.UserVerificationRequirementDiscouraged, True) -> pure ()
+    (M.UserVerificationRequirementDiscouraged, False) -> pure ()
 
   -- 18. Verify that the values of the client extension outputs in
   -- clientExtensionResults and the authenticator extension outputs in the
