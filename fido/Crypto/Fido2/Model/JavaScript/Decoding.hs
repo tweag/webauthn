@@ -20,6 +20,7 @@ module Crypto.Fido2.Model.JavaScript.Decoding
     decodeCreatedPublicKeyCredential,
     decodeRequestedPublicKeyCredential,
     decodePublicKeyCredentialCreationOptions,
+    decodePublicKeyCredentialRequestOptions,
   )
 where
 
@@ -385,6 +386,16 @@ instance Decode (M.PublicKeyCredentialOptions 'M.Create) where
     let pkcocExtensions = M.AuthenticationExtensionsClientInputs {} <$ extensions
     pure $ M.PublicKeyCredentialCreationOptions {..}
 
+instance Decode (M.PublicKeyCredentialOptions 'M.Get) where
+  decode JS.PublicKeyCredentialRequestOptions {..} = do
+    pkcogChallenge <- decode challenge
+    pkcogTimeout <- decode timeout
+    pkcogRpId <- decode rpId
+    pkcogAllowCredentials <- decode allowCredentials
+    pkcogUserVerification <- decode userVerification
+    let pkcogExtensions = M.AuthenticationExtensionsClientInputs {} <$ extensions
+    pure $ M.PublicKeyCredentialRequestOptions {..}
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated M.AttestationObject where
   decodeCreated supportedFormats (JS.URLEncodedBase64 bytes) = do
@@ -444,3 +455,8 @@ decodePublicKeyCredentialCreationOptions ::
   JS.PublicKeyCredentialCreationOptions ->
   Either DecodingError (M.PublicKeyCredentialOptions 'M.Create)
 decodePublicKeyCredentialCreationOptions = decode
+
+decodePublicKeyCredentialRequestOptions ::
+  JS.PublicKeyCredentialRequestOptions ->
+  Either DecodingError (M.PublicKeyCredentialOptions 'M.Get)
+decodePublicKeyCredentialRequestOptions = decode
