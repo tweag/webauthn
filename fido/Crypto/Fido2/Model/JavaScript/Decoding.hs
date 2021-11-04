@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -53,7 +54,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Coerce (Coercible, coerce)
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
-import Data.Maybe (fromJust)
+import Data.Maybe (catMaybes, fromJust, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
@@ -83,13 +84,7 @@ data DecodingError
   | DecodingErrorNotAllInputUsed LBS.ByteString
   | DecodingErrorBinary String
   | DecodingErrorCBOR CBOR.DeserialiseFailure
-  | DecodingErrorUnexpectedPublicKeyCredentialType JS.DOMString
   | DecodingErrorUnexpectedAlgorithmIdentifier JS.COSEAlgorithmIdentifier
-  | DecodingErrorUnexpectedTransport JS.DOMString
-  | DecodingErrorUnexpectedAttachment JS.DOMString
-  | DecodingErrorUnexpectedResidentKeyRequirement JS.DOMString
-  | DecodingErrorUnexpectedUserVerificationRequirement JS.DOMString
-  | DecodingErrorUnexpectedAttestationConveyancePreference JS.DOMString
   deriving (Show, Exception)
 
 -- | Webauthn contains a mixture of binary formats. For one it's CBOR and
@@ -213,9 +208,6 @@ instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
   decode (Just a) = Just <$> decode a
 
-instance Decode a => Decode [a] where
-  decode = traverse decode
-
 instance Decode M.CredentialId
 
 instance Decode M.AssertionSignature
@@ -313,66 +305,103 @@ instance Decode M.PublicKeyCredentialUserEntity where
 
 instance Decode M.Challenge
 
-instance Decode M.PublicKeyCredentialType where
-  decode "public-key" = Right M.PublicKeyCredentialTypePublicKey
-  decode typ = Left $ DecodingErrorUnexpectedPublicKeyCredentialType typ
-
 instance Decode PublicKey.COSEAlgorithmIdentifier where
+  -- The specification does not specify what to do when an unsupported or unknown COSE identifier is received
+  -- We err on the side of caution by failing to parse.
   decode n = maybe (Left $ DecodingErrorUnexpectedAlgorithmIdentifier n) Right $ PublicKey.toAlg n
-
-instance Decode M.PublicKeyCredentialParameters where
-  decode JS.PublicKeyCredentialParameters {..} = do
-    pkcpTyp <- decode typ
-    pkcpAlg <- decode alg
-    pure $ M.PublicKeyCredentialParameters {..}
 
 instance Decode M.Timeout
 
-instance Decode M.AuthenticatorTransport where
-  decode "usb" = Right M.AuthenticatorTransportUSB
-  decode "nfc" = Right M.AuthenticatorTransportNFC
-  decode "ble" = Right M.AuthenticatorTransportBLE
-  decode "internal" = Right M.AuthenticatorTransportInternal
-  decode transport = Left $ DecodingErrorUnexpectedTransport transport
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
+instance Decode [M.AuthenticatorTransport] where
+  decode = pure . mapMaybe decodeTransport
+    where
+      decodeTransport "usb" = Just M.AuthenticatorTransportUSB
+      decodeTransport "nfc" = Just M.AuthenticatorTransportNFC
+      decodeTransport "ble" = Just M.AuthenticatorTransportBLE
+      decodeTransport "internal" = Just M.AuthenticatorTransportInternal
+      decodeTransport _ = Nothing
 
-instance Decode M.PublicKeyCredentialDescriptor where
-  decode JS.PublicKeyCredentialDescriptor {..} = do
-    pkcdTyp <- decode typ
-    pkcdId <- decode id
-    pkcdTransports <- decode transports
-    pure $ M.PublicKeyCredentialDescriptor {..}
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-descriptor)
+-- [The type] member contains the type of the public key credential the caller
+-- is referring to. The value SHOULD be a member of
+-- PublicKeyCredentialType but client platforms MUST ignore any
+-- PublicKeyCredentialDescriptor with an unknown type.
+instance Decode [M.PublicKeyCredentialDescriptor] where
+  decode Nothing = pure []
+  decode (Just xs) = catMaybes <$> traverse decodeDescriptor xs
+    where
+      decodeDescriptor :: JS.PublicKeyCredentialDescriptor -> Either DecodingError (Maybe M.PublicKeyCredentialDescriptor)
+      decodeDescriptor JS.PublicKeyCredentialDescriptor {typ = "public-key", id, transports} = do
+        let pkcdTyp = M.PublicKeyCredentialTypePublicKey
+        pkcdId <- decode id
+        pkcdTransports <- decode transports
+        pure . Just $ M.PublicKeyCredentialDescriptor {..}
+      decodeDescriptor _ = pure Nothing
 
-instance Decode M.AuthenticatorAttachment where
-  decode "platform" = Right M.AuthenticatorAttachmentPlatform
-  decode "cross-platform" = Right M.AuthenticatorAttachmentCrossPlatform
-  decode attachment = Left $ DecodingErrorUnexpectedAttachment attachment
-
-instance Decode M.ResidentKeyRequirement where
-  decode "discouraged" = Right M.ResidentKeyRequirementDiscouraged
-  decode "preferred" = Right M.ResidentKeyRequirementPreferred
-  decode "required" = Right M.ResidentKeyRequirementRequired
-  decode requirement = Left $ DecodingErrorUnexpectedResidentKeyRequirement requirement
-
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement)
+-- The value SHOULD be a member of UserVerificationRequirement but client
+-- platforms MUST ignore unknown values, treating an unknown value as if the
+-- member does not exist. The default is "preferred".
 instance Decode M.UserVerificationRequirement where
-  decode "discouraged" = Right M.UserVerificationRequirementDiscouraged
-  decode "preferred" = Right M.UserVerificationRequirementPreferred
-  decode "required" = Right M.UserVerificationRequirementRequired
-  decode requirement = Left $ DecodingErrorUnexpectedUserVerificationRequirement requirement
+  decode (Just "discouraged") = Right M.UserVerificationRequirementDiscouraged
+  decode (Just "preferred") = Right M.UserVerificationRequirementPreferred
+  decode (Just "required") = Right M.UserVerificationRequirementRequired
+  decode _ = Right M.UserVerificationRequirementPreferred
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-authenticatorSelection)
 instance Decode M.AuthenticatorSelectionCriteria where
   decode JS.AuthenticatorSelectionCriteria {..} = do
-    ascAuthenticatorAttachment <- decode authenticatorAttachment
-    ascResidentKey <- decode residentKey
+    let ascAuthenticatorAttachment = decodeAttachment =<< authenticatorAttachment
+        ascResidentKey = decodeResidentKey residentKey
     ascUserVerification <- decode userVerification
     pure $ M.AuthenticatorSelectionCriteria {..}
+    where
+      -- Any unknown values must be ignored, treating them as if the member does not exist
+      decodeAttachment "platform" = Just M.AuthenticatorAttachmentPlatform
+      decodeAttachment "cross-platform" = Just M.AuthenticatorAttachmentCrossPlatform
+      decodeAttachment _ = Nothing
 
+      -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-residentkey)
+      -- The value SHOULD be a member of ResidentKeyRequirement but client platforms
+      -- MUST ignore unknown values, treating an unknown value as if the member does not
+      -- exist. If no value is given then the effective value is required if
+      -- requireResidentKey is true or discouraged if it is false or absent.
+      decodeResidentKey :: Maybe JS.DOMString -> M.ResidentKeyRequirement
+      decodeResidentKey (Just "discouraged") = M.ResidentKeyRequirementDiscouraged
+      decodeResidentKey (Just "preferred") = M.ResidentKeyRequirementPreferred
+      decodeResidentKey (Just "required") = M.ResidentKeyRequirementRequired
+      decodeResidentKey _ = case requireResidentKey of
+        Just True -> M.ResidentKeyRequirementRequired
+        _ -> M.ResidentKeyRequirementDiscouraged
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-attestationconveyancepreference)
+-- Its values SHOULD be members of AttestationConveyancePreference. Client
+-- platforms MUST ignore unknown values, treating an unknown value as if the
+-- member does not exist. Its default value is "none".
 instance Decode M.AttestationConveyancePreference where
-  decode "none" = Right M.AttestationConveyancePreferenceNone
-  decode "indirect" = Right M.AttestationConveyancePreferenceIndirect
-  decode "direct" = Right M.AttestationConveyancePreferenceDirect
-  decode "enterprise" = Right M.AttestationConveyancePreferenceEnterprise
-  decode preference = Left $ DecodingErrorUnexpectedAttestationConveyancePreference preference
+  decode (Just "none") = Right M.AttestationConveyancePreferenceNone
+  decode (Just "indirect") = Right M.AttestationConveyancePreferenceIndirect
+  decode (Just "direct") = Right M.AttestationConveyancePreferenceDirect
+  decode (Just "enterprise") = Right M.AttestationConveyancePreferenceEnterprise
+  decode _ = Right M.AttestationConveyancePreferenceNone
 
+-- [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialparameters)
+-- [The type] member specifies the type of credential to be created. The value SHOULD
+-- be a member of PublicKeyCredentialType but client platforms MUST ignore
+-- unknown values, ignoring any PublicKeyCredentialParameters with an unknown
+-- type.
+instance Decode [M.PublicKeyCredentialParameters] where
+  decode xs = catMaybes <$> traverse decodeParam xs
+    where
+      decodeParam :: JS.PublicKeyCredentialParameters -> Either DecodingError (Maybe M.PublicKeyCredentialParameters)
+      decodeParam JS.PublicKeyCredentialParameters {typ = "public-key", alg} = do
+        let pkcpTyp = M.PublicKeyCredentialTypePublicKey
+        pkcpAlg <- decode alg
+        pure . Just $ M.PublicKeyCredentialParameters {..}
+      decodeParam _ = pure Nothing
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 instance Decode (M.PublicKeyCredentialOptions 'M.Create) where
   decode JS.PublicKeyCredentialCreationOptions {..} = do
     pkcocRp <- decode rp
@@ -386,6 +415,7 @@ instance Decode (M.PublicKeyCredentialOptions 'M.Create) where
     let pkcocExtensions = M.AuthenticationExtensionsClientInputs {} <$ extensions
     pure $ M.PublicKeyCredentialCreationOptions {..}
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
 instance Decode (M.PublicKeyCredentialOptions 'M.Get) where
   decode JS.PublicKeyCredentialRequestOptions {..} = do
     pkcogChallenge <- decode challenge

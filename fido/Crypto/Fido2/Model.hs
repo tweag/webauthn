@@ -611,7 +611,7 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- Specifies the extent to which the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- desires to create a [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential).
     -- For historical reasons the naming retains the deprecated “resident” terminology.
-    ascResidentKey :: Maybe ResidentKeyRequirement,
+    ascResidentKey :: ResidentKeyRequirement,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-userverification)
     -- This member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
     -- requirements regarding [user verification](https://www.w3.org/TR/webauthn-2/#user-verification)
@@ -620,7 +620,7 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- The value SHOULD be a member of 'UserVerificationRequirement' but
     -- [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values,
     -- treating an unknown value as if the [member does not exist](https://infra.spec.whatwg.org/#map-exists).
-    ascUserVerification :: Maybe UserVerificationRequirement
+    ascUserVerification :: UserVerificationRequirement
   }
   deriving (Eq, Show)
 
@@ -668,7 +668,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
       -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
-      pkcocExcludeCredentials :: Maybe [PublicKeyCredentialDescriptor],
+      pkcocExcludeCredentials :: [PublicKeyCredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to select the appropriate authenticators to participate in the
@@ -677,7 +677,7 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
-      pkcocAttestation :: Maybe AttestationConveyancePreference,
+      pkcocAttestation :: AttestationConveyancePreference,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
       -- This member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, the caller may request that only authenticators with certain capabilities be used to create the credential,
@@ -713,12 +713,12 @@ data PublicKeyCredentialOptions (t :: WebauthnType) where
       -- This OPTIONAL member contains a list of 'PublicKeyCredentialDescriptor'
       -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
       -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
-      pkcogAllowCredentials :: Maybe [PublicKeyCredentialDescriptor],
+      pkcogAllowCredentials :: [PublicKeyCredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
       -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
       -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
       -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
-      pkcogUserVerification :: Maybe UserVerificationRequirement,
+      pkcogUserVerification :: UserVerificationRequirement,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
@@ -1058,7 +1058,7 @@ data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
     -- [extension identifier](https://www.w3.org/TR/webauthn-2/#extension-identifier) →
     -- [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output) entries produced
     -- by the extension’s [client extension processing](https://www.w3.org/TR/webauthn-2/#client-extension-processing).
-    pkcClientExtensionResults :: Maybe AuthenticationExtensionsClientOutputs
+    pkcClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
 
 deriving instance Eq (PublicKeyCredential t)

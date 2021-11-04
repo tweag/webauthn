@@ -217,7 +217,7 @@ data PublicKeyCredential response = PublicKeyCredential
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-response)
     response :: response,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
-    clientExtensionResults :: Maybe (Map Text Aeson.Value)
+    clientExtensionResults :: Map Text Aeson.Value
   }
   deriving (Eq, Show, Generic)
 

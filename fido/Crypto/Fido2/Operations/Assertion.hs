@@ -97,11 +97,8 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   -- 5. If options.allowCredentials is not empty, verify that credential.id
   -- identifies one of the public key credentials listed in
   -- options.allowCredentials.
-  case M.pkcogAllowCredentials options of
-    Nothing -> pure ()
-    Just allowCredentials
-      | M.pkcIdentifier credential `elem` map M.pkcdId allowCredentials -> pure ()
-      | otherwise -> failure $ AssertionDisallowedCredential credential
+  let allowCredentials = M.pkcogAllowCredentials options
+  unless (null allowCredentials || M.pkcIdentifier credential `elem` map M.pkcdId allowCredentials) . failure $ AssertionDisallowedCredential credential
 
   -- 6. Identify the user being authenticated and verify that this user is the
   -- owner of the public key credential source credentialSource identified by

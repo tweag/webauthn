@@ -34,9 +34,6 @@ instance Encode hs => Encode (Maybe hs) where
   encode Nothing = Nothing
   encode (Just hs) = Just $ encode hs
 
-instance Encode a => Encode [a] where
-  encode = fmap encode
-
 instance Encode M.RpId
 
 instance Encode M.RelyingPartyName
@@ -69,11 +66,13 @@ instance Encode M.PublicKeyCredentialType where
   encode M.PublicKeyCredentialTypePublicKey = "public-key"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport>
-instance Encode M.AuthenticatorTransport where
-  encode M.AuthenticatorTransportUSB = "usb"
-  encode M.AuthenticatorTransportNFC = "nfc"
-  encode M.AuthenticatorTransportBLE = "ble"
-  encode M.AuthenticatorTransportInternal = "internal"
+instance Encode [M.AuthenticatorTransport] where
+  encode = map encodeTransport
+    where
+      encodeTransport M.AuthenticatorTransportUSB = "usb"
+      encodeTransport M.AuthenticatorTransportNFC = "nfc"
+      encodeTransport M.AuthenticatorTransportBLE = "ble"
+      encodeTransport M.AuthenticatorTransportInternal = "internal"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment>
 instance Encode M.AuthenticatorAttachment where
@@ -82,22 +81,22 @@ instance Encode M.AuthenticatorAttachment where
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-residentKeyRequirement>
 instance Encode M.ResidentKeyRequirement where
-  encode M.ResidentKeyRequirementDiscouraged = "discouraged"
-  encode M.ResidentKeyRequirementPreferred = "preferred"
-  encode M.ResidentKeyRequirementRequired = "required"
+  encode M.ResidentKeyRequirementDiscouraged = Just "discouraged"
+  encode M.ResidentKeyRequirementPreferred = Just "preferred"
+  encode M.ResidentKeyRequirementRequired = Just "required"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement>
 instance Encode M.UserVerificationRequirement where
-  encode M.UserVerificationRequirementRequired = "required"
-  encode M.UserVerificationRequirementPreferred = "preferred"
-  encode M.UserVerificationRequirementDiscouraged = "discouraged"
+  encode M.UserVerificationRequirementRequired = Just "required"
+  encode M.UserVerificationRequirementPreferred = Just "preferred"
+  encode M.UserVerificationRequirementDiscouraged = Just "discouraged"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-attestation-convey>
 instance Encode M.AttestationConveyancePreference where
-  encode M.AttestationConveyancePreferenceNone = "none"
-  encode M.AttestationConveyancePreferenceIndirect = "indirect"
-  encode M.AttestationConveyancePreferenceDirect = "direct"
-  encode M.AttestationConveyancePreferenceEnterprise = "enterprise"
+  encode M.AttestationConveyancePreferenceNone = Just "none"
+  encode M.AttestationConveyancePreferenceIndirect = Just "indirect"
+  encode M.AttestationConveyancePreferenceDirect = Just "direct"
+  encode M.AttestationConveyancePreferenceEnterprise = Just "enterprise"
 
 instance Encode M.PublicKeyCredentialRpEntity where
   encode M.PublicKeyCredentialRpEntity {..} =
@@ -114,12 +113,14 @@ instance Encode M.PublicKeyCredentialUserEntity where
         name = encode pkcueName
       }
 
-instance Encode M.PublicKeyCredentialParameters where
-  encode M.PublicKeyCredentialParameters {..} =
-    JS.PublicKeyCredentialParameters
-      { typ = encode pkcpTyp,
-        alg = encode pkcpAlg
-      }
+instance Encode [M.PublicKeyCredentialParameters] where
+  encode = map encodeParameters
+    where
+      encodeParameters M.PublicKeyCredentialParameters {..} =
+        JS.PublicKeyCredentialParameters
+          { typ = encode pkcpTyp,
+            alg = encode pkcpAlg
+          }
 
 instance Encode M.PublicKeyCredentialDescriptor where
   encode M.PublicKeyCredentialDescriptor {..} =
@@ -136,9 +137,12 @@ instance Encode M.AuthenticatorSelectionCriteria where
         residentKey = encode ascResidentKey,
         -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
         -- Relying Parties SHOULD set it to true if, and only if, residentKey is set to required.
-        requireResidentKey = Just (ascResidentKey == Just M.ResidentKeyRequirementRequired),
+        requireResidentKey = Just (ascResidentKey == M.ResidentKeyRequirementRequired),
         userVerification = encode ascUserVerification
       }
+
+instance Encode [M.PublicKeyCredentialDescriptor] where
+  encode = Just . map encode
 
 instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
   encode M.PublicKeyCredentialCreationOptions {..} =

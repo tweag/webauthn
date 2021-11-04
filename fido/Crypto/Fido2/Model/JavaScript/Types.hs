@@ -22,9 +22,6 @@ class Convert hs where
 instance Convert hs => Convert (Maybe hs) where
   type JS (Maybe hs) = Maybe (JS hs)
 
-instance Convert a => Convert [a] where
-  type JS [a] = [JS a]
-
 instance Convert M.RpId where
   type JS M.RpId = JS.DOMString
 
@@ -55,8 +52,8 @@ instance Convert M.PublicKeyCredentialType where
 instance Convert PublicKey.COSEAlgorithmIdentifier where
   type JS PublicKey.COSEAlgorithmIdentifier = JS.COSEAlgorithmIdentifier
 
-instance Convert M.PublicKeyCredentialParameters where
-  type JS M.PublicKeyCredentialParameters = JS.PublicKeyCredentialParameters
+instance Convert [M.PublicKeyCredentialParameters] where
+  type JS [M.PublicKeyCredentialParameters] = [JS.PublicKeyCredentialParameters]
 
 instance Convert M.Timeout where
   type JS M.Timeout = JS.UnsignedLong
@@ -64,26 +61,29 @@ instance Convert M.Timeout where
 instance Convert M.CredentialId where
   type JS M.CredentialId = JS.BufferSource
 
-instance Convert M.AuthenticatorTransport where
-  type JS M.AuthenticatorTransport = JS.DOMString
+instance Convert [M.AuthenticatorTransport] where
+  type JS [M.AuthenticatorTransport] = [JS.DOMString]
 
 instance Convert M.PublicKeyCredentialDescriptor where
   type JS M.PublicKeyCredentialDescriptor = JS.PublicKeyCredentialDescriptor
+
+instance Convert [M.PublicKeyCredentialDescriptor] where
+  type JS [M.PublicKeyCredentialDescriptor] = Maybe [JS.PublicKeyCredentialDescriptor]
 
 instance Convert M.AuthenticatorAttachment where
   type JS M.AuthenticatorAttachment = JS.DOMString
 
 instance Convert M.ResidentKeyRequirement where
-  type JS M.ResidentKeyRequirement = JS.DOMString
+  type JS M.ResidentKeyRequirement = Maybe JS.DOMString
 
 instance Convert M.UserVerificationRequirement where
-  type JS M.UserVerificationRequirement = JS.DOMString
+  type JS M.UserVerificationRequirement = Maybe JS.DOMString
 
 instance Convert M.AuthenticatorSelectionCriteria where
   type JS M.AuthenticatorSelectionCriteria = JS.AuthenticatorSelectionCriteria
 
 instance Convert M.AttestationConveyancePreference where
-  type JS M.AttestationConveyancePreference = JS.DOMString
+  type JS M.AttestationConveyancePreference = Maybe JS.DOMString
 
 instance Convert M.AuthenticationExtensionsClientInputs where
   type JS M.AuthenticationExtensionsClientInputs = Map Text Aeson.Value
