@@ -19,6 +19,7 @@ module Crypto.Fido2.Model.JavaScript.Decoding
     CreatedDecodingError (..),
     decodeCreatedPublicKeyCredential,
     decodeRequestedPublicKeyCredential,
+    decodePublicKeyCredentialCreationOptions,
   )
 where
 
@@ -39,6 +40,7 @@ import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import Crypto.Fido2.PublicKey (decodePublicKey)
+import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Crypto.Hash as Hash
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first, second)
@@ -80,6 +82,13 @@ data DecodingError
   | DecodingErrorNotAllInputUsed LBS.ByteString
   | DecodingErrorBinary String
   | DecodingErrorCBOR CBOR.DeserialiseFailure
+  | DecodingErrorUnexpectedPublicKeyCredentialType JS.DOMString
+  | DecodingErrorUnexpectedAlgorithmIdentifier JS.COSEAlgorithmIdentifier
+  | DecodingErrorUnexpectedTransport JS.DOMString
+  | DecodingErrorUnexpectedAttachment JS.DOMString
+  | DecodingErrorUnexpectedResidentKeyRequirement JS.DOMString
+  | DecodingErrorUnexpectedUserVerificationRequirement JS.DOMString
+  | DecodingErrorUnexpectedAttestationConveyancePreference JS.DOMString
   deriving (Show, Exception)
 
 -- | Webauthn contains a mixture of binary formats. For one it's CBOR and
@@ -203,6 +212,9 @@ instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
   decode (Just a) = Just <$> decode a
 
+instance Decode a => Decode [a] where
+  decode = traverse decode
+
 instance Decode M.CredentialId
 
 instance Decode M.AssertionSignature
@@ -277,6 +289,102 @@ instance Decode (M.PublicKeyCredential 'M.Get) where
     pkcClientExtensionResults <- decode clientExtensionResults
     pure $ M.PublicKeyCredential {..}
 
+instance Decode M.RpId
+
+instance Decode M.RelyingPartyName
+
+instance Decode M.PublicKeyCredentialRpEntity where
+  decode JS.PublicKeyCredentialRpEntity {..} = do
+    pkcreId <- decode id
+    pkcreName <- decode name
+    pure $ M.PublicKeyCredentialRpEntity {..}
+
+instance Decode M.UserAccountDisplayName
+
+instance Decode M.UserAccountName
+
+instance Decode M.PublicKeyCredentialUserEntity where
+  decode JS.PublicKeyCredentialUserEntity {..} = do
+    pkcueId <- decode id
+    pkcueDisplayName <- decode displayName
+    pkcueName <- decode name
+    pure $ M.PublicKeyCredentialUserEntity {..}
+
+instance Decode M.Challenge
+
+instance Decode M.PublicKeyCredentialType where
+  decode "public-key" = Right M.PublicKeyCredentialTypePublicKey
+  decode typ = Left $ DecodingErrorUnexpectedPublicKeyCredentialType typ
+
+instance Decode PublicKey.COSEAlgorithmIdentifier where
+  decode n = maybe (Left $ DecodingErrorUnexpectedAlgorithmIdentifier n) Right $ PublicKey.toAlg n
+
+instance Decode M.PublicKeyCredentialParameters where
+  decode JS.PublicKeyCredentialParameters {..} = do
+    pkcpTyp <- decode typ
+    pkcpAlg <- decode alg
+    pure $ M.PublicKeyCredentialParameters {..}
+
+instance Decode M.Timeout
+
+instance Decode M.AuthenticatorTransport where
+  decode "usb" = Right M.AuthenticatorTransportUSB
+  decode "nfc" = Right M.AuthenticatorTransportNFC
+  decode "ble" = Right M.AuthenticatorTransportBLE
+  decode "internal" = Right M.AuthenticatorTransportInternal
+  decode transport = Left $ DecodingErrorUnexpectedTransport transport
+
+instance Decode M.PublicKeyCredentialDescriptor where
+  decode JS.PublicKeyCredentialDescriptor {..} = do
+    pkcdTyp <- decode typ
+    pkcdId <- decode id
+    pkcdTransports <- decode transports
+    pure $ M.PublicKeyCredentialDescriptor {..}
+
+instance Decode M.AuthenticatorAttachment where
+  decode "platform" = Right M.AuthenticatorAttachmentPlatform
+  decode "cross-platform" = Right M.AuthenticatorAttachmentCrossPlatform
+  decode attachment = Left $ DecodingErrorUnexpectedAttachment attachment
+
+instance Decode M.ResidentKeyRequirement where
+  decode "discouraged" = Right M.ResidentKeyRequirementDiscouraged
+  decode "preferred" = Right M.ResidentKeyRequirementPreferred
+  decode "required" = Right M.ResidentKeyRequirementRequired
+  decode requirement = Left $ DecodingErrorUnexpectedResidentKeyRequirement requirement
+
+instance Decode M.UserVerificationRequirement where
+  decode "discouraged" = Right M.UserVerificationRequirementDiscouraged
+  decode "preferred" = Right M.UserVerificationRequirementPreferred
+  decode "required" = Right M.UserVerificationRequirementRequired
+  decode requirement = Left $ DecodingErrorUnexpectedUserVerificationRequirement requirement
+
+instance Decode M.AuthenticatorSelectionCriteria where
+  decode JS.AuthenticatorSelectionCriteria {..} = do
+    ascAuthenticatorAttachment <- decode authenticatorAttachment
+    ascResidentKey <- decode residentKey
+    ascUserVerification <- decode userVerification
+    pure $ M.AuthenticatorSelectionCriteria {..}
+
+instance Decode M.AttestationConveyancePreference where
+  decode "none" = Right M.AttestationConveyancePreferenceNone
+  decode "indirect" = Right M.AttestationConveyancePreferenceIndirect
+  decode "direct" = Right M.AttestationConveyancePreferenceDirect
+  decode "enterprise" = Right M.AttestationConveyancePreferenceEnterprise
+  decode preference = Left $ DecodingErrorUnexpectedAttestationConveyancePreference preference
+
+instance Decode (M.PublicKeyCredentialOptions 'M.Create) where
+  decode JS.PublicKeyCredentialCreationOptions {..} = do
+    pkcocRp <- decode rp
+    pkcocUser <- decode user
+    pkcocChallenge <- decode challenge
+    pkcocPubKeyCredParams <- decode pubKeyCredParams
+    pkcocTimeout <- decode timeout
+    pkcocExcludeCredentials <- decode excludeCredentials
+    pkcocAuthenticatorSelection <- decode authenticatorSelection
+    pkcocAttestation <- decode attestation
+    let pkcocExtensions = M.AuthenticationExtensionsClientInputs {} <$ extensions
+    pure $ M.PublicKeyCredentialCreationOptions {..}
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated M.AttestationObject where
   decodeCreated supportedFormats (JS.URLEncodedBase64 bytes) = do
@@ -302,7 +410,7 @@ instance DecodeCreated (M.AuthenticatorResponse 'M.Create) where
   decodeCreated asfMap JS.AuthenticatorAttestationResponse {..} = do
     arcClientData <- first CreatedDecodingErrorCommon $ decode clientDataJSON
     arcAttestationObject <- decodeCreated asfMap attestationObject
-    -- TODO
+    -- TODO: The webauthn-json library doesn't currently pass the transports
     let arcTransports = Set.empty
     pure $ M.AuthenticatorAttestationResponse {..}
 
@@ -331,3 +439,8 @@ decodeRequestedPublicKeyCredential ::
   JS.RequestedPublicKeyCredential ->
   Either DecodingError (M.PublicKeyCredential 'M.Get)
 decodeRequestedPublicKeyCredential = decode
+
+decodePublicKeyCredentialCreationOptions ::
+  JS.PublicKeyCredentialCreationOptions ->
+  Either DecodingError (M.PublicKeyCredentialOptions 'M.Create)
+decodePublicKeyCredentialCreationOptions = decode
