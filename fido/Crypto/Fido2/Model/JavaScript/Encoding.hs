@@ -187,7 +187,7 @@ instance Encode (M.PublicKeyCredential 'M.Create) where
       { rawId = encode pkcIdentifier,
         response = encode pkcResponse,
         -- TODO: Extensions aren't currently supported
-        clientExtensionResults = Map.empty <$ pkcClientExtensionResults
+        clientExtensionResults = Just Map.empty
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)

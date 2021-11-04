@@ -11,6 +11,7 @@ import qualified Codec.CBOR.Write as CBOR
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
+import qualified Crypto.Fido2.Model.JavaScript.Types as JS
 import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256, hash, hashlazy)
@@ -68,7 +69,7 @@ clientAttestation (AuthenticatorNone (cred : _)) options =
                       },
                   M.arcTransports = Set.fromList [M.AuthenticatorTransportUSB, M.AuthenticatorTransportBLE, M.AuthenticatorTransportNFC, M.AuthenticatorTransportInternal]
                 },
-            M.pkcClientExtensionResults = Nothing
+            M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
           }
 
 createAuthenticatorData :: Digest SHA256 -> AuthenticatorCredential -> M.CredentialId -> M.AuthenticatorData 'M.Create

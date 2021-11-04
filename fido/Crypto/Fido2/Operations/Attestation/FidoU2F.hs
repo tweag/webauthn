@@ -29,7 +29,6 @@ import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1), Point (Point))
 import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
