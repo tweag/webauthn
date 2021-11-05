@@ -5,6 +5,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -fplugin=LiquidHaskell #-}
 
 module Crypto.Fido2.Operations.Attestation (AttestationError, verifyAttestationResponse, allSupportedFormats) where
 
