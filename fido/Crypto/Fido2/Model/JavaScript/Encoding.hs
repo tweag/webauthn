@@ -187,7 +187,7 @@ instance Encode (M.PublicKeyCredential 'M.Create) where
       { rawId = encode pkcIdentifier,
         response = encode pkcResponse,
         -- TODO: Extensions aren't currently supported
-        clientExtensionResults = Just Map.empty
+        clientExtensionResults = Map.empty
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
@@ -202,11 +202,11 @@ instance Encode (M.AuthenticatorResponse 'M.Create) where
 -- TODO: Consider if we should encode a general `CollectedClientData t`
 instance Encode (M.CollectedClientData 'M.Create) where
   encode M.CollectedClientData {..} =
-    JS.URLEncodedBase64 . Base64.encode . toStrict $
+    JS.URLEncodedBase64 . toStrict $
       Aeson.encode
         JS.ClientDataJSON
           { typ = "webauthn.create",
-            challenge = Text.decodeUtf8 $ M.unChallenge ccdChallenge,
+            challenge = Text.decodeUtf8 . Base64.encode $ M.unChallenge ccdChallenge,
             origin = M.unOrigin ccdOrigin,
             crossOrigin = ccdCrossOrigin
           }

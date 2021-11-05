@@ -4,27 +4,37 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Client () where
+module Client (clientAttestation, spec) where
 
 import qualified Client.PrivateKey as PrivateKey
 import qualified Codec.CBOR.Write as CBOR
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
-import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
+import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodePublicKeyCredentialCreationOptions)
+import Crypto.Fido2.Model.JavaScript.Encoding (encodeCreatedPublicKeyCredential, encodePublicKeyCredentialCreationOptions)
 import qualified Crypto.Fido2.Model.JavaScript.Types as JS
+import Crypto.Fido2.Operations.Attestation (allSupportedFormats)
+import qualified Crypto.Fido2.Operations.Attestation as Fido2
 import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256, hash, hashlazy)
+import qualified Crypto.PubKey.ECC.Generate as ECC
+import qualified Crypto.PubKey.ECC.Types as ECC
+import qualified Crypto.PubKey.Ed25519 as Ed25519
+import Crypto.Random (MonadRandom)
 import Data.Aeson (encode)
-import qualified Data.Binary as Binary
-import Data.Binary.Put (putWord32be, runPut)
+import Data.Binary.Put (runPut)
 import qualified Data.Binary.Put as Put
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
-import Data.Maybe (fromJust)
+import Data.Either (fromRight, isRight)
+import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Data.Validation (toEither)
+import System.Random.Stateful (globalStdGen, uniformM)
+import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 
 data AuthenticatorCredential = AuthenticatorCredential
   { counter :: M.SignatureCounter,
@@ -36,9 +46,9 @@ data AuthenticatorCredential = AuthenticatorCredential
 data Authenticator
   = AuthenticatorNone [AuthenticatorCredential]
 
-clientAttestation :: Authenticator -> JS.PublicKeyCredentialCreationOptions -> JS.CreatedPublicKeyCredential
-clientAttestation (AuthenticatorNone (cred : _)) options =
-  let M.PublicKeyCredentialCreationOptions {M.pkcocChallenge, M.pkcocRp} = undefined {- TODO: decode -} options
+clientAttestation :: MonadRandom m => JS.PublicKeyCredentialCreationOptions -> Authenticator -> m (JS.CreatedPublicKeyCredential, Authenticator)
+clientAttestation options (AuthenticatorNone creds) = do
+  let M.PublicKeyCredentialCreationOptions {M.pkcocChallenge, M.pkcocRp} = fromRight (error "Test: could not decode creation options") $ decodePublicKeyCredentialCreationOptions options
       clientDataBS =
         encode
           JS.ClientDataJSON
@@ -47,30 +57,33 @@ clientAttestation (AuthenticatorNone (cred : _)) options =
               JS.origin = "https://localhost:8080/",
               JS.crossOrigin = Nothing
             }
-      rpIdHash = hash . encodeUtf8 . M.unRpId . fromJust $ M.pkcreId pkcocRp
+      rpIdHash = hash . encodeUtf8 . M.unRpId . fromMaybe (M.RpId "") $ M.pkcreId pkcocRp
       credentialId = M.CredentialId "This is the credential"
-   in undefined {- TODO: encode -}
-        M.PublicKeyCredential
-          { M.pkcIdentifier = credentialId,
-            M.pkcResponse =
-              M.AuthenticatorAttestationResponse
-                { M.arcClientData =
-                    M.CollectedClientData
-                      { M.ccdChallenge = pkcocChallenge,
-                        M.ccdOrigin = M.Origin "https://localhost:8080/",
-                        M.ccdCrossOrigin = Just True,
-                        M.ccdHash = M.ClientDataHash $ hashlazy clientDataBS
-                      },
-                  M.arcAttestationObject =
-                    M.AttestationObject
-                      { M.aoAuthData = createAuthenticatorData rpIdHash cred credentialId,
-                        M.aoFmt = None.Format,
-                        M.aoAttStmt = ()
-                      },
-                  M.arcTransports = Set.fromList [M.AuthenticatorTransportUSB, M.AuthenticatorTransportBLE, M.AuthenticatorTransportNFC, M.AuthenticatorTransportInternal]
-                },
-            M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
-          }
+  cred <- newCredential PublicKey.COSEAlgorithmIdentifierES256
+  let response =
+        encodeCreatedPublicKeyCredential
+          M.PublicKeyCredential
+            { M.pkcIdentifier = credentialId,
+              M.pkcResponse =
+                M.AuthenticatorAttestationResponse
+                  { M.arcClientData =
+                      M.CollectedClientData
+                        { M.ccdChallenge = pkcocChallenge,
+                          M.ccdOrigin = M.Origin "https://localhost:8080/",
+                          M.ccdCrossOrigin = Just True,
+                          M.ccdHash = M.ClientDataHash $ hashlazy clientDataBS
+                        },
+                    M.arcAttestationObject =
+                      M.AttestationObject
+                        { M.aoAuthData = createAuthenticatorData rpIdHash cred credentialId,
+                          M.aoFmt = None.Format,
+                          M.aoAttStmt = ()
+                        },
+                    M.arcTransports = Set.fromList [M.AuthenticatorTransportUSB, M.AuthenticatorTransportBLE, M.AuthenticatorTransportNFC, M.AuthenticatorTransportInternal]
+                  },
+              M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+            }
+  pure (response, AuthenticatorNone (cred : creds))
 
 createAuthenticatorData :: Digest SHA256 -> AuthenticatorCredential -> M.CredentialId -> M.AuthenticatorData 'M.Create
 createAuthenticatorData rpIdHash cred credentialId =
@@ -106,3 +119,78 @@ createAuthenticatorData rpIdHash cred credentialId =
       M.unAAGUID acdAaguid
         <> (toStrict . runPut . Put.putWord16be . fromIntegral . BS.length $ M.unCredentialId acdCredentialId)
         <> M.unPublicKeyBytes acdCredentialPublicKeyBytes
+
+newCredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
+newCredential PublicKey.COSEAlgorithmIdentifierES256 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES256
+newCredential PublicKey.COSEAlgorithmIdentifierES384 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES384
+newCredential PublicKey.COSEAlgorithmIdentifierES512 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES512
+newCredential PublicKey.COSEAlgorithmIdentifierEdDSA = do
+  secret <- Ed25519.generateSecretKey
+  let public = Ed25519.toPublic secret
+  pure $
+    AuthenticatorCredential
+      { counter = M.SignatureCounter 0,
+        privateKey = PrivateKey.Ed25519PrivateKey secret,
+        publicKey = PublicKey.Ed25519PublicKey public
+      }
+
+newECDSACredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
+newECDSACredential ident =
+  do
+    let curve = ECC.getCurveByName ECC.SEC_p256r1
+    (public, private) <- ECC.generate curve
+    pure $
+      AuthenticatorCredential
+        { counter = M.SignatureCounter 0,
+          privateKey = fromMaybe (error "Not a ECDSAKey") $ PrivateKey.toECDSAKey ident private,
+          publicKey = fromMaybe (error "Not a ECDSAKey") $ PublicKey.toECDSAKey ident public
+        }
+
+spec :: SpecWith ()
+spec = describe "None" $
+  it "succeeds" $ do
+    challenge <- uniformM globalStdGen
+    userId <- uniformM globalStdGen
+    let user =
+          M.PublicKeyCredentialUserEntity
+            { M.pkcueId = userId,
+              M.pkcueDisplayName = M.UserAccountDisplayName "John Doe",
+              M.pkcueName = M.UserAccountName "john-doe"
+            }
+    let options = defaultPkcco user challenge
+    (jspkCredential, _) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) (AuthenticatorNone [])
+    let Right mpkCredential = decodeCreatedPublicKeyCredential allSupportedFormats jspkCredential
+    let registerResult =
+          toEither $
+            Fido2.verifyAttestationResponse
+              (M.Origin "https://localhost:44329")
+              (M.RpIdHash $ hash ("localhost" :: BS.ByteString))
+              options
+              mpkCredential
+    registerResult `shouldSatisfy` isRight
+
+defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
+defaultPkcco userEntity challenge =
+  M.PublicKeyCredentialCreationOptions
+    { M.pkcocRp = M.PublicKeyCredentialRpEntity {M.pkcreId = Nothing, M.pkcreName = "ACME"},
+      M.pkcocUser = userEntity,
+      M.pkcocChallenge = challenge,
+      -- Empty credentialparameters are not supported.
+      M.pkcocPubKeyCredParams =
+        [ M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
+            }
+        ],
+      M.pkcocTimeout = Nothing,
+      M.pkcocExcludeCredentials = [],
+      M.pkcocAuthenticatorSelection =
+        Just
+          M.AuthenticatorSelectionCriteria
+            { M.ascAuthenticatorAttachment = Nothing,
+              M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
+              M.ascUserVerification = M.UserVerificationRequirementPreferred
+            },
+      M.pkcocAttestation = M.AttestationConveyancePreferenceDirect,
+      M.pkcocExtensions = Nothing
+    }

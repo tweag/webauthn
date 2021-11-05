@@ -137,4 +137,5 @@ test-suite tests
     pem,
     validation,
     containers,
-    binary
+    binary,
+    random
