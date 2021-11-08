@@ -97,11 +97,8 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   -- 5. If options.allowCredentials is not empty, verify that credential.id
   -- identifies one of the public key credentials listed in
   -- options.allowCredentials.
-  case M.pkcogAllowCredentials options of
-    Nothing -> pure ()
-    Just allowCredentials
-      | M.pkcIdentifier credential `elem` map M.pkcdId allowCredentials -> pure ()
-      | otherwise -> failure $ AssertionDisallowedCredential credential
+  let allowCredentials = M.pkcogAllowCredentials options
+  unless (null allowCredentials || M.pkcIdentifier credential `elem` map M.pkcdId allowCredentials) . failure $ AssertionDisallowedCredential credential
 
   -- 6. Identify the user being authenticated and verify that this user is the
   -- owner of the public key credential source credentialSource identified by
@@ -193,15 +190,14 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   case ( M.pkcogUserVerification options,
          M.adfUserVerified (M.adFlags authData)
        ) of
-    (Nothing, _) -> pure ()
-    (Just M.UserVerificationRequirementRequired, True) -> pure ()
-    (Just M.UserVerificationRequirementRequired, False) -> failure AssertionUserNotVerified
-    (Just M.UserVerificationRequirementPreferred, True) -> pure ()
+    (M.UserVerificationRequirementRequired, True) -> pure ()
+    (M.UserVerificationRequirementRequired, False) -> failure AssertionUserNotVerified
+    (M.UserVerificationRequirementPreferred, True) -> pure ()
     -- TODO: Maybe throw warning that user verification was preferred but not provided
-    (Just M.UserVerificationRequirementPreferred, False) -> pure ()
+    (M.UserVerificationRequirementPreferred, False) -> pure ()
     -- TODO: Maybe throw warning that user verification was discouraged but provided
-    (Just M.UserVerificationRequirementDiscouraged, True) -> pure ()
-    (Just M.UserVerificationRequirementDiscouraged, False) -> pure ()
+    (M.UserVerificationRequirementDiscouraged, True) -> pure ()
+    (M.UserVerificationRequirementDiscouraged, False) -> pure ()
 
   -- 18. Verify that the values of the client extension outputs in
   -- clientExtensionResults and the authenticator extension outputs in the

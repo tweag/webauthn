@@ -157,7 +157,7 @@ verifyAttestationResponse
     -- NOTE: The spec is interpreted to mean that the userVerification option
     -- from authenticatorSelection being set to "required" is what is meant by
     -- whether user verification is required
-    case ( M.ascUserVerification =<< M.pkcocAuthenticatorSelection options,
+    case ( M.ascUserVerification <$> M.pkcocAuthenticatorSelection options,
            M.adfUserVerified (M.adFlags authData)
          ) of
       (Nothing, _) -> pure ()
