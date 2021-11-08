@@ -31,4 +31,6 @@ jobs:
         git diff --exit-code
 
     - name: "Build"
-      run: nix-build -A fido2.checks
+      run: |
+        nix-build -A fido2.checks
+        nix-build -A fido2.components.exes
