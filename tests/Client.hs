@@ -29,7 +29,7 @@ import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
 import Data.Either (fromRight, isRight)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Validation (toEither)
@@ -159,14 +159,15 @@ spec = describe "None" $
             }
     let options = defaultPkcco user challenge
     (jspkCredential, _) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) (AuthenticatorNone [])
-    let Right mpkCredential = decodeCreatedPublicKeyCredential allSupportedFormats jspkCredential
+    let mpkCredential = decodeCreatedPublicKeyCredential allSupportedFormats jspkCredential
+    mpkCredential `shouldSatisfy` isRight
     let registerResult =
           toEither $
             Fido2.verifyAttestationResponse
               (M.Origin "https://localhost:44329")
               (M.RpIdHash $ hash ("localhost" :: BS.ByteString))
               options
-              mpkCredential
+              (fromRight (error "should not happend") mpkCredential)
     registerResult `shouldSatisfy` isRight
 
 defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create

@@ -214,7 +214,7 @@ instance Encode (M.CollectedClientData 'M.Create) where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
 instance Encode M.AttestationObject where
   encode M.AttestationObject {..} =
-    JS.URLEncodedBase64 . Base64.encode . CBOR.toStrictByteString $ CBOR.encodeTerm term
+    JS.URLEncodedBase64 . CBOR.toStrictByteString $ CBOR.encodeTerm term
     where
       term :: CBOR.Term
       term =
