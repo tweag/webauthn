@@ -144,17 +144,11 @@ data Session
   = Unauthenticated
   | Registering (M.PublicKeyCredentialOptions 'M.Create)
   | Authenticating M.UserHandle (M.PublicKeyCredentialOptions 'M.Get)
-  | Authenticated M.UserHandle
   deriving (Eq, Show)
 
 isUnauthenticated :: Session -> Bool
 isUnauthenticated session = case session of
   Unauthenticated -> True
-  _ -> False
-
-isAuthenticated :: Session -> Bool
-isAuthenticated session = case session of
-  Authenticated _ -> True
   _ -> False
 
 type Sessions = Map SessionId Session
@@ -168,6 +162,39 @@ data RegisterBeginReq = RegisterBeginReq
   deriving (Show, FromJSON)
   deriving stock (Generic)
 
+setAuthenticatedAs :: Database.Connection -> M.UserHandle -> Scotty.ActionM ()
+setAuthenticatedAs db userHandle = do
+  token <- liftIO $ uniformM globalStdGen
+  liftIO $
+    Database.withTransaction db $ \tx ->
+      Database.insertAuthToken tx token userHandle
+  let setCookie =
+        Cookie.defaultSetCookie
+          { Cookie.setCookieName = "auth-token",
+            Cookie.setCookieValue = Base64.encodeUnpadded (Database.unAuthToken token),
+            Cookie.setCookieSameSite = Just Cookie.sameSiteStrict,
+            Cookie.setCookieHttpOnly = True,
+            Cookie.setCookiePath = Just "/"
+            -- Does not work on localhost: the browser doesn't send any cookies
+            -- to a non-TLS version of localhost.
+            -- TODO: Use mkcert to get a HTTPS setup for localhost.
+            -- , Cookie.setCookieSecure = True
+          }
+  Scotty.setHeader
+    "Set-Cookie"
+    (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
+
+getAuthenticatedUser :: Database.Connection -> Scotty.ActionM (Maybe M.UserHandle)
+getAuthenticatedUser db = runMaybeT $ do
+  cookieHeader <- MaybeT $ Scotty.header "cookie"
+  let cookies = Cookie.parseCookies $ LBS.toStrict $ LText.encodeUtf8 cookieHeader
+  sessionCookie <- MaybeT . pure $ lookup "auth-token" cookies
+  token <- MaybeT . pure $ either (const Nothing) (Just . Database.AuthToken) $ Base64.decodeUnpadded sessionCookie
+  MaybeT $
+    liftIO $
+      Database.withTransaction db $ \tx ->
+        Database.getAuthTokenUser tx token
+
 app :: M.Origin -> M.RpIdHash -> Database.Connection -> TVar Sessions -> ScottyM ()
 app origin rpIdHash db sessions = do
   Scotty.middleware (staticPolicy (addBase "dist"))
@@ -176,9 +203,9 @@ app origin rpIdHash db sessions = do
   Scotty.post "/login/begin" $ beginLogin db sessions
   Scotty.post "/login/complete" $ completeLogin origin rpIdHash db sessions
   Scotty.get "/requires-auth" $ do
-    (_sessionId, session) <- getSessionScotty sessions
-    unless (isAuthenticated session) (Scotty.raiseStatus HTTP.status401 "Please authenticate first")
-    Scotty.json @Text $ "This should only be visible when authenticated"
+    getAuthenticatedUser db >>= \case
+      Nothing -> Scotty.raiseStatus HTTP.status401 "Please authenticate first"
+      Just user -> Scotty.json @Text $ "This should only be visible when authenticated as user: " <> Text.decodeUtf8 (Base64.encodeUnpadded (M.unUserHandle user))
 
 mkCredentialDescriptor :: CredentialEntry -> M.PublicKeyCredentialDescriptor
 mkCredentialDescriptor CredentialEntry {ceCredentialId} =
@@ -227,13 +254,13 @@ beginLogin db sessions = do
 
 completeLogin :: M.Origin -> M.RpIdHash -> Database.Connection -> TVar Sessions -> Scotty.ActionM ()
 completeLogin origin rpIdHash db sessions = do
-  (sessionId, session) <- getSessionScotty sessions
+  (_sessionId, session) <- getSessionScotty sessions
   case session of
-    Authenticating userHandle options -> verifyLogin sessionId session userHandle options
+    Authenticating userHandle options -> verifyLogin userHandle options
     _ -> Scotty.raiseStatus HTTP.status400 "You need to be authenticating to complete login"
   where
-    verifyLogin :: SessionId -> Session -> M.UserHandle -> M.PublicKeyCredentialOptions 'M.Get -> Scotty.ActionM ()
-    verifyLogin sessionId session userHandle options = do
+    verifyLogin :: M.UserHandle -> M.PublicKeyCredentialOptions 'M.Get -> Scotty.ActionM ()
+    verifyLogin userHandle options = do
       credential <- Scotty.jsonData @JS.RequestedPublicKeyCredential
 
       cred <- case decodeRequestedPublicKeyCredential credential of
@@ -254,9 +281,7 @@ completeLogin origin rpIdHash db sessions = do
         Failure (err :| _) -> fail $ show err
         Success result -> pure result
       -- FIXME: Set new signature count
-      liftIO $
-        STM.atomically $
-          casSession sessions sessionId session (Authenticated userHandle)
+      setAuthenticatedAs db userHandle
       Scotty.json @Text "Welcome."
 
 beginRegistration :: Database.Connection -> TVar Sessions -> Scotty.ActionM ()
@@ -289,17 +314,17 @@ beginRegistration db sessions = do
 
 completeRegistration :: M.Origin -> M.RpIdHash -> Database.Connection -> TVar Sessions -> Scotty.ActionM ()
 completeRegistration origin rpIdHash db sessions = do
-  (sessionId, session) <- getSessionScotty sessions
+  (_sessionId, session) <- getSessionScotty sessions
   case session of
     Registering options ->
-      verifyRegistration sessionId options
+      verifyRegistration options
     _ ->
       Scotty.raiseStatus
         HTTP.status400
         "You need to be registering to complete registration"
   where
-    verifyRegistration :: SessionId -> M.PublicKeyCredentialOptions 'M.Create -> Scotty.ActionM ()
-    verifyRegistration sessionId options = do
+    verifyRegistration :: M.PublicKeyCredentialOptions 'M.Create -> Scotty.ActionM ()
+    verifyRegistration options = do
       let userHandle = M.pkcueId $ M.pkcocUser options
       credential <- Scotty.jsonData @JS.CreatedPublicKeyCredential
       cred <- case decodeCreatedPublicKeyCredential allSupportedFormats credential of
@@ -327,7 +352,7 @@ completeRegistration origin rpIdHash db sessions = do
             Just existingUserId | userHandle == existingUserId -> pure $ Right ()
             Just _differentUserId -> pure $ Left AlreadyRegistered
       handleError result
-      liftIO $ STM.atomically $ STM.modifyTVar sessions $ Map.insert sessionId (Authenticated userHandle)
+      setAuthenticatedAs db userHandle
 
 defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
 defaultPkcco userEntity challenge =

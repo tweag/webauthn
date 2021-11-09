@@ -1,6 +1,9 @@
 module Database
   ( Connection,
     Transaction (), -- Constructor deliberately not exposed.
+    AuthToken (..),
+    getAuthTokenUser,
+    insertAuthToken,
     addAttestedCredentialData,
     addUser,
     withTransaction,
@@ -13,7 +16,9 @@ where
 
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
+import qualified Data.ByteString as BS
 import qualified Database.SQLite.Simple as Sqlite
+import System.Random.Stateful (Uniform, uniformByteStringM, uniformM)
 
 type Connection = Sqlite.Connection
 
@@ -54,6 +59,20 @@ initialize conn = do
     " create index if not exists                                               \
     \ ix_attested_credential_data_user_id                                      \
     \ on attested_credential_data(user_id);                                    "
+    ()
+  Sqlite.execute
+    conn
+    " create table if not exists auth_tokens                                   \
+    \ ( token            blob    primary key                                   \
+    \ , user_id          blob    not null                                      \
+    \ , foreign key (user_id) references users (id)                            \
+    \ );                                                                       "
+    ()
+  Sqlite.execute
+    conn
+    " create index if not exists                                               \
+    \ ix_auth_tokens_user_id                                                   \
+    \ on auth_tokens(user_id);                                                 "
     ()
 
 -- | Run an action using `Sqlite.withTransaction`.
@@ -137,3 +156,27 @@ getCredentialsByUserId (Transaction conn) (M.UserHandle userId) = do
           cePublicKeyBytes = M.PublicKeyBytes publicKey,
           ceSignCounter = M.SignatureCounter signCounter
         }
+
+newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
+
+instance Uniform AuthToken where
+  uniformM g = AuthToken <$> uniformByteStringM 16 g
+
+getAuthTokenUser :: Transaction -> AuthToken -> IO (Maybe M.UserHandle)
+getAuthTokenUser (Transaction conn) (AuthToken token) = do
+  result <-
+    Sqlite.query
+      conn
+      "select user_id from auth_tokens where token = ?;"
+      [token]
+  case result of
+    [] -> pure Nothing
+    [Sqlite.Only userId] -> pure $ Just $ M.UserHandle userId
+    _ -> fail "Unreachable: attested_credential_data.id has a unique index."
+
+insertAuthToken :: Transaction -> AuthToken -> M.UserHandle -> IO ()
+insertAuthToken (Transaction conn) (AuthToken token) (M.UserHandle user) = do
+  Sqlite.execute
+    conn
+    "insert into auth_tokens (token, user_id) values (?, ?);"
+    (token, user)
