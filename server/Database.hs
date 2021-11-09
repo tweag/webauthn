@@ -8,8 +8,8 @@ module Database
     addUser,
     withTransaction,
     connect,
-    getUserByCredentialId,
-    getCredentialsByUserId,
+    getCredentialEntryById,
+    getCredentialEntriesByUserId,
     initialize,
   )
 where
@@ -17,6 +17,7 @@ where
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import qualified Data.ByteString as BS
+import Data.Word (Word32)
 import qualified Database.SQLite.Simple as Sqlite
 import System.Random.Stateful (Uniform, uniformByteStringM, uniformM)
 
@@ -126,36 +127,35 @@ addAttestedCredentialData
           signCounter
         )
 
-getUserByCredentialId :: Transaction -> M.CredentialId -> IO (Maybe M.UserHandle)
-getUserByCredentialId
-  (Transaction conn)
-  (M.CredentialId credentialId) = do
-    result <-
-      Sqlite.query
-        conn
-        "select user_id from attested_credential_data where id = ?;"
-        [credentialId]
-    case result of
-      [] -> pure Nothing
-      [Sqlite.Only userId] -> pure $ Just $ M.UserHandle userId
-      _ -> fail "Unreachable: attested_credential_data.id has a unique index."
+getCredentialEntryById :: Transaction -> M.CredentialId -> IO (Maybe CredentialEntry)
+getCredentialEntryById (Transaction conn) (M.CredentialId credentialId) = do
+  entries <-
+    Sqlite.query
+      conn
+      "select user_id, id, public_key, sign_counter from attested_credential_data where id = ?;"
+      [credentialId]
+  case entries of
+    [] -> pure Nothing
+    [entry] -> pure $ Just $ toCredentialEntry entry
+    _ -> fail "Unreachable: attested_credential_data.id has a unique index."
 
-getCredentialsByUserId :: Transaction -> M.UserHandle -> IO [CredentialEntry]
-getCredentialsByUserId (Transaction conn) (M.UserHandle userId) = do
+getCredentialEntriesByUserId :: Transaction -> M.UserHandle -> IO [CredentialEntry]
+getCredentialEntriesByUserId (Transaction conn) (M.UserHandle userId) = do
   entries <-
     Sqlite.query
       conn
       "select user_id, id, public_key, sign_counter from attested_credential_data where user_id = ?;"
       [userId]
   pure $ map toCredentialEntry entries
-  where
-    toCredentialEntry (userHandle, credentialId, publicKey, signCounter) =
-      CredentialEntry
-        { ceUserHandle = M.UserHandle userHandle,
-          ceCredentialId = M.CredentialId credentialId,
-          cePublicKeyBytes = M.PublicKeyBytes publicKey,
-          ceSignCounter = M.SignatureCounter signCounter
-        }
+
+toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32) -> CredentialEntry
+toCredentialEntry (userHandle, credentialId, publicKey, signCounter) =
+  CredentialEntry
+    { ceUserHandle = M.UserHandle userHandle,
+      ceCredentialId = M.CredentialId credentialId,
+      cePublicKeyBytes = M.PublicKeyBytes publicKey,
+      ceSignCounter = M.SignatureCounter signCounter
+    }
 
 newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
 
