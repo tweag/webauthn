@@ -118,6 +118,7 @@ createAuthenticatorData rpIdHash cred credentialId =
     encodeAttestedCredentialData M.AttestedCredentialData {..} =
       M.unAAGUID acdAaguid
         <> (toStrict . runPut . Put.putWord16be . fromIntegral . BS.length $ M.unCredentialId acdCredentialId)
+        <> M.unCredentialId credentialId
         <> M.unPublicKeyBytes acdCredentialPublicKeyBytes
 
 newCredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
