@@ -69,7 +69,7 @@ clientAttestation options (AuthenticatorNone creds) = do
                   { M.arcClientData =
                       M.CollectedClientData
                         { M.ccdChallenge = pkcocChallenge,
-                          M.ccdOrigin = M.Origin "https://localhost:8080/",
+                          M.ccdOrigin = M.Origin "https://localhost:8080",
                           M.ccdCrossOrigin = Just True,
                           M.ccdHash = M.ClientDataHash $ hashlazy clientDataBS
                         },
@@ -165,7 +165,7 @@ spec = describe "None" $
     let registerResult =
           toEither $
             Fido2.verifyAttestationResponse
-              (M.Origin "https://localhost:44329")
+              (M.Origin "https://localhost:8080")
               (M.RpIdHash $ hash ("localhost" :: BS.ByteString))
               options
               (fromRight (error "should not happend") mpkCredential)
