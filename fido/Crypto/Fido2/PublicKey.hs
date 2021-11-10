@@ -18,6 +18,7 @@ module Crypto.Fido2.PublicKey
     toCOSEAlgorithmIdentifier,
     toECDSAKey,
     fromAlg,
+    toCurveName,
   )
 where
 
@@ -152,6 +153,11 @@ decodePublicKey = do
       key' <- CBOR.decodeIntCanonical
       when (mapKeyToInt key /= key') $ fail $ "Expected " ++ show key
 
+toCurveName :: COSEAlgorithmIdentifier -> ECC.CurveName
+toCurveName COSEAlgorithmIdentifierES256 = ECC.SEC_p256r1
+toCurveName COSEAlgorithmIdentifierES384 = ECC.SEC_p384r1
+toCurveName COSEAlgorithmIdentifierES512 = ECC.SEC_p521r1
+toCurveName _ = error "No known curve"
 mapKeyToInt :: MapKey -> Int
 mapKeyToInt key = case key of
   Kty -> 1

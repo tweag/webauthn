@@ -57,7 +57,7 @@ clientAttestation options (AuthenticatorNone creds) = do
               JS.origin = "https://localhost:8080/",
               JS.crossOrigin = Nothing
             }
-      rpIdHash = hash . encodeUtf8 . M.unRpId . fromMaybe (M.RpId "") $ M.pkcreId pkcocRp
+      rpIdHash = hash . encodeUtf8 . M.unRpId . fromMaybe (M.RpId "localhost") $ M.pkcreId pkcocRp
       credentialId = M.CredentialId "This is the credential"
   cred <- newCredential PublicKey.COSEAlgorithmIdentifierES256
   let response =
@@ -137,7 +137,7 @@ newCredential PublicKey.COSEAlgorithmIdentifierEdDSA = do
 newECDSACredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
 newECDSACredential ident =
   do
-    let curve = ECC.getCurveByName ECC.SEC_p256r1
+    let curve = ECC.getCurveByName $ PublicKey.toCurveName ident
     (public, private) <- ECC.generate curve
     pure $
       AuthenticatorCredential
