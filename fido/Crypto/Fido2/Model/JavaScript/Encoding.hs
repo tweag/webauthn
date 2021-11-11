@@ -15,6 +15,7 @@ module Crypto.Fido2.Model.JavaScript.Encoding
   ( encodePublicKeyCredentialCreationOptions,
     encodePublicKeyCredentialRequestOptions,
     encodeCreatedPublicKeyCredential,
+    encodeRequestedPublicKeyCredential,
   )
 where
 
@@ -190,6 +191,34 @@ instance Encode (M.PublicKeyCredential 'M.Create) where
         clientExtensionResults = Map.empty
       }
 
+instance Encode (M.CollectedClientData 'M.Get) where
+  encode M.CollectedClientData {..} =
+    JS.URLEncodedBase64 . toStrict $
+      Aeson.encode
+        JS.ClientDataJSON
+          { typ = "webauthn.get",
+            challenge = Text.decodeUtf8 . Base64.encode $ M.unChallenge ccdChallenge,
+            origin = M.unOrigin ccdOrigin,
+            crossOrigin = ccdCrossOrigin
+          }
+
+instance Encode (M.AuthenticatorResponse 'M.Get) where
+  encode M.AuthenticatorAssertionResponse {..} =
+    JS.AuthenticatorAssertionResponse
+      { clientDataJSON = encode argClientData,
+        authenticatorData = JS.URLEncodedBase64 $ M.adRawData argAuthenticatorData,
+        signature = JS.URLEncodedBase64 $ M.unAssertionSignature argSignature,
+        userHandle = JS.URLEncodedBase64 . M.unUserHandle <$> argUserHandle
+      }
+
+instance Encode (M.PublicKeyCredential 'M.Get) where
+  encode M.PublicKeyCredential {..} =
+    JS.PublicKeyCredential
+      { rawId = encode pkcIdentifier,
+        response = encode pkcResponse,
+        clientExtensionResults = Map.empty
+      }
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
 instance Encode (M.AuthenticatorResponse 'M.Create) where
   encode M.AuthenticatorAttestationResponse {..} =
@@ -247,3 +276,9 @@ encodePublicKeyCredentialRequestOptions = encode
 -- of the client.
 encodeCreatedPublicKeyCredential :: M.PublicKeyCredential 'M.Create -> JS.CreatedPublicKeyCredential
 encodeCreatedPublicKeyCredential = encode
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- Encodes the PublicKeyCredential for assertion, this function is mostly used in the tests where we emulate the
+-- of the client.
+encodeRequestedPublicKeyCredential :: M.PublicKeyCredential 'M.Get -> JS.RequestedPublicKeyCredential
+encodeRequestedPublicKeyCredential = encode
