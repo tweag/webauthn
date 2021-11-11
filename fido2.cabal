@@ -138,4 +138,5 @@ test-suite tests
     validation,
     containers,
     binary,
-    random
+    random,
+    base64-bytestring
