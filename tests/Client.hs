@@ -4,14 +4,27 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
+-- | This modules provdes a way to emulate certain client behaviour for testing purposes. It DOES NOT implement the webauthn specification for two reasons:
+-- 1. There is no need for it in our tests.
+-- 2. It is much more convenient to implement both the client and authenticator in a single function, removing their communication.
 module Client (clientAttestation, spec, clientAssertion) where
 
 import qualified Client.PrivateKey as PrivateKey
 import qualified Codec.CBOR.Write as CBOR
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
-import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodePublicKeyCredentialCreationOptions, decodePublicKeyCredentialRequestOptions, decodeRequestedPublicKeyCredential)
-import Crypto.Fido2.Model.JavaScript.Encoding (encodeCreatedPublicKeyCredential, encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions, encodeRequestedPublicKeyCredential)
+import Crypto.Fido2.Model.JavaScript.Decoding
+  ( decodeCreatedPublicKeyCredential,
+    decodePublicKeyCredentialCreationOptions,
+    decodePublicKeyCredentialRequestOptions,
+    decodeRequestedPublicKeyCredential,
+  )
+import Crypto.Fido2.Model.JavaScript.Encoding
+  ( encodeCreatedPublicKeyCredential,
+    encodePublicKeyCredentialCreationOptions,
+    encodePublicKeyCredentialRequestOptions,
+    encodeRequestedPublicKeyCredential,
+  )
 import qualified Crypto.Fido2.Model.JavaScript.Types as JS
 import Crypto.Fido2.Operations.Attestation (allSupportedFormats)
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
@@ -37,6 +50,8 @@ import Data.Validation (toEither)
 import System.Random.Stateful (globalStdGen, uniformM)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 
+-- | A stored credential.
+-- TODO: Store the corresponding userId
 data AuthenticatorCredential = AuthenticatorCredential
   { counter :: M.SignatureCounter,
     privateKey :: PrivateKey.PrivateKey,
@@ -47,9 +62,11 @@ data AuthenticatorCredential = AuthenticatorCredential
 newtype Authenticator
   = AuthenticatorNone [AuthenticatorCredential]
 
+-- | Emulates the client-side operation for attestation given an authenticator. MonadRandom is required during the geneation of the new credentials.
 clientAttestation :: MonadRandom m => JS.PublicKeyCredentialCreationOptions -> Authenticator -> m (JS.CreatedPublicKeyCredential, Authenticator)
 clientAttestation options (AuthenticatorNone creds) = do
   let M.PublicKeyCredentialCreationOptions {M.pkcocChallenge, M.pkcocRp} = fromRight (error "Test: could not decode creation options") $ decodePublicKeyCredentialCreationOptions options
+      -- We have to encode the ClientData here because we need access to the ByteString representation to create the attestation response
       clientDataBS =
         encode
           JS.ClientDataJSON
@@ -122,6 +139,11 @@ clientAttestation options (AuthenticatorNone creds) = do
             <> M.unCredentialId credentialId
             <> M.unPublicKeyBytes acdCredentialPublicKeyBytes
 
+-- | Performs assertion as per the client specification provided an
+-- authenticator. MonadRandom is required for signing using Ed25519 which
+-- requires a random number to be generated during signing. There exists
+-- methods to not rely on a random number, but these have not been implemented
+-- in the cryptonite library we rely on.
 clientAssertion :: MonadRandom m => JS.PublicKeyCredentialRequestOptions -> Authenticator -> m JS.RequestedPublicKeyCredential
 clientAssertion options (AuthenticatorNone (cred : _)) = do
   let Right M.PublicKeyCredentialRequestOptions {..} = decodePublicKeyCredentialRequestOptions options
@@ -136,8 +158,9 @@ clientAssertion options (AuthenticatorNone (cred : _)) = do
       rpIdHash = hash . encodeUtf8 . M.unRpId $ fromMaybe (M.RpId "localhost") pkcogRpId
       credentialId = M.CredentialId "This is the credential"
       authenticatorData = createAuthenticatorData rpIdHash cred
-  signature <- PrivateKey.sign (publicKey cred) (privateKey cred) (M.adRawData authenticatorData <> BA.convert (hashlazy clientDataBS :: Digest SHA256))
-  let signatureBS = PrivateKey.toByteString signature
+  signature <-
+    PrivateKey.toByteString
+      <$> PrivateKey.sign (publicKey cred) (privateKey cred) (M.adRawData authenticatorData <> BA.convert (hashlazy clientDataBS :: Digest SHA256))
   pure $
     encodeRequestedPublicKeyCredential
       M.PublicKeyCredential
@@ -152,7 +175,7 @@ clientAssertion options (AuthenticatorNone (cred : _)) = do
                       M.ccdHash = M.ClientDataHash $ hashlazy clientDataBS
                     },
                 M.argAuthenticatorData = authenticatorData,
-                M.argSignature = M.AssertionSignature signatureBS,
+                M.argSignature = M.AssertionSignature signature,
                 M.argUserHandle = Nothing
               },
           M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
@@ -178,6 +201,7 @@ clientAssertion options (AuthenticatorNone (cred : _)) = do
         }
 clientAssertion _ _ = error "Should not happen"
 
+-- | Creates a new credential based on the provided COSEAlgorithm. MondRandom is required to generate the random keys.
 newCredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
 newCredential PublicKey.COSEAlgorithmIdentifierES256 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES256
 newCredential PublicKey.COSEAlgorithmIdentifierES384 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES384
@@ -207,8 +231,10 @@ newECDSACredential ident =
 spec :: SpecWith ()
 spec = describe "None" $
   it "succeeds" $ do
+    -- Generate new random input
     challenge <- uniformM globalStdGen
     userId <- uniformM globalStdGen
+    -- Create dummy user
     let user =
           M.PublicKeyCredentialUserEntity
             { M.pkcueId = userId,
@@ -216,9 +242,11 @@ spec = describe "None" $
               M.pkcueName = M.UserAccountName "john-doe"
             }
     let options = defaultPkcco user challenge
+    -- Perform client Attestation emulation with a fresh authenticator
     (jsPkcCreate, authenticator) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) (AuthenticatorNone [])
     let mPkcCreate = decodeCreatedPublicKeyCredential allSupportedFormats jsPkcCreate
     mPkcCreate `shouldSatisfy` isRight
+    -- Verify the result
     let registerResult =
           toEither $
             Fido2.verifyAttestationResponse
@@ -228,10 +256,13 @@ spec = describe "None" $
               (fromRight (error "should not happend") mPkcCreate)
     registerResult `shouldSatisfy` isRight
     let options = defaultPkcro challenge
+    -- Perform client assertion emulation with the same authenticator, this
+    -- authenticator should now store the created credential
     jsPkcGet <- clientAssertion (encodePublicKeyCredentialRequestOptions options) authenticator
     let mPkcGet = decodeRequestedPublicKeyCredential jsPkcGet
     mPkcGet `shouldSatisfy` isRight
 
+-- | Create a default set of options for attestation. These options can be modified before using them in the tests
 defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
 defaultPkcco userEntity challenge =
   M.PublicKeyCredentialCreationOptions
@@ -258,6 +289,7 @@ defaultPkcco userEntity challenge =
       M.pkcocExtensions = Nothing
     }
 
+-- | Create a default set of options for assertion. These options can be modified before using them in the tests
 defaultPkcro :: M.Challenge -> M.PublicKeyCredentialOptions 'M.Get
 defaultPkcro challenge =
   M.PublicKeyCredentialRequestOptions

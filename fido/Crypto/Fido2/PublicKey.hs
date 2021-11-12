@@ -205,6 +205,7 @@ encodeECDSA ident ECDSA.PublicKey {ECDSA.public_q = ECC.Point x y} =
     <> CBOR.encodeBytes (i2osp x)
     <> encodeMapKey Y
     <> CBOR.encodeBytes (i2osp y)
+encodeECDSA _ _ = error "Unreachable: Points at infinity are not allowed for the supported curves"
 
 encodeKeyType :: KeyType -> CBOR.Encoding
 encodeKeyType OKP = CBOR.encodeInt 1
@@ -223,6 +224,7 @@ encodeCurve :: COSEAlgorithmIdentifier -> CBOR.Encoding
 encodeCurve COSEAlgorithmIdentifierES256 = CBOR.encodeInt 1
 encodeCurve COSEAlgorithmIdentifierES384 = CBOR.encodeInt 2
 encodeCurve COSEAlgorithmIdentifierES512 = CBOR.encodeInt 3
+encodeCurve _ = error "Unreachable: The provided identifier does not have a curve encoding associated with it"
 
 toAlg :: (Eq a, Num a, MonadFail f) => a -> f COSEAlgorithmIdentifier
 toAlg (-7) = pure COSEAlgorithmIdentifierES256
