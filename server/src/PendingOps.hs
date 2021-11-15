@@ -49,7 +49,7 @@ data PendingOpsConfig = PendingOpsConfig
 defaultPendingOpsConfig :: PendingOpsConfig
 defaultPendingOpsConfig =
   PendingOpsConfig
-    { validTime = 5,
+    { validTime = 5 * 60,
       expireInterval = 10,
       challengeBytes = 16
     }

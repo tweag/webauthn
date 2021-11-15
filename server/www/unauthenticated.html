@@ -1,0 +1,26 @@
+<!doctype hmtl>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <title>WebAuthn Demo</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+
+<form id="registerForm">
+  <label for="accountDisplayName">Account Display Name</label>
+  <input name="accountDisplayName" id="accountDisplayName" placeholder="optional"/>
+  <br>
+  <label for="accountName">Account Name</label>
+  <input name="accountName" id="registerAccountName" required/>
+  <br>
+  <input type="submit" value="Register" id="register"/>
+</form>
+<hr>
+<form id="loginForm">
+  <label for="accountName">Account Name</label>
+  <input name="accountName" id="loginAccountName"/>
+  <br>
+  <input type="submit" value="Login" id="login"/>
+</form>
+<script src="./unauthenticated.js"> </script>
+

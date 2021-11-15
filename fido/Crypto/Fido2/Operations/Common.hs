@@ -13,8 +13,8 @@ import Data.Validation (Validation (Failure))
 -- | This type represents the database row that a Relying Party server needs
 -- to store for each credential that's registered to a user
 data CredentialEntry = CredentialEntry
-  { ceUserHandle :: M.UserHandle,
-    ceCredentialId :: M.CredentialId,
+  { ceCredentialId :: M.CredentialId,
+    ceUserHandle :: M.UserHandle,
     cePublicKeyBytes :: M.PublicKeyBytes,
     ceSignCounter :: M.SignatureCounter
   }
