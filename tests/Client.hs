@@ -59,13 +59,16 @@ data AuthenticatorCredential = AuthenticatorCredential
   }
 
 -- | The datatype holding all information needed for attestation and assertion
-newtype Authenticator
-  = AuthenticatorNone [AuthenticatorCredential]
+data Authenticator = AuthenticatorNone
+  { credentials :: [AuthenticatorCredential],
+    supportedAlgorithms :: Set.Set PublicKey.COSEAlgorithmIdentifier
+  }
 
 -- | Emulates the client-side operation for attestation given an authenticator. MonadRandom is required during the geneation of the new credentials.
 clientAttestation :: MonadRandom m => JS.PublicKeyCredentialCreationOptions -> Authenticator -> m (JS.CreatedPublicKeyCredential, Authenticator)
-clientAttestation options (AuthenticatorNone creds) = do
-  let M.PublicKeyCredentialCreationOptions {M.pkcocChallenge, M.pkcocRp} = fromRight (error "Test: could not decode creation options") $ decodePublicKeyCredentialCreationOptions options
+clientAttestation options AuthenticatorNone {..} = do
+  let M.PublicKeyCredentialCreationOptions {M.pkcocChallenge, M.pkcocRp, M.pkcocPubKeyCredParams} =
+        fromRight (error "Test: could not decode creation options") $ decodePublicKeyCredentialCreationOptions options
       -- We have to encode the ClientData here because we need access to the ByteString representation to create the attestation response
       clientDataBS =
         encode
@@ -77,7 +80,10 @@ clientAttestation options (AuthenticatorNone creds) = do
             }
       rpIdHash = hash . encodeUtf8 . M.unRpId . fromMaybe (M.RpId "localhost") $ M.pkcreId pkcocRp
       credentialId = M.CredentialId "This is the credential"
-  cred <- newCredential PublicKey.COSEAlgorithmIdentifierES256
+      requestedAlgorithms = Set.fromList $ map M.pkcpAlg pkcocPubKeyCredParams
+      acceptableAlgorithms = Set.intersection supportedAlgorithms requestedAlgorithms
+      chosenAlgorithm = fromMaybe (error "No supported algoritms were accepted by the creation options") $ Set.lookupMin acceptableAlgorithms
+  cred <- newCredential chosenAlgorithm
   let response =
         encodeCreatedPublicKeyCredential
           M.PublicKeyCredential
@@ -101,7 +107,7 @@ clientAttestation options (AuthenticatorNone creds) = do
                   },
               M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
             }
-  pure (response, AuthenticatorNone (cred : creds))
+  pure (response, AuthenticatorNone (cred : credentials) supportedAlgorithms)
   where
     createAuthenticatorData :: Digest SHA256 -> AuthenticatorCredential -> M.CredentialId -> M.AuthenticatorData 'M.Create
     createAuthenticatorData rpIdHash cred credentialId =
@@ -145,7 +151,7 @@ clientAttestation options (AuthenticatorNone creds) = do
 -- methods to not rely on a random number, but these have not been implemented
 -- in the cryptonite library we rely on.
 clientAssertion :: MonadRandom m => JS.PublicKeyCredentialRequestOptions -> Authenticator -> m JS.RequestedPublicKeyCredential
-clientAssertion options (AuthenticatorNone (cred : _)) = do
+clientAssertion options AuthenticatorNone {credentials = (cred : _)} = do
   let Right M.PublicKeyCredentialRequestOptions {..} = decodePublicKeyCredentialRequestOptions options
       clientDataBS =
         encode
@@ -242,8 +248,9 @@ spec = describe "None" $
               M.pkcueName = M.UserAccountName "john-doe"
             }
     let options = defaultPkcco user challenge
+    let noneAuthenticator = AuthenticatorNone {credentials = [], supportedAlgorithms = Set.singleton PublicKey.COSEAlgorithmIdentifierEdDSA}
     -- Perform client Attestation emulation with a fresh authenticator
-    (jsPkcCreate, authenticator) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) (AuthenticatorNone [])
+    (jsPkcCreate, authenticator) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) noneAuthenticator
     let mPkcCreate = decodeCreatedPublicKeyCredential allSupportedFormats jsPkcCreate
     mPkcCreate `shouldSatisfy` isRight
     -- Verify the result
@@ -274,6 +281,10 @@ defaultPkcco userEntity challenge =
         [ M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
               M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierEdDSA
             }
         ],
       M.pkcocTimeout = Nothing,
