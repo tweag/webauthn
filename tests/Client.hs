@@ -35,6 +35,7 @@ import qualified Crypto.PubKey.ECC.Generate as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import Crypto.Random (MonadRandom)
+import qualified Crypto.Random as Random
 import Data.Aeson (encode)
 import Data.Binary.Put (runPut)
 import qualified Data.Binary.Put as Put
@@ -54,6 +55,7 @@ import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 -- TODO: Store the corresponding userId
 data AuthenticatorCredential = AuthenticatorCredential
   { acCounter :: M.SignatureCounter,
+    acId :: M.CredentialId,
     acPrivateKey :: PrivateKey.PrivateKey,
     acPublicKey :: PublicKey.PublicKey
   }
@@ -61,12 +63,14 @@ data AuthenticatorCredential = AuthenticatorCredential
 -- | The datatype holding all information needed for attestation and assertion
 data Authenticator = AuthenticatorNone
   { credentials :: [AuthenticatorCredential],
-    supportedAlgorithms :: Set.Set PublicKey.COSEAlgorithmIdentifier
+    supportedAlgorithms :: Set.Set PublicKey.COSEAlgorithmIdentifier,
+    -- | If this credentialId is Just, it will be used as the next credentialId. If None, a random bytestring is generated instead.
+    suggestedCredentialId :: Maybe BS.ByteString
   }
 
 -- | Emulates the client-side operation for attestation given an authenticator. MonadRandom is required during the geneation of the new credentials.
 clientAttestation :: MonadRandom m => JS.PublicKeyCredentialCreationOptions -> Authenticator -> m (JS.CreatedPublicKeyCredential, Authenticator)
-clientAttestation options AuthenticatorNone {..} = do
+clientAttestation options authenticator@AuthenticatorNone {..} = do
   let M.PublicKeyCredentialCreationOptions {M.pkcocChallenge, M.pkcocRp, M.pkcocPubKeyCredParams} =
         fromRight (error "Test: could not decode creation options") $ decodePublicKeyCredentialCreationOptions options
       -- We have to encode the ClientData here because we need access to the ByteString representation to create the attestation response
@@ -83,7 +87,7 @@ clientAttestation options AuthenticatorNone {..} = do
       requestedAlgorithms = Set.fromList $ map M.pkcpAlg pkcocPubKeyCredParams
       acceptableAlgorithms = Set.intersection supportedAlgorithms requestedAlgorithms
       chosenAlgorithm = fromMaybe (error "No supported algoritms were accepted by the creation options") $ Set.lookupMin acceptableAlgorithms
-  cred <- newCredential chosenAlgorithm
+  cred <- newCredential suggestedCredentialId chosenAlgorithm
   let response =
         encodeCreatedPublicKeyCredential
           M.PublicKeyCredential
@@ -107,7 +111,7 @@ clientAttestation options AuthenticatorNone {..} = do
                   },
               M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
             }
-  pure (response, AuthenticatorNone (cred : credentials) supportedAlgorithms)
+  pure (response, authenticator {credentials = cred : credentials})
   where
     createAuthenticatorData :: Digest SHA256 -> AuthenticatorCredential -> M.CredentialId -> M.AuthenticatorData 'M.Create
     createAuthenticatorData rpIdHash cred credentialId =
@@ -208,31 +212,36 @@ clientAssertion options AuthenticatorNone {credentials = (cred : _)} = do
 clientAssertion _ _ = error "Should not happen"
 
 -- | Creates a new credential based on the provided COSEAlgorithm. MondRandom is required to generate the random keys.
-newCredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
-newCredential PublicKey.COSEAlgorithmIdentifierES256 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES256
-newCredential PublicKey.COSEAlgorithmIdentifierES384 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES384
-newCredential PublicKey.COSEAlgorithmIdentifierES512 = newECDSACredential PublicKey.COSEAlgorithmIdentifierES512
-newCredential PublicKey.COSEAlgorithmIdentifierEdDSA = do
+newCredential :: MonadRandom m => Maybe BS.ByteString -> PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
+newCredential credId PublicKey.COSEAlgorithmIdentifierES256 = newECDSACredential credId PublicKey.COSEAlgorithmIdentifierES256
+newCredential credId PublicKey.COSEAlgorithmIdentifierES384 = newECDSACredential credId PublicKey.COSEAlgorithmIdentifierES384
+newCredential credId PublicKey.COSEAlgorithmIdentifierES512 = newECDSACredential credId PublicKey.COSEAlgorithmIdentifierES512
+newCredential credId PublicKey.COSEAlgorithmIdentifierEdDSA = do
   secret <- Ed25519.generateSecretKey
   let public = Ed25519.toPublic secret
+  -- Generate a random Id if the provided credId is None, use it otherwise
+  acId <- M.CredentialId <$> maybe (Random.getRandomBytes 16) pure credId
   pure $
     AuthenticatorCredential
       { acCounter = M.SignatureCounter 0,
+        acId = acId,
         acPrivateKey = PrivateKey.Ed25519PrivateKey secret,
         acPublicKey = PublicKey.Ed25519PublicKey public
       }
 
-newECDSACredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
-newECDSACredential ident =
-  do
-    let curve = ECC.getCurveByName $ PublicKey.toCurveName ident
-    (public, private) <- ECC.generate curve
-    pure $
-      AuthenticatorCredential
-        { acCounter = M.SignatureCounter 0,
-          acPrivateKey = fromMaybe (error "Not a ECDSAKey") $ PrivateKey.toECDSAKey ident private,
-          acPublicKey = fromMaybe (error "Not a ECDSAKey") $ PublicKey.toECDSAKey ident public
-        }
+newECDSACredential :: MonadRandom m => Maybe BS.ByteString -> PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
+newECDSACredential credId ident = do
+  let curve = ECC.getCurveByName $ PublicKey.toCurveName ident
+  (public, private) <- ECC.generate curve
+  -- Generate a random Id if the provided credId is None, use it otherwise
+  acId <- M.CredentialId <$> maybe (Random.getRandomBytes 16) pure credId
+  pure $
+    AuthenticatorCredential
+      { acCounter = M.SignatureCounter 0,
+        acId = acId,
+        acPrivateKey = fromMaybe (error "Not a ECDSAKey") $ PrivateKey.toECDSAKey ident private,
+        acPublicKey = fromMaybe (error "Not a ECDSAKey") $ PublicKey.toECDSAKey ident public
+      }
 
 spec :: SpecWith ()
 spec = describe "None" $
@@ -248,7 +257,12 @@ spec = describe "None" $
               M.pkcueName = M.UserAccountName "john-doe"
             }
     let options = defaultPkcco user challenge
-    let noneAuthenticator = AuthenticatorNone {credentials = [], supportedAlgorithms = Set.singleton PublicKey.COSEAlgorithmIdentifierEdDSA}
+    let noneAuthenticator =
+          AuthenticatorNone
+            { credentials = [],
+              supportedAlgorithms = Set.singleton PublicKey.COSEAlgorithmIdentifierEdDSA,
+              suggestedCredentialId = Nothing
+            }
     -- Perform client Attestation emulation with a fresh authenticator
     (jsPkcCreate, authenticator) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) noneAuthenticator
     let mPkcCreate = decodeCreatedPublicKeyCredential allSupportedFormats jsPkcCreate
