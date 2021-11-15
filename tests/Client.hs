@@ -48,6 +48,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Validation (toEither)
+import Debug.Trace (trace, traceShowId)
 import System.Random.Stateful (globalStdGen, uniformM)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 
@@ -59,14 +60,18 @@ data AuthenticatorCredential = AuthenticatorCredential
     acPrivateKey :: PrivateKey.PrivateKey,
     acPublicKey :: PublicKey.PublicKey
   }
+  deriving (Show)
 
 -- | The datatype holding all information needed for attestation and assertion
 data Authenticator = AuthenticatorNone
   { credentials :: [AuthenticatorCredential],
     supportedAlgorithms :: Set.Set PublicKey.COSEAlgorithmIdentifier,
     -- | If this credentialId is Just, it will be used as the next credentialId. If None, a random bytestring is generated instead.
-    suggestedCredentialId :: Maybe BS.ByteString
+    suggestedCredentialId :: Maybe BS.ByteString,
+    -- | If True, an invalid signature is created during assertion.
+    createFalseSignature :: Bool
   }
+  deriving (Show)
 
 -- | Emulates the client-side operation for attestation given an authenticator. MonadRandom is required during the geneation of the new credentials.
 clientAttestation :: MonadRandom m => JS.PublicKeyCredentialCreationOptions -> Authenticator -> m (JS.CreatedPublicKeyCredential, Authenticator)
@@ -155,7 +160,7 @@ clientAttestation options authenticator@AuthenticatorNone {..} = do
 -- methods to not rely on a random number, but these have not been implemented
 -- in the cryptonite library we rely on.
 clientAssertion :: MonadRandom m => JS.PublicKeyCredentialRequestOptions -> Authenticator -> m JS.RequestedPublicKeyCredential
-clientAssertion options AuthenticatorNone {credentials = (cred : _)} = do
+clientAssertion options AuthenticatorNone {credentials = (cred : _), ..} = do
   let Right M.PublicKeyCredentialRequestOptions {..} = decodePublicKeyCredentialRequestOptions options
       clientDataBS =
         encode
@@ -169,27 +174,33 @@ clientAssertion options AuthenticatorNone {credentials = (cred : _)} = do
       credentialId = M.CredentialId "This is the credential"
       authenticatorData = createAuthenticatorData rpIdHash cred
   signature <-
-    PrivateKey.toByteString
-      <$> PrivateKey.sign (acPublicKey cred) (acPrivateKey cred) (M.adRawData authenticatorData <> BA.convert (hashlazy clientDataBS :: Digest SHA256))
+    if createFalseSignature
+      then -- Simply hash a random ByteString to get the invalid signature
+        BA.convert . (hash :: BS.ByteString -> Digest SHA256) <$> Random.getRandomBytes 16
+      else
+        PrivateKey.toByteString
+          <$> PrivateKey.sign (acPublicKey cred) (acPrivateKey cred) (M.adRawData authenticatorData <> BA.convert (hashlazy clientDataBS :: Digest SHA256))
+
   pure $
-    encodeRequestedPublicKeyCredential
-      M.PublicKeyCredential
-        { M.pkcIdentifier = credentialId,
-          M.pkcResponse =
-            M.AuthenticatorAssertionResponse
-              { M.argClientData =
-                  M.CollectedClientData
-                    { M.ccdChallenge = pkcogChallenge,
-                      M.ccdOrigin = M.Origin "https://localhost:8080",
-                      M.ccdCrossOrigin = Just True,
-                      M.ccdHash = M.ClientDataHash $ hashlazy clientDataBS
-                    },
-                M.argAuthenticatorData = authenticatorData,
-                M.argSignature = M.AssertionSignature signature,
-                M.argUserHandle = Nothing
-              },
-          M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
-        }
+    encodeRequestedPublicKeyCredential $
+      traceShowId
+        M.PublicKeyCredential
+          { M.pkcIdentifier = credentialId,
+            M.pkcResponse =
+              M.AuthenticatorAssertionResponse
+                { M.argClientData =
+                    M.CollectedClientData
+                      { M.ccdChallenge = pkcogChallenge,
+                        M.ccdOrigin = M.Origin "https://localhost:8080",
+                        M.ccdCrossOrigin = Just True,
+                        M.ccdHash = M.ClientDataHash $ hashlazy clientDataBS
+                      },
+                  M.argAuthenticatorData = authenticatorData,
+                  M.argSignature = M.AssertionSignature signature,
+                  M.argUserHandle = Nothing
+                },
+            M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+          }
   where
     createAuthenticatorData :: Digest SHA256 -> AuthenticatorCredential -> M.AuthenticatorData 'M.Get
     createAuthenticatorData rpIdHash cred =
@@ -258,11 +269,13 @@ spec = describe "None" $
             }
     let options = defaultPkcco user challenge
     let noneAuthenticator =
-          AuthenticatorNone
-            { credentials = [],
-              supportedAlgorithms = Set.singleton PublicKey.COSEAlgorithmIdentifierEdDSA,
-              suggestedCredentialId = Nothing
-            }
+          traceShowId
+            AuthenticatorNone
+              { credentials = [],
+                supportedAlgorithms = Set.singleton PublicKey.COSEAlgorithmIdentifierES256,
+                suggestedCredentialId = Nothing,
+                createFalseSignature = True
+              }
     -- Perform client Attestation emulation with a fresh authenticator
     (jsPkcCreate, authenticator) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) noneAuthenticator
     let mPkcCreate = decodeCreatedPublicKeyCredential allSupportedFormats jsPkcCreate
@@ -279,7 +292,7 @@ spec = describe "None" $
     let options = defaultPkcro challenge
     -- Perform client assertion emulation with the same authenticator, this
     -- authenticator should now store the created credential
-    jsPkcGet <- clientAssertion (encodePublicKeyCredentialRequestOptions options) authenticator
+    jsPkcGet <- clientAssertion (encodePublicKeyCredentialRequestOptions options) (traceShowId authenticator)
     let mPkcGet = decodeRequestedPublicKeyCredential jsPkcGet
     mPkcGet `shouldSatisfy` isRight
 
