@@ -78,12 +78,16 @@ executable server
   import: sanity
   hs-source-dirs: server
   main-is: Main.hs
-  other-modules: Database
+  other-modules:
+    Database,
+    PendingOps
 
   build-depends:
     aeson,
     base64-bytestring,
+    binary,
     cborg,
+    clock,
     bytestring,
     containers,
     cookie,
