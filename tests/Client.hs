@@ -53,9 +53,9 @@ import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 -- | A stored credential.
 -- TODO: Store the corresponding userId
 data AuthenticatorCredential = AuthenticatorCredential
-  { counter :: M.SignatureCounter,
-    privateKey :: PrivateKey.PrivateKey,
-    publicKey :: PublicKey.PublicKey
+  { acCounter :: M.SignatureCounter,
+    acPrivateKey :: PrivateKey.PrivateKey,
+    acPublicKey :: PublicKey.PublicKey
   }
 
 -- | The datatype holding all information needed for attestation and assertion
@@ -118,14 +118,14 @@ clientAttestation options AuthenticatorNone {..} = do
               { adfUserPresent = True,
                 adfUserVerified = True
               },
-          M.adSignCount = counter cred,
+          M.adSignCount = acCounter cred,
           M.adAttestedCredentialData = attestedCredentialData,
           M.adExtensions = Nothing,
           M.adRawData =
             -- TODO: Use Put?
             BA.convert rpIdHash
               <> BS.singleton 0b01000101
-              <> (toStrict . runPut $ Put.putWord32be . M.unSignatureCounter $ counter cred)
+              <> (toStrict . runPut $ Put.putWord32be . M.unSignatureCounter $ acCounter cred)
               <> encodeAttestedCredentialData attestedCredentialData
         }
       where
@@ -133,8 +133,8 @@ clientAttestation options AuthenticatorNone {..} = do
           M.AttestedCredentialData
             { M.acdAaguid = M.AAGUID "0000000000000000",
               M.acdCredentialId = credentialId,
-              M.acdCredentialPublicKey = publicKey cred, -- This is selfsigned
-              M.acdCredentialPublicKeyBytes = M.PublicKeyBytes . CBOR.toStrictByteString . PublicKey.encodePublicKey $ publicKey cred
+              M.acdCredentialPublicKey = acPublicKey cred, -- This is selfsigned
+              M.acdCredentialPublicKeyBytes = M.PublicKeyBytes . CBOR.toStrictByteString . PublicKey.encodePublicKey $ acPublicKey cred
             }
 
         -- https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data
@@ -166,7 +166,7 @@ clientAssertion options AuthenticatorNone {credentials = (cred : _)} = do
       authenticatorData = createAuthenticatorData rpIdHash cred
   signature <-
     PrivateKey.toByteString
-      <$> PrivateKey.sign (publicKey cred) (privateKey cred) (M.adRawData authenticatorData <> BA.convert (hashlazy clientDataBS :: Digest SHA256))
+      <$> PrivateKey.sign (acPublicKey cred) (acPrivateKey cred) (M.adRawData authenticatorData <> BA.convert (hashlazy clientDataBS :: Digest SHA256))
   pure $
     encodeRequestedPublicKeyCredential
       M.PublicKeyCredential
@@ -196,14 +196,14 @@ clientAssertion options AuthenticatorNone {credentials = (cred : _)} = do
               { adfUserPresent = True,
                 adfUserVerified = True
               },
-          M.adSignCount = counter cred,
+          M.adSignCount = acCounter cred,
           M.adAttestedCredentialData = M.NoAttestedCredentialData,
           M.adExtensions = Nothing,
           M.adRawData =
             -- TODO: Use Put?
             BA.convert rpIdHash
               <> BS.singleton 0b00000101
-              <> (toStrict . runPut $ Put.putWord32be . M.unSignatureCounter $ counter cred)
+              <> (toStrict . runPut $ Put.putWord32be . M.unSignatureCounter $ acCounter cred)
         }
 clientAssertion _ _ = error "Should not happen"
 
@@ -217,9 +217,9 @@ newCredential PublicKey.COSEAlgorithmIdentifierEdDSA = do
   let public = Ed25519.toPublic secret
   pure $
     AuthenticatorCredential
-      { counter = M.SignatureCounter 0,
-        privateKey = PrivateKey.Ed25519PrivateKey secret,
-        publicKey = PublicKey.Ed25519PublicKey public
+      { acCounter = M.SignatureCounter 0,
+        acPrivateKey = PrivateKey.Ed25519PrivateKey secret,
+        acPublicKey = PublicKey.Ed25519PublicKey public
       }
 
 newECDSACredential :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m AuthenticatorCredential
@@ -229,9 +229,9 @@ newECDSACredential ident =
     (public, private) <- ECC.generate curve
     pure $
       AuthenticatorCredential
-        { counter = M.SignatureCounter 0,
-          privateKey = fromMaybe (error "Not a ECDSAKey") $ PrivateKey.toECDSAKey ident private,
-          publicKey = fromMaybe (error "Not a ECDSAKey") $ PublicKey.toECDSAKey ident public
+        { acCounter = M.SignatureCounter 0,
+          acPrivateKey = fromMaybe (error "Not a ECDSAKey") $ PrivateKey.toECDSAKey ident private,
+          acPublicKey = fromMaybe (error "Not a ECDSAKey") $ PublicKey.toECDSAKey ident public
         }
 
 spec :: SpecWith ()
