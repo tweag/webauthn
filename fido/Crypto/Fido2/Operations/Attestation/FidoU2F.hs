@@ -10,7 +10,7 @@ module Crypto.Fido2.Operations.Attestation.FidoU2F
   )
 where
 
-import Codec.CBOR.Term (Term (TBytes, TList))
+import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.Fido2.Model
@@ -72,16 +72,22 @@ instance M.AttestationStatementFormat Format where
 
   asfDecode _ m = do
     sig <- case Map.lookup "sig" m of
-      Just (TBytes sig) -> pure sig
+      Just (CBOR.TBytes sig) -> pure sig
       _ -> Left NoSig
     -- 2. Check that x5c has exactly one element and let attCert be that element.
     attCert <- case Map.lookup "x5c" m of
-      Just (TList [TBytes certBytes]) ->
+      Just (CBOR.TList [CBOR.TBytes certBytes]) ->
         either (Left . DecodingErrorX5C) pure $ X509.decodeSignedCertificate certBytes
-      Just (TList []) -> Left NoX5C
-      Just (TList _) -> Left MultipleX5C
+      Just (CBOR.TList []) -> Left NoX5C
+      Just (CBOR.TList _) -> Left MultipleX5C
       _ -> Left NoX5C
     pure $ Statement sig attCert
+
+  asfEncode _ Statement {sig, attCert} =
+    CBOR.TMap
+      [ (CBOR.TString "sig", CBOR.TBytes sig),
+        (CBOR.TString "x5c", CBOR.TList [CBOR.TBytes $ X509.encodeSignedObject attCert])
+      ]
 
   type AttStmtVerificationError Format = VerifyingError
 

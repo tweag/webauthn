@@ -16,7 +16,7 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, void, when)
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.PublicKey (PublicKey, toAlg, toPublicKey)
+import Crypto.Fido2.PublicKey (PublicKey, fromAlg, toAlg, toCOSEAlgorithmIdentifier, toPublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
@@ -25,7 +25,7 @@ import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
 import Data.HashMap.Strict (HashMap, (!?))
-import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 import Data.Set (Set)
@@ -193,6 +193,16 @@ instance M.AttestationStatementFormat Format where
 
         pure Statement {..}
       _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
+
+  asfEncode _ Statement {sig, x5c, pubKey} =
+    CBOR.TMap
+      [ (CBOR.TString "sig", CBOR.TBytes sig),
+        (CBOR.TString "alg", CBOR.TInt $ fromAlg $ toCOSEAlgorithmIdentifier pubKey),
+        ( CBOR.TString "x5c",
+          CBOR.TList $
+            map (CBOR.TBytes . X509.encodeSignedObject) $ toList x5c
+        )
+      ]
 
   type AttStmtVerificationError Format = VerificationError
 
