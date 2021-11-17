@@ -346,7 +346,7 @@ newtype AAGUID = AAGUID {unAAGUID :: BS.ByteString}
 -- and https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid, but the former
 -- uses DOMString, while the latter uses USVString. Is this a bug in the spec or is there an actual difference?
 newtype RpId = RpId {unRpId :: Text}
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
   deriving newtype (IsString)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
@@ -375,7 +375,7 @@ newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
 -- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
 -- with a maximum size of 64 bytes, and is not meant to be displayed to the user.
 newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
@@ -423,7 +423,7 @@ newtype UserAccountName = UserAccountName {unUserAccountName :: Text}
 -- identifying a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential-source)
 -- source and its [authentication assertions](https://www.w3.org/TR/webauthn-2/#authentication-assertion).
 newtype CredentialId = CredentialId {unCredentialId :: BS.ByteString}
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
 -- This member contains a challenge intended to be used for generating the newly
