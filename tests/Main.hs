@@ -5,6 +5,7 @@ module Main
   )
 where
 
+import qualified Client
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
@@ -67,6 +68,9 @@ main = Hspec.hspec $ do
   describe
     "Metadata"
     MetadataSpec.spec
+  describe
+    "Client Emulation"
+    Client.spec
   describe "RegisterAndLogin" $
     it "tests whether the fixed register and login responses are matching" $
       do
