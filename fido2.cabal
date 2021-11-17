@@ -116,7 +116,8 @@ test-suite tests
     PublicKeySpec,
     MetadataSpec,
     Spec.Types,
-    Spec.Util
+    Spec.Util,
+    Client.PrivateKey,
   build-depends:
     aeson,
     bytestring,
