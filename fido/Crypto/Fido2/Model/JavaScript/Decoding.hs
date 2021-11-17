@@ -22,6 +22,8 @@ module Crypto.Fido2.Model.JavaScript.Decoding
     decodeRequestedPublicKeyCredential,
     decodePublicKeyCredentialCreationOptions,
     decodePublicKeyCredentialRequestOptions,
+    decodeCreateCollectedClientData,
+    decodeGetCollectedClientData,
   )
 where
 
@@ -470,3 +472,11 @@ decodePublicKeyCredentialRequestOptions ::
   JS.PublicKeyCredentialRequestOptions ->
   Either DecodingError (M.PublicKeyCredentialOptions 'M.Get)
 decodePublicKeyCredentialRequestOptions = decode
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
+decodeCreateCollectedClientData :: JS.ArrayBuffer -> Either DecodingError (M.CollectedClientData 'M.Create)
+decodeCreateCollectedClientData = decode
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
+decodeGetCollectedClientData :: JS.ArrayBuffer -> Either DecodingError (M.CollectedClientData 'M.Get)
+decodeGetCollectedClientData = decode

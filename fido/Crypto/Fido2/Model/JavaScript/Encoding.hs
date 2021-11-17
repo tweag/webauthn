@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | This module handles the encoding of structures passed to the
@@ -13,15 +14,25 @@
 module Crypto.Fido2.Model.JavaScript.Encoding
   ( encodePublicKeyCredentialCreationOptions,
     encodePublicKeyCredentialRequestOptions,
+    encodeCreatedPublicKeyCredential,
+    encodeRequestedPublicKeyCredential,
   )
 where
 
+import qualified Codec.CBOR.Term as CBOR
+import qualified Codec.CBOR.Write as CBOR
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
+import qualified Crypto.Fido2.Model.JavaScript.Types as JS
+import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import qualified Crypto.Fido2.PublicKey as PublicKey
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Base64.URL as Base64
+import Data.ByteString.Lazy (toStrict)
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Map as Map
+import qualified Data.Text.Encoding as Text
 
 -- | @'Encode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- encoded to the more generic JavaScript type @'JS' hs@ with the 'encode' function.
@@ -169,6 +180,72 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
         extensions = encode pkcogExtensions
       }
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- Encodes the PublicKeyCredential for attestation, this instance is mostly used in the tests where we emulate the
+-- of the client.
+instance Encode (M.PublicKeyCredential 'M.Create) where
+  encode M.PublicKeyCredential {..} =
+    JS.PublicKeyCredential
+      { rawId = encode pkcIdentifier,
+        response = encode pkcResponse,
+        -- TODO: Extensions aren't currently supported
+        clientExtensionResults = Map.empty
+      }
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
+instance SingI t => Encode (M.CollectedClientData t) where
+  encode M.CollectedClientData {..} =
+    let typ = case sing @t of
+          SCreate -> "webauthn.create"
+          SGet -> "webauthn.get"
+     in JS.URLEncodedBase64 . toStrict $
+          Aeson.encode
+            JS.ClientDataJSON
+              { typ = typ,
+                challenge = Text.decodeUtf8 . Base64.encode $ M.unChallenge ccdChallenge,
+                origin = M.unOrigin ccdOrigin,
+                crossOrigin = ccdCrossOrigin
+              }
+
+instance Encode (M.AuthenticatorResponse 'M.Get) where
+  encode M.AuthenticatorAssertionResponse {..} =
+    JS.AuthenticatorAssertionResponse
+      { clientDataJSON = encode argClientData,
+        authenticatorData = JS.URLEncodedBase64 $ M.adRawData argAuthenticatorData,
+        signature = JS.URLEncodedBase64 $ M.unAssertionSignature argSignature,
+        userHandle = JS.URLEncodedBase64 . M.unUserHandle <$> argUserHandle
+      }
+
+instance Encode (M.PublicKeyCredential 'M.Get) where
+  encode M.PublicKeyCredential {..} =
+    JS.PublicKeyCredential
+      { rawId = encode pkcIdentifier,
+        response = encode pkcResponse,
+        -- TODO: Extensions are not currently supported
+        clientExtensionResults = Map.empty
+      }
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
+instance Encode (M.AuthenticatorResponse 'M.Create) where
+  encode M.AuthenticatorAttestationResponse {..} =
+    JS.AuthenticatorAttestationResponse
+      { clientDataJSON = encode arcClientData,
+        attestationObject = encode arcAttestationObject
+      }
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
+instance Encode M.AttestationObject where
+  encode M.AttestationObject {..} =
+    JS.URLEncodedBase64 . CBOR.toStrictByteString $ CBOR.encodeTerm term
+    where
+      term :: CBOR.Term
+      term =
+        CBOR.TMap
+          [ (CBOR.TString "authData", CBOR.TBytes $ M.adRawData aoAuthData),
+            (CBOR.TString "fmt", CBOR.TString $ M.asfIdentifier aoFmt),
+            (CBOR.TString "attStmt", M.asfEncode aoFmt aoAttStmt)
+          ]
+
 -- | Encodes a 'JS.PublicKeyCredentialCreationOptions', corresponding to the
 -- [`PublicKeyCredentialCreationOptions` dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 -- to be passed to the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
@@ -186,3 +263,15 @@ encodePublicKeyCredentialRequestOptions ::
   M.PublicKeyCredentialOptions 'M.Get ->
   JS.PublicKeyCredentialRequestOptions
 encodePublicKeyCredentialRequestOptions = encode
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- Encodes the PublicKeyCredential for attestation, this function is mostly used in the tests where we emulate the
+-- of the client.
+encodeCreatedPublicKeyCredential :: M.PublicKeyCredential 'M.Create -> JS.CreatedPublicKeyCredential
+encodeCreatedPublicKeyCredential = encode
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- Encodes the PublicKeyCredential for assertion, this function is mostly used in the tests where we emulate the
+-- of the client.
+encodeRequestedPublicKeyCredential :: M.PublicKeyCredential 'M.Get -> JS.RequestedPublicKeyCredential
+encodeRequestedPublicKeyCredential = encode
