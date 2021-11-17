@@ -40,6 +40,7 @@ import Crypto.Fido2.Model
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
+import qualified Crypto.Fido2.Model.JavaScript.Types as JS
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import Crypto.Fido2.PublicKey (decodePublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
@@ -58,8 +59,6 @@ import Data.Maybe (catMaybes, fromJust, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
-import qualified Deriving.Aeson as Aeson
-import GHC.Generics (Generic)
 
 -- | Decoding errors that can only occur when decoding a
 -- 'JS.CreatedPublicKeyCredential' result with 'decodeCreatedPublicKeyCredential'
@@ -218,29 +217,10 @@ instance Decode M.AuthenticationExtensionsClientOutputs where
   -- TODO: Implement extension support
   decode _ = pure M.AuthenticationExtensionsClientOutputs {}
 
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
--- Intermediate type used to extract the JSON structure stored in the
--- CBOR-encoded [clientDataJSON](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson).
-data ClientDataJSON = ClientDataJSON
-  { typ :: JS.DOMString,
-    challenge :: JS.DOMString,
-    origin :: JS.DOMString,
-    crossOrigin :: Maybe Bool
-    -- TODO
-    -- tokenBinding :: Maybe TokenBinding
-  }
-  deriving (Generic)
-  -- Note: Encoding can NOT be derived automatically, and most likely not even
-  -- be provided correctly with the Aeson.ToJSON class, because it is only a
-  -- JSON-_compatible_ encoding, but it also contains some extra structure
-  -- allowing for verification without a full JSON parser
-  -- See <https://www.w3.org/TR/webauthn-2/#clientdatajson-serialization>
-  deriving (Aeson.FromJSON) via Aeson.CustomJSON '[Aeson.OmitNothingFields, Aeson.FieldLabelModifier (Aeson.Rename "typ" "type")] ClientDataJSON
-
 instance SingI t => Decode (M.CollectedClientData t) where
   decode (JS.URLEncodedBase64 bytes) = do
     -- https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data
-    ClientDataJSON {..} <- first DecodingErrorClientDataJSON $ Aeson.eitherDecodeStrict bytes
+    JS.ClientDataJSON {..} <- first DecodingErrorClientDataJSON $ Aeson.eitherDecodeStrict bytes
     -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
     -- This member contains the base64url encoding of the challenge provided by the
     -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party). See the
