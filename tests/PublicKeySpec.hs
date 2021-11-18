@@ -11,7 +11,9 @@ module PublicKeySpec
 where
 
 import qualified Codec.CBOR.Encoding as CBOR
+import Codec.CBOR.Read (deserialiseFromBytes)
 import qualified Codec.CBOR.Read as Read
+import Codec.CBOR.Write (toLazyByteString)
 import qualified Codec.CBOR.Write as Write
 import Crypto.Fido2.PublicKey
   ( COSEAlgorithmIdentifier
@@ -26,6 +28,8 @@ import Crypto.Fido2.PublicKey
         Ed25519PublicKey
       ),
     decodeCOSEAlgorithmIdentifier,
+    decodePublicKey,
+    encodePublicKey,
     toECDSAKey,
     verify,
   )
@@ -33,7 +37,7 @@ import Crypto.Hash (SHA384 (SHA384))
 import Crypto.Hash.Algorithms (HashAlgorithm, SHA256 (SHA256), SHA512 (SHA512))
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Generate as ECC
-import Crypto.PubKey.ECC.Types (CurveName, getCurveByName)
+import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.Random as Random
 import qualified Data.ASN1.BinaryEncoding as ASN1
@@ -43,7 +47,7 @@ import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
 import Data.Maybe (fromJust)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
-import Test.QuickCheck (Arbitrary, Gen, Property, arbitrary, arbitraryBoundedEnum, oneof, property)
+import Test.QuickCheck (Arbitrary, Gen, Property, arbitrary, arbitraryBoundedEnum, elements, oneof, property, (===))
 import Test.QuickCheck.Instances.ByteString ()
 
 instance Arbitrary COSEAlgorithmIdentifier where
@@ -52,9 +56,9 @@ instance Arbitrary COSEAlgorithmIdentifier where
 instance Arbitrary PublicKey where
   arbitrary =
     oneof
-      [ ES256PublicKey <$> arbitrary,
-        ES384PublicKey <$> arbitrary,
-        ES512PublicKey <$> arbitrary,
+      [ ES256PublicKey <$> randomECDSAPublicKey ECC.SEC_p256r1,
+        ES384PublicKey <$> randomECDSAPublicKey ECC.SEC_p384r1,
+        ES512PublicKey <$> randomECDSAPublicKey ECC.SEC_p521r1,
         Ed25519PublicKey <$> arbitrary
       ]
 
@@ -71,24 +75,26 @@ instance Arbitrary Ed25519.SecretKey where
 
 newtype ECDSAKeyPair = ECDSAKeyPair (ECDSA.PublicKey, ECDSA.PrivateKey) deriving (Eq, Show)
 
-instance Arbitrary ECDSA.PublicKey where
-  arbitrary = fst <$> randomECDSAKey
-
-instance Arbitrary ECDSA.PrivateKey where
-  arbitrary = snd <$> randomECDSAKey
-
 instance Arbitrary ECDSAKeyPair where
-  arbitrary = ECDSAKeyPair <$> randomECDSAKey
+  arbitrary = ECDSAKeyPair <$> (randomECDSAKeyPair =<< arbitrary)
 
-instance Arbitrary CurveName where
-  arbitrary = arbitraryBoundedEnum
+instance Arbitrary ECC.CurveName where
+  arbitrary =
+    elements
+      [ ECC.SEC_p256r1,
+        ECC.SEC_p384r1,
+        ECC.SEC_p521r1
+      ]
 
-randomECDSAKey :: Gen (ECDSA.PublicKey, ECDSA.PrivateKey)
-randomECDSAKey = do
-  curve <- getCurveByName <$> arbitrary
+randomECDSAPublicKey :: ECC.CurveName -> Gen ECDSA.PublicKey
+randomECDSAPublicKey curveName = fst <$> randomECDSAKeyPair curveName
+
+randomECDSAKeyPair :: ECC.CurveName -> Gen (ECDSA.PublicKey, ECDSA.PrivateKey)
+randomECDSAKeyPair curveName = do
+  let curve = ECC.getCurveByName curveName
   rng <- Random.drgNewSeed . Random.seedFromInteger <$> arbitrary
-  let (x, _) = Random.withDRG rng (ECC.generate curve)
-  pure x
+  let ((public, private), _) = Random.withDRG rng (ECC.generate curve)
+  pure (public, private)
 
 spec :: SpecWith ()
 spec = do
@@ -110,6 +116,10 @@ spec = do
       it "rejects invalid ASN.1 ES256" $ ecdsaRejectsInvalidASN COSEAlgorithmIdentifierES256
       it "rejects invalid ASN.1 ES384" $ ecdsaRejectsInvalidASN COSEAlgorithmIdentifierES384
       it "rejects invalid ASN.1 ES512" $ ecdsaRejectsInvalidASN COSEAlgorithmIdentifierES512
+    it "encodes roundtrip" $ do
+      property $
+        \(key :: PublicKey) ->
+          Right ("", key) === deserialiseFromBytes decodePublicKey (toLazyByteString $ encodePublicKey key)
   -- TODO: Find out how encoding changed
   -- Though COSE allows us to pick `alg` and `crv` independently, Webauthn wants us
   -- to let `alg` imply `crv`

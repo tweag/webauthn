@@ -4,6 +4,7 @@
 
 module Crypto.Fido2.Model.JavaScript.Types
   ( Convert (..),
+    ClientDataJSON (..),
   )
 where
 
@@ -13,6 +14,32 @@ import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Data.Aeson as Aeson
 import Data.Map (Map)
 import Data.Text (Text)
+import qualified Deriving.Aeson as Aeson
+import GHC.Generics (Generic)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
+-- Intermediate type used to extract the JSON structure stored in the
+-- CBOR-encoded [clientDataJSON](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson).
+-- NOTE: Do not rely on the ToJSON instance of this type, it is not implemented according to spec.
+data ClientDataJSON = ClientDataJSON
+  { typ :: JS.DOMString,
+    challenge :: JS.DOMString,
+    origin :: JS.DOMString,
+    crossOrigin :: Maybe Bool
+    -- TODO
+    -- tokenBinding :: Maybe TokenBinding
+  }
+  deriving (Generic)
+  -- Note: Encoding can NOT be derived automatically, and most likely not even
+  -- be provided correctly with the Aeson.ToJSON class, because it is only a
+  -- JSON-_compatible_ encoding, but it also contains some extra structure
+  -- allowing for verification without a full JSON parser
+  -- See <https://www.w3.org/TR/webauthn-2/#clientdatajson-serialization>
+  -- TODO/FIXME: As described above the ToJSON instance should not be derived,
+  -- but implemented manually using the description provided in the specification.
+  -- For now the ToJSON instance is only used for tests so it suffices, but
+  -- library users should not rely on it.
+  deriving (Aeson.FromJSON, Aeson.ToJSON) via Aeson.CustomJSON '[Aeson.OmitNothingFields, Aeson.FieldLabelModifier (Aeson.Rename "typ" "type")] ClientDataJSON
 
 -- | @'Convert' hs@ indicates that the Haskell-specific type @hs@ has a more
 -- general JavaScript-specific type associated with it, which can be accessed with 'JS'.
