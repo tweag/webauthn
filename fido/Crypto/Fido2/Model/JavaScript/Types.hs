@@ -12,6 +12,7 @@ import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Data.Aeson as Aeson
+import Data.Kind (Type)
 import Data.Map (Map)
 import Data.Text (Text)
 import qualified Deriving.Aeson as Aeson
@@ -44,7 +45,7 @@ data ClientDataJSON = ClientDataJSON
 -- | @'Convert' hs@ indicates that the Haskell-specific type @hs@ has a more
 -- general JavaScript-specific type associated with it, which can be accessed with 'JS'.
 class Convert hs where
-  type JS hs :: *
+  type JS hs :: Type
 
 instance Convert hs => Convert (Maybe hs) where
   type JS (Maybe hs) = Maybe (JS hs)

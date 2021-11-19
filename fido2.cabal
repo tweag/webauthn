@@ -13,6 +13,8 @@ common sanity
     -Wmissing-export-lists
     -Wmissing-import-lists
     -Wno-name-shadowing
+    -Wcompat
+    -Wincomplete-uni-patterns
   default-extensions:
     DerivingStrategies
     DerivingVia
@@ -112,6 +114,8 @@ test-suite tests
   type: exitcode-stdio-1.0
   hs-source-dirs: tests
   main-is: Main.hs
+  ghc-options:
+    -Wno-incomplete-uni-patterns
   other-modules:
     PublicKeySpec,
     MetadataSpec,

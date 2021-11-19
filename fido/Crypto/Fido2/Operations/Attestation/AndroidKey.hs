@@ -95,7 +95,11 @@ instance Extension ExtAttestation where
         allApplications <- void <$> getNextContainerMaybe (Container Context 600)
         _applicationId <- getNextContainerMaybe (Container Context 601)
         _creationDateTime <- getNextContainerMaybe (Container Context 701)
-        origin <- onNextContainerMaybe (Container Context 702) (getNext >>= \(IntVal i) -> pure i)
+        origin <-
+          onNextContainerMaybe (Container Context 702) $
+            getNext >>= \case
+              IntVal i -> pure i
+              _ -> fail "Unexpected non-IntVal"
         _rollbackResistant <- getNextContainerMaybe (Container Context 703)
         _rootOfTrust <- getNextContainerMaybe (Container Context 704)
         _osVersion <- getNextContainerMaybe (Container Context 705)
