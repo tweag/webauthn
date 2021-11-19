@@ -51,11 +51,14 @@ data DecodingError
   deriving (Show, Exception)
 
 data VerifyingError
-  = NoECKeyInCertificate
-  | CredentialDataMissing
-  | NoECKeyInAttestedCredentialData
-  | UnexpectedCoordinateLength
-  | InvalidSignature
+  = -- | The public key in the certificate was not an EC Key or the curve was not the p256 curve
+    IncorrectKeyInCertificate
+  | -- | The key in the attested credential data was not an EC key or the point was the point at infinity
+    NoECKeyInAttestedCredentialData
+  | -- | After encoding the x or y coordinate of the public key did not have the required 32 byte length
+    UnexpectedCoordinateLength
+  | -- | The provided public key cannot validate the signature over the verification data
+    InvalidSignature
   deriving (Show, Exception)
 
 data Statement = Statement
@@ -106,7 +109,7 @@ instance M.AttestationStatementFormat Format where
     case certPubKey of
       -- TODO: Will we only get named curves?
       (X509.PubKeyEC X509.PubKeyEC_Named {X509.pubkeyEC_name = SEC_p256r1}) -> pure ()
-      _ -> Left NoECKeyInCertificate
+      _ -> Left IncorrectKeyInCertificate
 
     -- 3. Extract the claimed rpIdHash from authenticatorData, and the claimed
     -- credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.

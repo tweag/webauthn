@@ -143,21 +143,37 @@ data Statement = Statement
   deriving (Eq, Show)
 
 data DecodingError
-  = DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
-  | DecodingErrorUnknownAlgorithmIdentifier Int
-  | DecodingErrorCertificate String
-  | DecodingErrorCertificateExtensionMissing
-  | DecodingErrorCertificateExtension String
-  | DecodingErrorPublicKey X509.PubKey
+  = -- | The provided CBOR encoded data was malformed. Either because a field
+    -- was missing, or because the field contained the wrong type of data
+    DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
+  | -- | The algorithm identifier was invalid, or unsupported by the library
+    DecodingErrorUnknownAlgorithmIdentifier Int
+  | -- | The x5c field of the attestation statement could not be decoded for
+    -- the provided reason
+    DecodingErrorCertificate String
+  | -- | The required "attestation" extension was not found in the certificate
+    DecodingErrorCertificateExtensionMissing
+  | -- | The required "attestation" extension of the certificate could not be
+    -- decoded
+    DecodingErrorCertificateExtension String
+  | -- | The public key of the certificate could not be decoded
+    DecodingErrorPublicKey X509.PubKey
   deriving (Show, Exception)
 
 data VerificationError
-  = VerificationErrorCertiticatePublicKeyInvalid
-  | VerificationErrorCredentialKeyMismatch
-  | VerificationErrorChallengeMismatch
-  | VerificationErrorAndroidKeyAllApplicationsFieldFound
-  | VerificationErrorAndroidKeyOriginFieldInvalid
-  | VerificationErrorAndroidKeyPurposeFieldInvalid
+  = -- | The public key in the certificate is different from the on in the
+    -- attested credential data
+    VerificationErrorCredentialKeyMismatch
+  | -- | The challenge field of the certificate extension does not match the
+    -- clientDataHash
+    VerificationErrorClientDataHashMismatch
+  | -- | The "attestation" extension is scoped to all applications instead of just the RpId
+    VerificationErrorAndroidKeyAllApplicationsFieldFound
+  | -- | The origin field(s) were not equal to KM_ORIGIN_GENERATED
+    VerificationErrorAndroidKeyOriginFieldInvalid
+  | -- | The purpose field(s) were not equal to the singleton set containing
+    -- KM_PURPOSE_SIGN
+    VerificationErrorAndroidKeyPurposeFieldInvalid
   deriving (Show, Exception)
 
 -- | [(spec)](https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h)
@@ -228,7 +244,7 @@ instance M.AttestationStatementFormat Format where
     -- 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to
     -- clientDataHash.
     -- See https://source.android.com/security/keystore/attestation for the ASN1 description
-    unless (attestationChallenge attExt == M.unClientDataHash clientDataHash) . Left $ VerificationErrorChallengeMismatch
+    unless (attestationChallenge attExt == M.unClientDataHash clientDataHash) . Left $ VerificationErrorClientDataHashMismatch
 
     -- 5. Verify the following using the appropriate authorization list from the attestation certificate extension data:
 
