@@ -51,19 +51,38 @@ data Statement = Statement
   deriving (Eq, Show)
 
 data DecodingError
-  = DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
-  | DecodingErrorUnknownAlgorithmIdentifier Int
-  | DecodingErrorCertificate String
+  = -- | The provided CBOR encoded data was malformed. Either because a field
+    -- was missing, or because the field contained the wrong type of data
+    DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
+  | -- | The algorithm identifier was invalid, or unsupported by the library
+    DecodingErrorUnknownAlgorithmIdentifier Int
+  | -- | The x5c field of the attestation statement could not be decoded for
+    -- the provided reason
+    DecodingErrorCertificate String
   deriving (Show, Exception)
 
 data VerificationError
-  = VerificationErrorAlgorithmMismatch
-  | VerificationErrorInvalidSignature
-  | VerificationErrorVerificationFailure X509.SignatureFailure
-  | VerificationErrorCertificateRequirementsUnmet
-  | VerificationErrorCredentialAAGUIDMissing
-  | VerificationErrorCertificateAAGUIDMismatch
-  | VerificationErrorASN1Error ASN1Error
+  = -- | The Algorithm from the attestation format does not match the algorithm
+    -- of the key in the credential data
+    VerificationErrorAlgorithmMismatch
+  | -- | The statement key cannot verify the signature over the attested
+    -- credential data and client data for self attestation
+    VerificationErrorInvalidSignature
+  | -- | The statement certificate cannot verify the signature over the attested
+    -- credential data and client data for nonself attestation
+    VerificationErrorVerificationFailure X509.SignatureFailure
+  | -- | The certificate does not meet the requirements layed out in the
+    -- webauthn specification
+    -- https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
+    VerificationErrorCertificateRequirementsUnmet
+  | -- | The (supposedly) ASN1 encoded certificate extension could not be
+    -- decoded
+    VerificationErrorASN1Error ASN1Error
+  | -- | The certificate extension does not contain a AAGUID
+    VerificationErrorCredentialAAGUIDMissing
+  | -- | The AAGUID in the certificate extension does not match the AAGUID in
+    -- the authenticator data
+    VerificationErrorCertificateAAGUIDMismatch
   deriving (Show, Exception)
 
 instance M.AttestationStatementFormat Format where
@@ -131,7 +150,7 @@ instance M.AttestationStatementFormat Format where
             X509.SignaturePass -> pure ()
             X509.SignatureFailed err -> Left $ VerificationErrorVerificationFailure err
 
-          -- Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation Statement Certificate
+          -- Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation Statement Certificate
           -- Requirements.
           let dnElements = X509.getDistinguishedElements $ X509.certSubjectDN cert
           unless

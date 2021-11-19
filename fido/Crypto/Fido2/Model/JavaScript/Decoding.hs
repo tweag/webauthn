@@ -65,27 +65,50 @@ import qualified Data.Text.Encoding as Text
 -- | Decoding errors that can only occur when decoding a
 -- 'JS.CreatedPublicKeyCredential' result with 'decodeCreatedPublicKeyCredential'
 data CreatedDecodingError
-  = CreatedDecodingErrorCommon DecodingError
-  | CreatedDecodingErrorCBOR CBOR.DeserialiseFailure
-  | CreatedDecodingErrorUnknownAttestationStatementFormat Text
-  | CreatedDecodingErrorUnexpectedAttestationStatementKey CBOR.Term
-  | CreatedDecodingErrorAttestationStatement SomeException
-  | CreatedDecodingErrorUnexpectedAttestationObjectValues (Maybe CBOR.Term, Maybe CBOR.Term, Maybe CBOR.Term)
+  = -- | Any of the below specified 'DecodingError's occured
+    CreatedDecodingErrorCommon DecodingError
+  | -- | The Attestation format could not be decoded because the provided
+    -- format is not part of the webauthn specification or not supported by this
+    -- library
+    CreatedDecodingErrorUnknownAttestationStatementFormat Text
+  | -- | A CBOR String was expected but a different type was encountered
+    CreatedDecodingErrorUnexpectedAttestationStatementKey CBOR.Term
+  | -- | An error was encountered during the decoding of the attestation
+    -- statement format
+    CreatedDecodingErrorAttestationStatement SomeException
+  | -- | The CBOR-encoded attestation object did not contain the required
+    -- "authData", "fmt" and "attStmt" fields, or their respective values were
+    -- not the correct types
+    CreatedDecodingErrorUnexpectedAttestationObjectValues (HashMap Text CBOR.Term)
   deriving (Show, Exception)
 
 -- | Decoding errors that can occur when decoding either a
 -- 'JS.CreatedPublicKeyCredential' result with 'decodeCreatedPublicKeyCredential'
 -- or a 'JS.RequestedPublicKeyCredential' result with 'decodeRequestedPublicKeyCredential'
 data DecodingError
-  = DecodingErrorClientDataJSON String
-  | DecodingErrorClientDataChallenge String
-  | DecodingErrorUnexpectedWebauthnType JS.DOMString JS.DOMString
-  | DecodingErrorExpectedAttestedCredentialData
-  | DecodingErrorUnexpectedAttestedCredentialData
-  | DecodingErrorNotAllInputUsed LBS.ByteString
-  | DecodingErrorBinary String
-  | DecodingErrorCBOR CBOR.DeserialiseFailure
-  | DecodingErrorUnexpectedAlgorithmIdentifier JS.COSEAlgorithmIdentifier
+  = -- | The Client data could not be decoded for the provided reason
+    DecodingErrorClientDataJSON String
+  | -- | The Challenge could not be decoded from its Base64-based encoding for
+    -- the provided reason
+    DecodingErrorClientDataChallenge String
+  | -- | The Client Data's Webauthn type did not match the expected one
+    -- (first: expected, second: received)
+    DecodingErrorUnexpectedWebauthnType JS.DOMString JS.DOMString
+  | -- | The client data had the create type but the authenticator data's
+    -- attested credential data flag was not set.
+    DecodingErrorExpectedAttestedCredentialData
+  | -- | The client data had the get type but the authenticator data's
+    -- attested credential data flag was set.
+    DecodingErrorUnexpectedAttestedCredentialData
+  | -- | After decoding the authenticator data, the data in the error remained
+    -- undecoded
+    DecodingErrorNotAllInputUsed LBS.ByteString
+  | -- | The given error occured during decoding of binary data
+    DecodingErrorBinary String
+  | -- | The given error occured during decoding of CBOR-encoded data
+    DecodingErrorCBOR CBOR.DeserialiseFailure
+  | -- | The decoded algorithm identifier does not match the desired algorithm
+    DecodingErrorUnexpectedAlgorithmIdentifier JS.COSEAlgorithmIdentifier
   deriving (Show, Exception)
 
 -- | Webauthn contains a mixture of binary formats. For one it's CBOR and
@@ -288,8 +311,10 @@ instance Decode M.PublicKeyCredentialUserEntity where
 instance Decode M.Challenge
 
 instance Decode PublicKey.COSEAlgorithmIdentifier where
-  -- The specification does not specify what to do when an unsupported or unknown COSE identifier is received
-  -- We err on the side of caution by failing to parse.
+  -- The specification does not inspect the algorithm until
+  -- assertion/attestation. We implement the check here to go to a Haskell
+  -- type. Erring on the side of caution by failing to parse if an unsupported
+  -- alg was encountered.
   decode n = maybe (Left $ DecodingErrorUnexpectedAlgorithmIdentifier n) Right $ PublicKey.toAlg n
 
 instance Decode M.Timeout
@@ -411,7 +436,7 @@ instance Decode (M.PublicKeyCredentialOptions 'M.Get) where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated M.AttestationObject where
   decodeCreated supportedFormats (JS.URLEncodedBase64 bytes) = do
-    map :: HashMap Text CBOR.Term <- first CreatedDecodingErrorCBOR $ CBOR.deserialiseOrFail $ LBS.fromStrict bytes
+    map :: HashMap Text CBOR.Term <- first (CreatedDecodingErrorCommon . DecodingErrorCBOR) $ CBOR.deserialiseOrFail $ LBS.fromStrict bytes
     case (map !? "authData", map !? "fmt", map !? "attStmt") of
       (Just (CBOR.TBytes authDataBytes), Just (CBOR.TString fmt), Just (CBOR.TMap attStmtPairs)) -> do
         aoAuthData <- first CreatedDecodingErrorCommon $ decodeAuthenticatorData authDataBytes
@@ -427,7 +452,7 @@ instance DecodeCreated M.AttestationObject where
               first (CreatedDecodingErrorAttestationStatement . SomeException) $
                 asfDecode aoFmt attStmtMap
             pure $ M.AttestationObject {..}
-      terms -> Left $ CreatedDecodingErrorUnexpectedAttestationObjectValues terms
+      terms -> Left $ CreatedDecodingErrorUnexpectedAttestationObjectValues map
 
 instance DecodeCreated (M.AuthenticatorResponse 'M.Create) where
   decodeCreated asfMap JS.AuthenticatorAttestationResponse {..} = do

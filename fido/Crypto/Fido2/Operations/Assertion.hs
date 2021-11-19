@@ -23,17 +23,37 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (Validation)
 
 data AssertionError
-  = AssertionDisallowedCredential (M.PublicKeyCredential 'M.Get)
-  | AssertionAuthenticatedUserHandleMismatch M.UserHandle M.UserHandle
-  | AssertionCredentialUserHandleMismatch M.UserHandle M.UserHandle
-  | AssertionCannotVerifyUserHandle
-  | AssertionChallengeMismatch M.Challenge M.Challenge
-  | AssertionOriginMismatch M.Origin M.Origin
-  | AssertionRpIdHashMismatch M.RpIdHash M.RpIdHash
-  | AssertionUserNotPresent
-  | AssertionUserNotVerified
-  | AssertionInvalidSignature (Either CBOR.DeserialiseFailure (PublicKey, BS.ByteString, M.AssertionSignature))
-  | AssertionPolicyRejected
+  = -- | The provided Credential was not one explicitly allowed by the server
+    -- (first: allowed credentials, second: received credential)
+    AssertionDisallowedCredential [M.PublicKeyCredentialDescriptor] (M.PublicKeyCredential 'M.Get)
+  | -- | The received credential does not match the currently identified user
+    -- (first: identified, second: received)
+    AssertionIdentifiedUserHandleMismatch M.UserHandle M.UserHandle
+  | -- | The stored credential does not match the user specified in the
+    -- response
+    -- (first: stored, second: received)
+    AssertionCredentialUserHandleMismatch M.UserHandle M.UserHandle
+  | -- | No user was identified and the response did not specify a user
+    AssertionCannotVerifyUserHandle
+  | -- | The received challenge does not match the originally created
+    -- challenge
+    -- (first: expected, second: received)
+    AssertionChallengeMismatch M.Challenge M.Challenge
+  | -- | The origin derived by the client does match the assumed origin
+    -- (first: expected, second: received)
+    AssertionOriginMismatch M.Origin M.Origin
+  | -- | The rpIdHash in the authData is not a valid hash over the RpId
+    -- expected by the Relying party
+    -- (first: expected, second: received)
+    AssertionRpIdHashMismatch M.RpIdHash M.RpIdHash
+  | -- | The UserPresent bit was not set in the authData
+    AssertionUserNotPresent
+  | -- | The UserVerified bit was not set in the authData while user
+    -- verification was required
+    AssertionUserNotVerified
+  | -- | The public key could not be decoded or the public key does verify the
+    -- signature over the authData
+    AssertionInvalidSignature (Either CBOR.DeserialiseFailure (PublicKey, BS.ByteString, M.AssertionSignature))
   deriving (Show)
 
 data SignatureCounterResult
@@ -52,7 +72,7 @@ verifyAssertionResponse ::
   M.Origin ->
   -- | The hash of the relying party id
   M.RpIdHash ->
-  -- | The user handle, in case the user is authenticated already
+  -- | The user handle, in case the user is identified already
   Maybe M.UserHandle ->
   -- | The database entry for the credential, as created in the initial
   -- attestation and optionally updated in subsequent assertions
@@ -66,7 +86,7 @@ verifyAssertionResponse ::
   -- Or in case of success a signature counter result, which should be dealt
   -- with
   Validation (NonEmpty AssertionError) SignatureCounterResult
-verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credential = do
+verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential = do
   -- 1. Let options be a new PublicKeyCredentialRequestOptions structure
   -- configured to the Relying Party's needs for the ceremony.
   -- NOTE: Implemented by caller
@@ -98,7 +118,7 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   -- identifies one of the public key credentials listed in
   -- options.allowCredentials.
   let allowCredentials = M.pkcogAllowCredentials options
-  unless (null allowCredentials || M.pkcIdentifier credential `elem` map M.pkcdId allowCredentials) . failure $ AssertionDisallowedCredential credential
+  unless (null allowCredentials || M.pkcIdentifier credential `elem` map M.pkcdId allowCredentials) . failure $ AssertionDisallowedCredential allowCredentials credential
 
   -- 6. Identify the user being authenticated and verify that this user is the
   -- owner of the public key credential source credentialSource identified by
@@ -114,16 +134,16 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   -- initiated, verify that response.userHandle is present, and that the user
   -- identified by this value is the owner of credentialSource.
   let owner = ceUserHandle entry
-  case (mauthenticatedUser, M.argUserHandle response) of
-    (Just authenticatedUser, Just userHandle)
-      | authenticatedUser /= owner ->
-        failure $ AssertionAuthenticatedUserHandleMismatch authenticatedUser owner
+  case (midentifiedUser, M.argUserHandle response) of
+    (Just identifiedUser, Just userHandle)
+      | identifiedUser /= owner ->
+        failure $ AssertionIdentifiedUserHandleMismatch identifiedUser owner
       | userHandle /= owner ->
         failure $ AssertionCredentialUserHandleMismatch userHandle owner
       | otherwise -> pure ()
-    (Just authenticatedUser, Nothing)
-      | authenticatedUser /= owner ->
-        failure $ AssertionAuthenticatedUserHandleMismatch authenticatedUser owner
+    (Just identifiedUser, Nothing)
+      | identifiedUser /= owner ->
+        failure $ AssertionIdentifiedUserHandleMismatch identifiedUser owner
       | otherwise -> pure ()
     (Nothing, Just userHandle)
       | userHandle /= owner ->
@@ -158,11 +178,11 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
 
   -- 12. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
   unless (M.ccdChallenge c == M.pkcogChallenge options) $
-    failure $ AssertionChallengeMismatch (M.ccdChallenge c) (M.pkcogChallenge options)
+    failure $ AssertionChallengeMismatch (M.pkcogChallenge options) (M.ccdChallenge c)
 
   -- 13. Verify that the value of C.origin matches the Relying Party's origin.
   unless (M.ccdOrigin c == origin) $
-    failure $ AssertionOriginMismatch (M.ccdOrigin c) origin
+    failure $ AssertionOriginMismatch origin (M.ccdOrigin c)
 
   -- 14. Verify that the value of C.tokenBinding.status matches the state of
   -- Token Binding for the TLS connection over which the attestation was
@@ -174,9 +194,9 @@ verifyAssertionResponse origin rpIdHash mauthenticatedUser entry options credent
   -- 15. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
   -- expected by the Relying Party.
   -- Note: If using the appid extension, this step needs some special logic.
-  -- See § 10.1 FIDO AppID Extension (appid) for details.
+  -- See § 10.1 FIDO AppID Extension (appid) for details.
   unless (M.adRpIdHash authData == rpIdHash) $
-    failure $ AssertionRpIdHashMismatch (M.adRpIdHash authData) rpIdHash
+    failure $ AssertionRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
   -- 16. Verify that the User Present bit of the flags in authData is set.
   unless (M.adfUserPresent (M.adFlags authData)) $
