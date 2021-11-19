@@ -14,7 +14,7 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.Fido2.Model
-  ( AttestationType (AttestationTypeSelf),
+  ( AttestationType (AttestationTypeUncertain),
     AttestedCredentialData (AttestedCredentialData, acdCredentialId, acdCredentialPublicKey),
     AuthenticatorData (AuthenticatorData, adAttestedCredentialData, adRpIdHash),
     ClientDataHash (unClientDataHash),
@@ -159,7 +159,10 @@ instance M.AttestationStatementFormat Format where
     -- attestation type Basic, AttCA or uncertainty, and attestation trust path
     -- x5c.
     -- TODO: Metadata
-    pure AttestationTypeSelf
+    -- Currently result in a Uncertain Attestation Type because we could not
+    -- determine Basic or CA attestation without access to a metadata service
+    -- containing the parent certificates.
+    pure . AttestationTypeUncertain $ pure attCert
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format
