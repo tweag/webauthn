@@ -8,7 +8,7 @@ module Main
 where
 
 import Control.Monad (when)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
@@ -19,7 +19,7 @@ import Crypto.Fido2.Operations.Attestation (AttestationError, allSupportedFormat
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Crypto.Hash (hash)
-import Data.Aeson (FromJSON)
+import Data.Aeson (FromJSON, Value (String))
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
@@ -43,18 +43,22 @@ import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
 
 data RegisterBeginReq = RegisterBeginReq
-  { userName :: Text,
-    displayName :: Text
+  { accountName :: Text,
+    accountDisplayName :: Text
   }
   deriving (Show, FromJSON)
   deriving stock (Generic)
 
 setAuthenticatedAs :: Database.Connection -> M.UserHandle -> Scotty.ActionM ()
 setAuthenticatedAs db userHandle = do
-  token <- liftIO $ uniformM globalStdGen
-  liftIO $
+  token <- Scotty.liftAndCatchIO $ uniformM globalStdGen
+  Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx ->
       Database.insertAuthToken tx token userHandle
+  setAuthToken token
+
+setAuthToken :: Database.AuthToken -> Scotty.ActionM ()
+setAuthToken token = do
   let setCookie =
         Cookie.defaultSetCookie
           { Cookie.setCookieName = "auth-token",
@@ -62,26 +66,61 @@ setAuthenticatedAs db userHandle = do
             Cookie.setCookieSameSite = Just Cookie.sameSiteStrict,
             Cookie.setCookieHttpOnly = True,
             Cookie.setCookiePath = Just "/",
-            Cookie.setCookieSecure = True
+            Cookie.setCookieSecure = True,
+            -- Keep user logged in for an hour
+            Cookie.setCookieMaxAge = Just (60 * 60 * 24)
           }
   Scotty.setHeader
     "Set-Cookie"
     (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
 
-getAuthenticatedUser :: Database.Connection -> Scotty.ActionM (Maybe M.UserHandle)
-getAuthenticatedUser db = runMaybeT $ do
+getAuthToken :: MaybeT Scotty.ActionM Database.AuthToken
+getAuthToken = do
   cookieHeader <- MaybeT $ Scotty.header "cookie"
   let cookies = Cookie.parseCookies $ LBS.toStrict $ LText.encodeUtf8 cookieHeader
   sessionCookie <- MaybeT . pure $ lookup "auth-token" cookies
-  token <- MaybeT . pure $ either (const Nothing) (Just . Database.AuthToken) $ Base64.decodeUnpadded sessionCookie
-  MaybeT $
-    liftIO $
+  MaybeT . pure $ either (const Nothing) (Just . Database.AuthToken) $ Base64.decodeUnpadded sessionCookie
+
+getAuthenticatedUser :: Database.Connection -> Scotty.ActionM (Maybe M.UserAccountName)
+getAuthenticatedUser db = runMaybeT $ do
+  token <- getAuthToken
+  user <- MaybeT $
+    Scotty.liftAndCatchIO $
       Database.withTransaction db $ \tx ->
-        Database.getAuthTokenUser tx token
+        Database.queryUserByAuthToken tx token
+  lift $ setAuthToken token
+  pure user
+
+logout :: Database.Connection -> Scotty.ActionM ()
+logout db = do
+  runMaybeT getAuthToken >>= \case
+    Nothing -> pure ()
+    Just token -> do
+      Scotty.liftAndCatchIO $
+        Database.withTransaction db $ \tx ->
+          Database.deleteAuthToken tx token
+
+  let setCookie =
+        Cookie.defaultSetCookie
+          { Cookie.setCookieName = "auth-token",
+            Cookie.setCookieValue = "",
+            Cookie.setCookieSameSite = Just Cookie.sameSiteStrict,
+            Cookie.setCookieSecure = True,
+            Cookie.setCookieHttpOnly = True,
+            Cookie.setCookiePath = Just "/",
+            Cookie.setCookieMaxAge = Just 0
+          }
+  Scotty.setHeader
+    "Set-Cookie"
+    (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
 
 app :: M.Origin -> M.RpIdHash -> Database.Connection -> PendingOps -> ScottyM ()
 app origin rpIdHash db pending = do
   Scotty.middleware (staticPolicy (addBase "dist"))
+  Scotty.get "/" $ do
+    getAuthenticatedUser db >>= \case
+      Nothing -> Scotty.redirect "unauthenticated.html"
+      Just _ -> Scotty.redirect "authenticated.html"
   Scotty.post "/register/begin" $ beginRegistration db pending
   Scotty.post "/register/complete" $ completeRegistration origin rpIdHash db pending
   Scotty.post "/login/begin" $ beginLogin db pending
@@ -89,7 +128,8 @@ app origin rpIdHash db pending = do
   Scotty.get "/requires-auth" $ do
     getAuthenticatedUser db >>= \case
       Nothing -> Scotty.raiseStatus HTTP.status401 "Please authenticate first"
-      Just user -> Scotty.json @Text $ "This should only be visible when authenticated as user: " <> Text.decodeUtf8 (Base64.encodeUnpadded (M.unUserHandle user))
+      Just name -> Scotty.json $ String $ M.unUserAccountName name
+  Scotty.get "/logout" $ logout db
 
 mkCredentialDescriptor :: CredentialEntry -> M.PublicKeyCredentialDescriptor
 mkCredentialDescriptor CredentialEntry {ceCredentialId} =
@@ -111,15 +151,12 @@ handleError (Right x) = pure x
 
 beginLogin :: Database.Connection -> PendingOps -> Scotty.ActionM ()
 beginLogin db pending = do
-  userId' <- Scotty.jsonData @Text
-  userId <- case Base64.decodeUnpadded (Text.encodeUtf8 userId') of
-    Left err -> fail $ "Failed to base64url decode the user id " <> show userId' <> ": " <> err
-    Right res -> pure $ M.UserHandle res
-  credentials <- liftIO $
+  accountName <- M.UserAccountName <$> Scotty.jsonData @Text
+  credentials <- Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx -> do
-      Database.getCredentialEntriesByUserId tx userId
+      Database.queryCredentialEntriesByUser tx accountName
   when (null credentials) $ Scotty.raiseStatus HTTP.status404 "User not found"
-  options <- liftIO $
+  options <- Scotty.liftAndCatchIO $
     insertPendingOptions pending $ \challenge -> do
       M.PublicKeyCredentialRequestOptions
         { M.pkcogRpId = Nothing,
@@ -141,40 +178,41 @@ completeLogin origin rpIdHash db pending = do
     Right result -> pure result
 
   options <-
-    liftIO (getPendingOptions pending cred) >>= \case
+    Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
       Left err -> Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
       Right result -> pure result
 
-  mentry <- liftIO $
+  mentry <- Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx ->
-      Database.getCredentialEntryById tx (M.pkcIdentifier cred)
+      Database.queryCredentialEntryByCredential tx (M.pkcIdentifier cred)
   entry <- case mentry of
     Nothing -> fail "Credential not found"
     Just entry -> pure entry
 
-  _newSigCount <- case verifyAssertionResponse origin rpIdHash Nothing entry options cred of
+  _newSigCount <- case verifyAssertionResponse origin rpIdHash (Just (ceUserHandle entry)) entry options cred of
     Failure (err :| _) -> fail $ show err
     Success result -> pure result
   -- FIXME: Update signature count in database
   setAuthenticatedAs db (ceUserHandle entry)
-  Scotty.json @Text "Welcome."
+  Scotty.json $ String "success"
 
 beginRegistration :: Database.Connection -> PendingOps -> Scotty.ActionM ()
 beginRegistration db pending = do
-  req@RegisterBeginReq {userName, displayName} <- Scotty.jsonData @RegisterBeginReq
-  liftIO $ putStrLn $ "/register/begin, received " <> show req
-  userId <- liftIO $ uniformM globalStdGen
+  req@RegisterBeginReq {accountName, accountDisplayName} <- Scotty.jsonData @RegisterBeginReq
+  Scotty.liftAndCatchIO $ putStrLn $ "/register/begin, received " <> show req
+  exists <- Scotty.liftAndCatchIO $
+    Database.withTransaction db $ \tx -> do
+      Database.userExists tx (M.UserAccountName accountName)
+  when exists $ Scotty.raiseStatus HTTP.status409 "Account name already taken"
+  userId <- Scotty.liftAndCatchIO $ uniformM globalStdGen
   let user =
         M.PublicKeyCredentialUserEntity
           { M.pkcueId = userId,
-            M.pkcueDisplayName = M.UserAccountDisplayName displayName,
-            M.pkcueName = M.UserAccountName userName
+            M.pkcueDisplayName = M.UserAccountDisplayName accountDisplayName,
+            M.pkcueName = M.UserAccountName accountName
           }
-  options <- liftIO $ insertPendingOptions pending $ defaultPkcco user
-  liftIO $ putStrLn $ "/register/begin, sending " <> show options
-  liftIO $
-    Database.withTransaction db $ \tx -> do
-      Database.addUser tx user
+  options <- Scotty.liftAndCatchIO $ insertPendingOptions pending $ defaultPkcco user
+  Scotty.liftAndCatchIO $ putStrLn $ "/register/begin, sending " <> show options
   Scotty.json $ encodePublicKeyCredentialCreationOptions options
 
 completeRegistration :: M.Origin -> M.RpIdHash -> Database.Connection -> PendingOps -> Scotty.ActionM ()
@@ -183,10 +221,10 @@ completeRegistration origin rpIdHash db pending = do
   cred <- case decodeCreatedPublicKeyCredential allSupportedFormats credential of
     Left err -> fail $ show err
     Right result -> pure result
-  liftIO $ putStrLn $ "/register/complete, received " <> show cred
+  Scotty.liftAndCatchIO $ putStrLn $ "/register/complete, received " <> show cred
 
   options <-
-    liftIO (getPendingOptions pending cred) >>= \case
+    Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
       Left err -> Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
       Right result -> pure result
 
@@ -199,20 +237,22 @@ completeRegistration origin rpIdHash db pending = do
     Success result -> pure result
   -- if the credential was succesfully attested, we will see if the
   -- credential doesn't exist yet, and if it doesn't, insert it.
-  result <- liftIO $
+  result <- Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx -> do
       -- If a credential with this id existed already, it must belong to the
       -- current user, otherwise it's an error. The spec allows removing the
       -- credential from the old user instead, but we don't do that.
-      mexistingEntry <- Database.getCredentialEntryById tx (ceCredentialId entry)
+      mexistingEntry <- Database.queryCredentialEntryByCredential tx (ceCredentialId entry)
       case mexistingEntry of
         Nothing -> do
-          Database.addAttestedCredentialData tx entry
+          Database.insertUser tx $ M.pkcocUser options
+          Database.insertCredentialEntry tx entry
           pure $ Right ()
         Just existingEntry | userHandle == ceUserHandle existingEntry -> pure $ Right ()
         Just _differentUserId -> pure $ Left AlreadyRegistered
   handleError result
   setAuthenticatedAs db userHandle
+  Scotty.json $ String "success"
 
 defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
 defaultPkcco userEntity challenge =
@@ -236,7 +276,7 @@ defaultPkcco userEntity challenge =
               M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
               M.ascUserVerification = M.UserVerificationRequirementPreferred
             },
-      M.pkcocAttestation = M.AttestationConveyancePreferenceDirect,
+      M.pkcocAttestation = M.AttestationConveyancePreferenceNone,
       M.pkcocExtensions = Nothing
     }
 
@@ -245,9 +285,7 @@ main = do
   [Text.pack -> origin, Text.pack -> domain, read -> port] <- getArgs
   db <- Database.connect
   Database.initialize db
-  -- Users have at least 5 minutes to complete register/login operations
-  -- Check for expired operations every 10 seconds
   pending <- newPendingOps defaultPendingOpsConfig
-  Text.putStrLn $ "You can view the web-app at: " <> origin <> "/index.html"
+  Text.putStrLn $ "You can view the web-app at: " <> origin
   let rpIdHash = M.RpIdHash $ hash $ Text.encodeUtf8 domain
   Scotty.scotty port $ app (M.Origin origin) rpIdHash db pending

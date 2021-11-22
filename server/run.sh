@@ -18,5 +18,4 @@ else
 fi
 
 yarn
-yarn parcel build index.html
-git ls-files .. | entr -r cabal run server "$origin" "$domain" "$localPort"
+git ls-files .. | entr -r bash -c "yarn parcel build 'www/*' && cabal run server \"$origin\" \"$domain\" \"$localPort\""

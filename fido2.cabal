@@ -78,7 +78,7 @@ library
 
 executable server
   import: sanity
-  hs-source-dirs: server
+  hs-source-dirs: server/src
   main-is: Main.hs
   other-modules:
     Database,
