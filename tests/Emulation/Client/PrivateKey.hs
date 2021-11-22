@@ -1,14 +1,23 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Client.PrivateKey
+module Emulation.Client.PrivateKey
   ( PrivateKey (..),
     Signature (..),
     sign,
     toECDSAKey,
     toByteString,
+    toCOSEAlgorithmIdentifier,
   )
 where
 
+import Crypto.Fido2.PublicKey
+  ( COSEAlgorithmIdentifier
+      ( COSEAlgorithmIdentifierES256,
+        COSEAlgorithmIdentifierES384,
+        COSEAlgorithmIdentifierES512,
+        COSEAlgorithmIdentifierEdDSA
+      ),
+  )
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Crypto.Hash as Hash
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
@@ -46,3 +55,9 @@ sign (Ed25519PrivateKey privateKey) msg = pure . Ed25519Signature $ Ed25519.sign
 toByteString :: Signature -> ByteString
 toByteString (ESSignature ECDSA.Signature {..}) = ASN1.encodeASN1' ASN1.DER [ASN1.Start ASN1.Sequence, ASN1.IntVal sign_r, ASN1.IntVal sign_s, ASN1.End ASN1.Sequence]
 toByteString (Ed25519Signature sig) = BA.convert sig
+
+toCOSEAlgorithmIdentifier :: PrivateKey -> COSEAlgorithmIdentifier
+toCOSEAlgorithmIdentifier (ES256PrivateKey _) = COSEAlgorithmIdentifierES256
+toCOSEAlgorithmIdentifier (ES384PrivateKey _) = COSEAlgorithmIdentifierES384
+toCOSEAlgorithmIdentifier (ES512PrivateKey _) = COSEAlgorithmIdentifierES512
+toCOSEAlgorithmIdentifier (Ed25519PrivateKey _) = COSEAlgorithmIdentifierEdDSA
