@@ -452,7 +452,7 @@ instance DecodeCreated M.AttestationObject where
               first (CreatedDecodingErrorAttestationStatement . SomeException) $
                 asfDecode aoFmt attStmtMap
             pure $ M.AttestationObject {..}
-      terms -> Left $ CreatedDecodingErrorUnexpectedAttestationObjectValues map
+      _ -> Left $ CreatedDecodingErrorUnexpectedAttestationObjectValues map
 
 instance DecodeCreated (M.AuthenticatorResponse 'M.Create) where
   decodeCreated asfMap JS.AuthenticatorAttestationResponse {..} = do
