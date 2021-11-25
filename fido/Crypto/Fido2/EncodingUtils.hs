@@ -1,13 +1,17 @@
-module Crypto.Fido2.EncodingUtils (modifyTypeField) where
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+
+module Crypto.Fido2.EncodingUtils (JSONEncoding, EnumJSONEncoding, Aeson.CustomJSON (..)) where
 
 import Data.Char (toLower)
-import Data.List (stripPrefix)
+import qualified Deriving.Aeson as Aeson
+import GHC.TypeLits (Symbol)
 
-lowerFirst :: String -> String
-lowerFirst [] = []
-lowerFirst (x : xs) = toLower x : xs
+type JSONEncoding = Aeson.CustomJSON '[Aeson.OmitNothingFields, Aeson.FieldLabelModifier (Aeson.StripPrefix "lit")]
 
-modifyTypeField :: String -> String -> String
-modifyTypeField prefix field = case stripPrefix prefix field of
-  Nothing -> error $ "Field " <> field <> " doesn't have prefix " <> prefix
-  Just stripped -> lowerFirst stripped
+data Lowercase
+
+instance Aeson.StringModifier Lowercase where
+  getStringModifier = map toLower
+
+type EnumJSONEncoding (prefix :: Symbol) = Aeson.CustomJSON '[Aeson.ConstructorTagModifier '[Aeson.StripPrefix prefix, Lowercase]]

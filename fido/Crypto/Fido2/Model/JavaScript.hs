@@ -43,69 +43,15 @@ module Crypto.Fido2.Model.JavaScript
     COSEAlgorithmIdentifier,
     PublicKeyCredentialDescriptor (..),
     AuthenticatorSelectionCriteria (..),
-
-    -- * JavaScript-builtin types
-    DOMString,
-    UnsignedLong,
-    BufferSource (..),
-    ArrayBuffer,
   )
 where
 
+import Crypto.Fido2.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
+import qualified Crypto.Fido2.WebIDL as IDL
 import qualified Data.Aeson as Aeson
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base64.URL as Base64
-import Data.Int (Int32)
 import Data.Map (Map)
 import Data.Text (Text)
-import qualified Data.Text.Encoding as Text
-import Data.Word (Word32)
-import Deriving.Aeson
-  ( CustomJSON (CustomJSON),
-    FieldLabelModifier,
-    OmitNothingFields,
-    Rename,
-  )
 import GHC.Generics (Generic)
-
--- | [(spec)](https://heycam.github.io/webidl/#idl-DOMString)
--- The `[DOMString](https://webidl.spec.whatwg.org/#idl-DOMString)` type
--- corresponds to the set of all possible sequences of
--- [code units](https://webidl.spec.whatwg.org/#dfn-code-unit). Such sequences
--- are commonly interpreted as UTF-16 encoded strings
--- [RFC2781](https://webidl.spec.whatwg.org/#biblio-rfc2781) although this is not required.
--- TODO: This implementation doesn't allow invalid UTF-16 codepoints, which
--- probably makes it not work regarding https://www.w3.org/TR/webauthn-2/#sctn-strings
--- Write a test case that doesn't work and find a better representation
-type DOMString = Text
-
--- | [(spec)](https://heycam.github.io/webidl/#idl-USVString)
--- The `[USVString](https://webidl.spec.whatwg.org/#idl-USVString)` type
--- corresponds to the set of all possible sequences of
--- [Unicode scalar values](http://www.unicode.org/glossary/#unicode_scalar_value),
--- which are all of the Unicode code points apart from the surrogate code points.
--- TODO: This implementation allows for surrogate code points. Figure out if
--- this can violate the spec in any way.
-type USVString = Text
-
--- | [(spec)](https://heycam.github.io/webidl/#idl-unsigned-long)
-type UnsignedLong = Word32
-
--- | [(spec)](https://heycam.github.io/webidl/#BufferSource)
-newtype BufferSource = -- | base64url encoded buffersource as done by https://github.com/github/webauthn-json
-  URLEncodedBase64 {unUrlEncodedBase64 :: BS.ByteString}
-  deriving (Show, Eq)
-
-instance Aeson.FromJSON BufferSource where
-  parseJSON = Aeson.withText "base64url" $ \t ->
-    either fail (pure . URLEncodedBase64) (Base64.decode $ Text.encodeUtf8 t)
-
-instance Aeson.ToJSON BufferSource where
-  toJSON (URLEncodedBase64 bs) = Aeson.String . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
-
-type ArrayBuffer = BufferSource
-
-type JSONEncoding = CustomJSON '[OmitNothingFields, FieldLabelModifier (Rename "typ" "type")]
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
@@ -114,17 +60,17 @@ data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-user)
     user :: PublicKeyCredentialUserEntity,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-challenge)
-    challenge :: BufferSource,
+    challenge :: IDL.BufferSource,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-pubkeycredparams)
     pubKeyCredParams :: [PublicKeyCredentialParameters],
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
-    timeout :: Maybe UnsignedLong,
+    timeout :: Maybe IDL.UnsignedLong,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-excludecredentials)
     excludeCredentials :: Maybe [PublicKeyCredentialDescriptor],
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
     authenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
-    attestation :: Maybe DOMString,
+    attestation :: Maybe IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
     extensions :: Maybe (Map Text Aeson.Value)
   }
@@ -134,9 +80,9 @@ data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-rp-credential-params)
 data PublicKeyCredentialRpEntity = PublicKeyCredentialRpEntity
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrpentity-id)
-    id :: Maybe DOMString,
+    id :: Maybe IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
-    name :: DOMString
+    name :: IDL.DOMString
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialRpEntity
@@ -144,11 +90,11 @@ data PublicKeyCredentialRpEntity = PublicKeyCredentialRpEntity
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-user-credential-params)
 data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-id)
-    id :: BufferSource,
+    id :: IDL.BufferSource,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
-    displayName :: DOMString,
+    displayName :: IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
-    name :: DOMString
+    name :: IDL.DOMString
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialUserEntity
@@ -156,7 +102,7 @@ data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-params)
 data PublicKeyCredentialParameters = PublicKeyCredentialParameters
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialparameters-type)
-    typ :: DOMString,
+    littype :: IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialparameters-alg)
     alg :: COSEAlgorithmIdentifier
   }
@@ -164,16 +110,16 @@ data PublicKeyCredentialParameters = PublicKeyCredentialParameters
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialParameters
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier)
-type COSEAlgorithmIdentifier = Int32
+type COSEAlgorithmIdentifier = IDL.Long
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialdescriptor)
 data PublicKeyCredentialDescriptor = PublicKeyCredentialDescriptor
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-type)
-    typ :: DOMString,
+    littype :: IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-id)
-    id :: BufferSource,
+    id :: IDL.BufferSource,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-transports)
-    transports :: Maybe [DOMString]
+    transports :: Maybe [IDL.DOMString]
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialDescriptor
@@ -181,13 +127,13 @@ data PublicKeyCredentialDescriptor = PublicKeyCredentialDescriptor
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-authenticatorselectioncriteria)
 data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-authenticatorattachment)
-    authenticatorAttachment :: Maybe DOMString,
+    authenticatorAttachment :: Maybe IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-residentkey)
-    residentKey :: Maybe DOMString,
+    residentKey :: Maybe IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
-    requireResidentKey :: Maybe Bool,
+    requireResidentKey :: Maybe IDL.Boolean,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-userverification)
-    userVerification :: Maybe DOMString
+    userVerification :: Maybe IDL.DOMString
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorSelectionCriteria
@@ -195,15 +141,15 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
 data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-challenge)
-    challenge :: BufferSource,
+    challenge :: IDL.BufferSource,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-timeout)
-    timeout :: Maybe UnsignedLong,
+    timeout :: Maybe IDL.UnsignedLong,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid)
-    rpId :: Maybe USVString,
+    rpId :: Maybe IDL.USVString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-allowcredentials)
     allowCredentials :: Maybe [PublicKeyCredentialDescriptor],
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
-    userVerification :: Maybe DOMString,
+    userVerification :: Maybe IDL.DOMString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
     extensions :: Maybe (Map Text Aeson.Value)
   }
@@ -213,7 +159,7 @@ data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 data PublicKeyCredential response = PublicKeyCredential
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-identifier-slot)
-    rawId :: ArrayBuffer,
+    rawId :: IDL.ArrayBuffer,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-response)
     response :: response,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
@@ -240,9 +186,9 @@ type RequestedPublicKeyCredential = PublicKeyCredential AuthenticatorAssertionRe
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
 data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
-    clientDataJSON :: ArrayBuffer,
+    clientDataJSON :: IDL.ArrayBuffer,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
-    attestationObject :: ArrayBuffer
+    attestationObject :: IDL.ArrayBuffer
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorAttestationResponse
@@ -250,13 +196,13 @@ data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorassertionresponse)
 data AuthenticatorAssertionResponse = AuthenticatorAssertionResponse
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
-    clientDataJSON :: ArrayBuffer,
+    clientDataJSON :: IDL.ArrayBuffer,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata)
-    authenticatorData :: ArrayBuffer,
+    authenticatorData :: IDL.ArrayBuffer,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-signature)
-    signature :: ArrayBuffer,
+    signature :: IDL.ArrayBuffer,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-userhandle)
-    userHandle :: Maybe ArrayBuffer
+    userHandle :: Maybe IDL.ArrayBuffer
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorAssertionResponse

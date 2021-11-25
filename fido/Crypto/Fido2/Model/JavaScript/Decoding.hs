@@ -46,6 +46,7 @@ import qualified Crypto.Fido2.Model.JavaScript.Types as JS
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import Crypto.Fido2.PublicKey (decodePublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
+import qualified Crypto.Fido2.WebIDL as IDL
 import qualified Crypto.Hash as Hash
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first, second)
@@ -93,7 +94,7 @@ data DecodingError
     DecodingErrorClientDataChallenge String
   | -- | The Client Data's Webauthn type did not match the expected one
     -- (first: expected, second: received)
-    DecodingErrorUnexpectedWebauthnType JS.DOMString JS.DOMString
+    DecodingErrorUnexpectedWebauthnType IDL.DOMString IDL.DOMString
   | -- | The client data had the create type but the authenticator data's
     -- attested credential data flag was not set.
     DecodingErrorExpectedAttestedCredentialData
@@ -243,7 +244,7 @@ instance Decode M.AuthenticationExtensionsClientOutputs where
   decode _ = pure M.AuthenticationExtensionsClientOutputs {}
 
 instance SingI t => Decode (M.CollectedClientData t) where
-  decode (JS.URLEncodedBase64 bytes) = do
+  decode (IDL.URLEncodedBase64 bytes) = do
     -- https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data
     JS.ClientDataJSON {..} <- first DecodingErrorClientDataJSON $ Aeson.eitherDecodeStrict bytes
     -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
@@ -260,7 +261,7 @@ instance SingI t => Decode (M.CollectedClientData t) where
     let expectedType = case sing @t of
           SCreate -> "webauthn.create"
           SGet -> "webauthn.get"
-    unless (typ == expectedType) $ Left (DecodingErrorUnexpectedWebauthnType expectedType typ)
+    unless (littype == expectedType) $ Left (DecodingErrorUnexpectedWebauthnType expectedType littype)
     pure
       M.CollectedClientData
         { ccdChallenge = M.Challenge challenge,
@@ -270,7 +271,7 @@ instance SingI t => Decode (M.CollectedClientData t) where
         }
 
 instance Decode (M.AuthenticatorData 'M.Get) where
-  decode (JS.URLEncodedBase64 bytes) = decodeAuthenticatorData bytes
+  decode (IDL.URLEncodedBase64 bytes) = decodeAuthenticatorData bytes
 
 instance Decode (M.AuthenticatorResponse 'M.Get) where
   decode JS.AuthenticatorAssertionResponse {..} = do
@@ -339,7 +340,7 @@ instance Decode [M.PublicKeyCredentialDescriptor] where
   decode (Just xs) = catMaybes <$> traverse decodeDescriptor xs
     where
       decodeDescriptor :: JS.PublicKeyCredentialDescriptor -> Either DecodingError (Maybe M.PublicKeyCredentialDescriptor)
-      decodeDescriptor JS.PublicKeyCredentialDescriptor {typ = "public-key", id, transports} = do
+      decodeDescriptor JS.PublicKeyCredentialDescriptor {littype = "public-key", id, transports} = do
         let pkcdTyp = M.PublicKeyCredentialTypePublicKey
         pkcdId <- decode id
         pkcdTransports <- decode transports
@@ -374,7 +375,7 @@ instance Decode M.AuthenticatorSelectionCriteria where
       -- MUST ignore unknown values, treating an unknown value as if the member does not
       -- exist. If no value is given then the effective value is required if
       -- requireResidentKey is true or discouraged if it is false or absent.
-      decodeResidentKey :: Maybe JS.DOMString -> M.ResidentKeyRequirement
+      decodeResidentKey :: Maybe IDL.DOMString -> M.ResidentKeyRequirement
       decodeResidentKey (Just "discouraged") = M.ResidentKeyRequirementDiscouraged
       decodeResidentKey (Just "preferred") = M.ResidentKeyRequirementPreferred
       decodeResidentKey (Just "required") = M.ResidentKeyRequirementRequired
@@ -402,7 +403,7 @@ instance Decode [M.PublicKeyCredentialParameters] where
   decode xs = catMaybes <$> traverse decodeParam xs
     where
       decodeParam :: JS.PublicKeyCredentialParameters -> Either DecodingError (Maybe M.PublicKeyCredentialParameters)
-      decodeParam JS.PublicKeyCredentialParameters {typ = "public-key", alg} = do
+      decodeParam JS.PublicKeyCredentialParameters {littype = "public-key", alg} = do
         let pkcpTyp = M.PublicKeyCredentialTypePublicKey
         pkcpAlg <- decode alg
         pure . Just $ M.PublicKeyCredentialParameters {..}
@@ -435,7 +436,7 @@ instance Decode (M.PublicKeyCredentialOptions 'M.Get) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated M.AttestationObject where
-  decodeCreated supportedFormats (JS.URLEncodedBase64 bytes) = do
+  decodeCreated supportedFormats (IDL.URLEncodedBase64 bytes) = do
     map :: HashMap Text CBOR.Term <- first (CreatedDecodingErrorCommon . DecodingErrorCBOR) $ CBOR.deserialiseOrFail $ LBS.fromStrict bytes
     case (map !? "authData", map !? "fmt", map !? "attStmt") of
       (Just (CBOR.TBytes authDataBytes), Just (CBOR.TString fmt), Just (CBOR.TMap attStmtPairs)) -> do
@@ -499,9 +500,9 @@ decodePublicKeyCredentialRequestOptions ::
 decodePublicKeyCredentialRequestOptions = decode
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
-decodeCreateCollectedClientData :: JS.ArrayBuffer -> Either DecodingError (M.CollectedClientData 'M.Create)
+decodeCreateCollectedClientData :: IDL.ArrayBuffer -> Either DecodingError (M.CollectedClientData 'M.Create)
 decodeCreateCollectedClientData = decode
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
-decodeGetCollectedClientData :: JS.ArrayBuffer -> Either DecodingError (M.CollectedClientData 'M.Get)
+decodeGetCollectedClientData :: IDL.ArrayBuffer -> Either DecodingError (M.CollectedClientData 'M.Get)
 decodeGetCollectedClientData = decode
