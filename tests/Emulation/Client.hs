@@ -3,13 +3,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | This modules provdes a way to emulate certain client behaviour for testing
--- purposes. It DOES NOT implement the webauthn specification for two reasons:
--- 1. There is no need for it in our tests.
--- 2. It is much more convenient to implement both the client and authenticator
--- in a single function, removing their communication.
+-- purposes. It DOES NOT implement the webauthn specification because there is
+-- no need for it in our tests.
 module Emulation.Client (clientAssertion, spec) where
 
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
@@ -18,21 +15,10 @@ import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Decoding
   ( decodeCreateCollectedClientData,
-    decodeCreatedPublicKeyCredential,
     decodeGetCollectedClientData,
-    decodePublicKeyCredentialCreationOptions,
-    decodePublicKeyCredentialRequestOptions,
-    decodeRequestedPublicKeyCredential,
-  )
-import Crypto.Fido2.Model.JavaScript.Encoding
-  ( encodeCreatedPublicKeyCredential,
-    encodePublicKeyCredentialCreationOptions,
-    encodePublicKeyCredentialRequestOptions,
-    encodeRequestedPublicKeyCredential,
   )
 import qualified Crypto.Fido2.Model.JavaScript.Types as JS
 import qualified Crypto.Fido2.Operations.Assertion as Fido2
-import Crypto.Fido2.Operations.Attestation (allSupportedFormats)
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Crypto.Fido2.WebIDL as IDL
@@ -86,6 +72,9 @@ data UserAgentNonConformingBehaviour
 -- | The ways in which the UserAgent should not conform to the spec
 type UserAgentConformance = Set.Set UserAgentNonConformingBehaviour
 
+-- | Custom type to combine the MonadPseudoRandom with the Except monad. We
+-- force the ChaChaDRG to ensure the App type is completely pure, and
+-- evaluating the monad has no side effects.
 newtype App a = App (ExceptT String (Random.MonadPseudoRandom Random.ChaChaDRG) a)
   deriving newtype (Functor, Applicative, Monad, MonadError String)
 
@@ -103,11 +92,15 @@ runApp seed (App except) =
 -- | Emulates the client-side operation for attestation given an authenticator.
 -- MonadRandom is required during the generation of the new credentials, and
 -- some non-conforming behaviour. MonadFail is used to fail when an error occurred
-clientAttestation :: (Random.MonadRandom m, MonadFail m) => JS.PublicKeyCredentialCreationOptions -> AnnotatedOrigin -> UserAgentConformance -> Authenticator -> m (JS.CreatedPublicKeyCredential, Authenticator)
-clientAttestation options AnnotatedOrigin {..} conformance authenticator = do
-  let M.PublicKeyCredentialCreationOptions {..} =
-        either (error . ((++) "Test: could not decode creation options: " . show)) id $ decodePublicKeyCredentialCreationOptions options
-      typ =
+clientAttestation ::
+  (Random.MonadRandom m, MonadFail m) =>
+  M.PublicKeyCredentialOptions 'M.Create ->
+  AnnotatedOrigin ->
+  UserAgentConformance ->
+  Authenticator ->
+  m (M.PublicKeyCredential 'M.Create, Authenticator)
+clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..} conformance authenticator = do
+  let typ =
         if Set.member WrongAttestationClientDataType conformance
           then "webauthn.get"
           else "webauthn.create"
@@ -148,19 +141,18 @@ clientAttestation options AnnotatedOrigin {..} conformance authenticator = do
       False
       pkcocExtensions
   let response =
-        encodeCreatedPublicKeyCredential
-          M.PublicKeyCredential
-            { M.pkcIdentifier = M.acdCredentialId . M.adAttestedCredentialData $ M.aoAuthData attestationObject,
-              M.pkcResponse =
-                M.AuthenticatorAttestationResponse
-                  { M.arcClientData = clientData,
-                    M.arcAttestationObject = attestationObject,
-                    -- Currently ignored by the library
-                    -- TODO: Policy
-                    M.arcTransports = Set.empty
-                  },
-              M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
-            }
+        M.PublicKeyCredential
+          { M.pkcIdentifier = M.acdCredentialId . M.adAttestedCredentialData $ M.aoAuthData attestationObject,
+            M.pkcResponse =
+              M.AuthenticatorAttestationResponse
+                { M.arcClientData = clientData,
+                  M.arcAttestationObject = attestationObject,
+                  -- Currently ignored by the library
+                  -- TODO: Policy
+                  M.arcTransports = Set.empty
+                },
+            M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+          }
   pure (response, authenticator')
 
 -- | Performs assertion as per the client specification provided an
@@ -168,11 +160,15 @@ clientAttestation options AnnotatedOrigin {..} conformance authenticator = do
 -- requires a random number to be generated during signing. There exists
 -- methods to not rely on a random number, but these have not been implemented
 -- in the cryptonite library we rely on.
-clientAssertion :: (MonadFail m, Random.MonadRandom m) => JS.PublicKeyCredentialRequestOptions -> AnnotatedOrigin -> UserAgentConformance -> Authenticator -> m (JS.RequestedPublicKeyCredential, Authenticator)
-clientAssertion options AnnotatedOrigin {..} conformance authenticator = do
-  let M.PublicKeyCredentialRequestOptions {..} =
-        either (error . ((++) "Test: could not decode request options: " . show)) id $ decodePublicKeyCredentialRequestOptions options
-      allowCredentialDescriptorList = case pkcogAllowCredentials of
+clientAssertion ::
+  (MonadFail m, Random.MonadRandom m) =>
+  M.PublicKeyCredentialOptions 'M.Get ->
+  AnnotatedOrigin ->
+  UserAgentConformance ->
+  Authenticator ->
+  m (M.PublicKeyCredential 'M.Get, Authenticator)
+clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} conformance authenticator = do
+  let allowCredentialDescriptorList = case pkcogAllowCredentials of
         [] -> Nothing
         xs -> Just xs
       typ =
@@ -210,26 +206,30 @@ clientAssertion options AnnotatedOrigin {..} conformance authenticator = do
       True
       pkcogExtensions
   let response =
-        encodeRequestedPublicKeyCredential
-          M.PublicKeyCredential
-            { M.pkcIdentifier = credentialId,
-              M.pkcResponse =
-                M.AuthenticatorAssertionResponse
-                  { M.argClientData = clientData,
-                    M.argAuthenticatorData = authenticatorData,
-                    M.argSignature = M.AssertionSignature $ PrivateKey.toByteString signature,
-                    M.argUserHandle = userHandle
-                  },
-              M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
-            }
+        M.PublicKeyCredential
+          { M.pkcIdentifier = credentialId,
+            M.pkcResponse =
+              M.AuthenticatorAssertionResponse
+                { M.argClientData = clientData,
+                  M.argAuthenticatorData = authenticatorData,
+                  M.argSignature = M.AssertionSignature $ PrivateKey.toByteString signature,
+                  M.argUserHandle = userHandle
+                },
+            M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+          }
   pure (response, authenticator')
 
 -- | Performs attestation to generate a credential, and then uses that
 -- credential to perform assertion.
-attestationFollowedByAssertion :: (Random.MonadRandom m, MonadFail m) => AnnotatedOrigin -> UserAgentConformance -> Authenticator -> m Fido2.SignatureCounterResult
-attestationFollowedByAssertion ao conformance authenticator = do
+attestationAndAssertion ::
+  (Random.MonadRandom m, MonadFail m) =>
+  AnnotatedOrigin ->
+  UserAgentConformance ->
+  Authenticator ->
+  m Fido2.SignatureCounterResult
+attestationAndAssertion ao conformance authenticator = do
   -- Generate new random input
-  challenge <- M.Challenge <$> Random.getRandomBytes 16
+  assertionChallenge <- M.Challenge <$> Random.getRandomBytes 16
   userId <- M.UserHandle <$> Random.getRandomBytes 16
   -- Create dummy user
   let user =
@@ -238,10 +238,9 @@ attestationFollowedByAssertion ao conformance authenticator = do
             M.pkcueDisplayName = M.UserAccountDisplayName "John Doe",
             M.pkcueName = M.UserAccountName "john-doe"
           }
-  let options = defaultPkcco user challenge
+  let options = defaultPkcoc user assertionChallenge
   -- Perform client Attestation emulation with a fresh authenticator
-  (jsPkcCreate, authenticator) <- clientAttestation (encodePublicKeyCredentialCreationOptions options) ao conformance authenticator
-  let Right mPkcCreate = decodeCreatedPublicKeyCredential allSupportedFormats jsPkcCreate
+  (mPkcCreate, authenticator) <- clientAttestation options ao conformance authenticator
   -- Verify the result
   let registerResult =
         toEither $
@@ -251,11 +250,11 @@ attestationFollowedByAssertion ao conformance authenticator = do
             options
             mPkcCreate
   let Right credentialEntry = registerResult
-  let options = defaultPkcro challenge
+  attestationChallenge <- M.Challenge <$> Random.getRandomBytes 16
+  let options = defaultPkcog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
   -- authenticator should now store the created credential
-  (jsPkcGet, _) <- clientAssertion (encodePublicKeyCredentialRequestOptions options) ao conformance authenticator
-  let Right mPkcGet = decodeRequestedPublicKeyCredential jsPkcGet
+  (mPkcGet, _) <- clientAssertion options ao conformance authenticator
   let Right loginResult =
         toEither $
           Fido2.verifyAssertionResponse
@@ -292,15 +291,15 @@ spec =
                   aSupportedAlgorithms = Set.singleton PublicKey.COSEAlgorithmIdentifierEdDSA,
                   aConformance = authenticatorConformance
                 }
-            Right c = runApp seed $ attestationFollowedByAssertion annotatedOrigin userAgentConformance noneAuthenticator
+            Right c = runApp seed $ attestationAndAssertion annotatedOrigin userAgentConformance noneAuthenticator
          in c `shouldSatisfy` \case
               Fido2.SignatureCounterZero -> True
               Fido2.SignatureCounterUpdated _ -> True
               Fido2.SignatureCounterPotentiallyCloned -> False
 
 -- | Create a default set of options for attestation. These options can be modified before using them in the tests
-defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
-defaultPkcco userEntity challenge =
+defaultPkcoc :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
+defaultPkcoc userEntity challenge =
   M.PublicKeyCredentialCreationOptions
     { M.pkcocRp = M.PublicKeyCredentialRpEntity {M.pkcreId = Nothing, M.pkcreName = "ACME"},
       M.pkcocUser = userEntity,
@@ -330,13 +329,13 @@ defaultPkcco userEntity challenge =
     }
 
 -- | Create a default set of options for assertion. These options can be modified before using them in the tests
-defaultPkcro :: M.Challenge -> M.PublicKeyCredentialOptions 'M.Get
-defaultPkcro challenge =
+defaultPkcog :: M.Challenge -> M.PublicKeyCredentialOptions 'M.Get
+defaultPkcog challenge =
   M.PublicKeyCredentialRequestOptions
     { M.pkcogChallenge = challenge,
       M.pkcogTimeout = Nothing,
       M.pkcogRpId = Just "localhost",
-      -- We currently only support Client
+      -- We currently only support client-side discoverable credentials
       M.pkcogAllowCredentials = [],
       M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
       M.pkcogExtensions = Nothing

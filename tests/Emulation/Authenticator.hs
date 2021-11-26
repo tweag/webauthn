@@ -20,7 +20,6 @@ import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
-import Crypto.Number.Serialize (os2ip)
 import qualified Crypto.PubKey.ECC.Generate as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
@@ -54,6 +53,7 @@ data AuthenticatorSignatureCounter
   = Unsupported
   | Global M.SignatureCounter
   | PerCredential (Map.Map M.CredentialId M.SignatureCounter)
+  deriving (Show)
 
 -- | Non Conforming behaviour the Authenticator should perform. Some behaviours
 -- cannot be performed at the same time. In such cases the superseding or
@@ -67,9 +67,9 @@ data AuthenticatorNonConformingBehaviour
     WrongAttestationDataFlagAttestation
   | -- | Incorrectly set the attestationData flag during assertion
     WrongAttestationDataFlagAssertion
-  | -- | Randomizes the Counter during assertion and attestation
-    RandomCounter
-  deriving (Eq, Ord)
+  | -- | Don't increase the counter during attestation and assertion
+    StaticCounter
+  deriving (Eq, Ord, Show)
 
 type Conformance = Set.Set AuthenticatorNonConformingBehaviour
 
@@ -83,6 +83,7 @@ data Authenticator = AuthenticatorNone
     aAuthenticatorDataFlags :: M.AuthenticatorDataFlags,
     aConformance :: Conformance
   }
+  deriving (Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-make-cred)
 authenticatorMakeCredential ::
@@ -247,14 +248,14 @@ authenticatorMakeCredential
       -- 9. Let processedExtensions be the result of authenticator extension
       -- processing for each supported extension identifier → authenticator
       -- extension input in extensions.
-      -- NOTE: Extensions are unsupported
+      -- NOTE: Extensions are unsupporteded
 
       -- 10. If the authenticator supports a per credential signature counter,
       -- allocate the counter, associate it with the new credential, and
       -- initialize the counter value as zero.
       -- NOTE: We return the updated signature counter and the supposed signatureCount.
       -- The signatureCount will be 0 if Unsupported
-      (signatureCounter, aSignatureCounter') <- initialiseCounter credentialId aSignatureCounter
+      let (signatureCounter, aSignatureCounter') = initialiseCounter credentialId aSignatureCounter
 
       -- 11. Let attestedCredentialData be the attested credential data byte
       -- array including the credentialId and publicKey.
@@ -310,22 +311,18 @@ authenticatorMakeCredential
           <> M.unCredentialId acdCredentialId
           <> M.unPublicKeyBytes acdCredentialPublicKeyBytes
 
-      initialiseCounter :: (MonadRandom m) => M.CredentialId -> AuthenticatorSignatureCounter -> m (M.SignatureCounter, AuthenticatorSignatureCounter)
-      initialiseCounter _ Unsupported = pure (M.SignatureCounter 0, Unsupported)
-      initialiseCounter _ (Global c) = do
-        increment <-
-          if Set.member RandomCounter aConformance
-            then M.SignatureCounter . fromInteger . (os2ip :: BS.ByteString -> Integer) <$> Random.getRandomBytes 4
-            else pure 1
-        let new = increment + c
-        pure (new, Global new)
+      initialiseCounter :: M.CredentialId -> AuthenticatorSignatureCounter -> (M.SignatureCounter, AuthenticatorSignatureCounter)
+      initialiseCounter _ Unsupported = (M.SignatureCounter 0, Unsupported)
+      initialiseCounter _ (Global c) =
+        let increment =
+              if Set.member StaticCounter aConformance
+                then 0
+                else 1
+            new = increment + c
+         in (new, Global new)
       initialiseCounter key (PerCredential m) = do
-        initial <-
-          if Set.member RandomCounter aConformance
-            then M.SignatureCounter . fromInteger . (os2ip :: BS.ByteString -> Integer) <$> Random.getRandomBytes 4
-            else pure 0
-        let m' = Map.insert key initial m
-        pure (initial, PerCredential m')
+        let m' = Map.insert key 0 m
+        (0, PerCredential m')
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion)
 authenticatorGetAssertion ::
@@ -413,7 +410,7 @@ authenticatorGetAssertion
       -- the authenticator, by some positive value. If the authenticator does
       -- not implement a signature counter, let the signature counter value
       -- remain constant at zero.
-      (signatureCounter, aSignatureCounter') <- incrementCounter (pkcsId selectedCredential) aSignatureCounter
+      let (signatureCounter, aSignatureCounter') = incrementCounter (pkcsId selectedCredential) aSignatureCounter
 
       -- 10. Let authenticatorData be the byte array specified in § 6.1
       -- Authenticator Data including processedExtensions, if any, as the
@@ -467,25 +464,25 @@ authenticatorGetAssertion
       pure ((pkcsId selectedCredential, authenticatorData, signature, pkcsUserHandle selectedCredential), authenticator {aSignatureCounter = aSignatureCounter'})
     where
       -- Increments the signature counter and results in the updated version
-      incrementCounter :: (MonadRandom m) => M.CredentialId -> AuthenticatorSignatureCounter -> m (M.SignatureCounter, AuthenticatorSignatureCounter)
-      incrementCounter _ Unsupported = pure (M.SignatureCounter 0, Unsupported)
-      incrementCounter _ (Global c) = do
-        increment <-
-          if Set.member RandomCounter aConformance
-            then M.SignatureCounter . fromInteger . (os2ip :: BS.ByteString -> Integer) <$> Random.getRandomBytes 4
-            else pure 1
-        let new = increment + c
-        pure (new, Global new)
-      incrementCounter key (PerCredential m) = do
-        increment <-
-          if Set.member RandomCounter aConformance
-            then M.SignatureCounter . fromInteger . (os2ip :: BS.ByteString -> Integer) <$> Random.getRandomBytes 4
-            else pure 1
-        -- updateLookupWithKey results in the updated value
-        -- NOTE: Rather sketchy, but should be fine for tests, this map should
-        -- have all credentials
-        let (Just c, m') = Map.updateLookupWithKey (\_ c -> Just $ increment + c) key m
-        pure (c, PerCredential m')
+      incrementCounter :: M.CredentialId -> AuthenticatorSignatureCounter -> (M.SignatureCounter, AuthenticatorSignatureCounter)
+      incrementCounter _ Unsupported = (M.SignatureCounter 0, Unsupported)
+      incrementCounter _ (Global c) =
+        let increment =
+              if Set.member StaticCounter aConformance
+                then 0
+                else 1
+            new = increment + c
+         in (new, Global new)
+      incrementCounter key (PerCredential m) =
+        let increment =
+              if Set.member StaticCounter aConformance
+                then 0
+                else 1
+            -- updateLookupWithKey results in the updated value
+            -- NOTE: Rather sketchy, but should be fine for tests, this map should
+            -- have all credentials
+            (Just c, m') = Map.updateLookupWithKey (\_ c -> Just $ increment + c) key m
+         in (c, PerCredential m')
 
 -- TODO: Surely there must be a beter function than lookpMin . filter
 authenticatorLookupCredential :: Authenticator -> M.CredentialId -> Maybe PublicKeyCredentialSource
