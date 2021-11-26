@@ -38,6 +38,7 @@ import qualified Crypto.Fido2.Model.JavaScript.Types as JS
 import Crypto.Fido2.Operations.Attestation (allSupportedFormats)
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
 import qualified Crypto.Fido2.PublicKey as PublicKey
+import qualified Crypto.Fido2.WebIDL as IDL
 import Crypto.Hash (hash)
 import Crypto.Random (MonadRandom)
 import Data.Aeson (encode)
@@ -72,15 +73,15 @@ clientAttestation options AnnotatedOrigin {..} authenticator = do
       -- representation, allowing us to construct the hash and the
       -- CollectedClientData from that.
       clientDataAB =
-        JS.URLEncodedBase64 . toStrict $
+        IDL.URLEncodedBase64 . toStrict $
           encode
             JS.ClientDataJSON
-              { JS.typ = "webauthn.create",
+              { JS.littype = "webauthn.create",
                 JS.challenge = decodeUtf8 . Base64.encode $ M.unChallenge pkcocChallenge,
                 JS.origin = M.unOrigin aoOrigin,
                 JS.crossOrigin = Nothing
               }
-      clientDataHash = M.ClientDataHash . hash $ JS.unUrlEncodedBase64 clientDataAB
+      clientDataHash = M.ClientDataHash . hash $ IDL.unUrlEncodedBase64 clientDataAB
       clientData = fromRight (error "Test: could not decode encoded clientData") $ traceShowId $ decodeCreateCollectedClientData clientDataAB
   (attestationObject, authenticator') <-
     authenticatorMakeCredential
@@ -127,15 +128,15 @@ clientAssertion options AnnotatedOrigin {..} authenticator = do
       -- representation, allowing us to construct the hash and the
       -- CollectedClientData from that.
       clientDataAB =
-        JS.URLEncodedBase64 . toStrict $
+        IDL.URLEncodedBase64 . toStrict $
           encode
             JS.ClientDataJSON
-              { JS.typ = "webauthn.get",
+              { JS.littype = "webauthn.get",
                 JS.challenge = decodeUtf8 . Base64.encode $ M.unChallenge pkcogChallenge,
                 JS.origin = M.unOrigin aoOrigin,
                 JS.crossOrigin = Nothing
               }
-      clientDataHash = M.ClientDataHash . hash $ JS.unUrlEncodedBase64 clientDataAB
+      clientDataHash = M.ClientDataHash . hash $ IDL.unUrlEncodedBase64 clientDataAB
       clientData = fromRight (error "Test: could not decode encoded clientData") $ decodeGetCollectedClientData clientDataAB
   ((credentialId, authenticatorData, signature, userHandle), authenticator') <-
     authenticatorGetAssertion

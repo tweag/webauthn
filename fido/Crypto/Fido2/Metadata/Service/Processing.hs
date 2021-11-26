@@ -2,60 +2,23 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Crypto.Fido2.Metadata.Blob
+module Crypto.Fido2.Metadata.Service.Processing
   ( getPayload,
     RootCertificate (..),
-    MetadataBlobPayload (..),
-    module Crypto.Fido2.Metadata.Model,
   )
 where
 
 import Control.Lens ((^.), (^?), _Just)
 import Control.Monad.Except (ExceptT, MonadError (throwError), liftIO)
-import Crypto.Fido2.EncodingUtils (modifyTypeField)
-import Crypto.Fido2.Metadata.Model (Entry)
 import Crypto.JOSE (fromX509Certificate)
 import Crypto.JOSE.JWK.Store (VerificationKeyStore (getVerificationKeys))
 import Crypto.JWT (Error (JWSInvalidSignature), HasX5c (x5c), JWSHeader, JWTError (JWSError), SignedJWT, decodeCompact, defaultJWTValidationSettings, param, unregisteredClaims, verifyClaims)
-import Data.Aeson (FromJSON, ToJSON, Value (Object), genericToJSON)
-import Data.Aeson.Types
-  ( FromJSON (parseJSON),
-    Options (fieldLabelModifier),
-    ToJSON (toJSON),
-    defaultOptions,
-    genericParseJSON,
-  )
+import Data.Aeson (Value (Object))
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List.NonEmpty as NE
-import Data.Text (Text)
-import Data.Time (Day)
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
-import GHC.Generics (Generic)
-
--- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-dictionary
-data MetadataBlobPayload = MetadataBlobPayload
-  { metadataNo :: Int,
-    metadataNextUpdate :: Day,
-    metadataLegalHeader :: Text,
-    metadataEntries :: [Entry]
-  }
-  deriving (Show, Eq, Generic)
-
-instance FromJSON MetadataBlobPayload where
-  parseJSON =
-    genericParseJSON
-      defaultOptions
-        { fieldLabelModifier = modifyTypeField "metadata"
-        }
-
-instance ToJSON MetadataBlobPayload where
-  toJSON =
-    genericToJSON
-      defaultOptions
-        { fieldLabelModifier = modifyTypeField "metadata"
-        }
 
 data RootCertificate = RootCertificate
   { -- | The root certificate itself

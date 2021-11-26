@@ -4,11 +4,8 @@
 module MetadataSpec (spec) where
 
 import Control.Monad.Except (runExceptT)
-import Crypto.Fido2.Metadata.Blob
-  ( MetadataBlobPayload,
-    RootCertificate (RootCertificate),
-    getPayload,
-  )
+import Crypto.Fido2.Metadata.Service.IDL (MetadataBLOBPayload)
+import Crypto.Fido2.Metadata.Service.Processing (RootCertificate (RootCertificate), getPayload)
 import Data.Aeson (Result (Success), ToJSON (toJSON), decodeFileStrict, fromJSON)
 import Data.Aeson.Types (Result (Error))
 import qualified Data.ByteString as BS
@@ -41,7 +38,7 @@ golden subdir = describe subdir $ do
     Just payload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"
     case fromJSON payload of
       Error err -> fail err
-      Success (value :: MetadataBlobPayload) ->
+      Success (value :: MetadataBLOBPayload) ->
         toJSON value `shouldBeUnorderedJson` payload
 
 spec :: SpecWith ()

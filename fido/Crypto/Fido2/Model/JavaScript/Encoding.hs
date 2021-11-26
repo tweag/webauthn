@@ -27,6 +27,7 @@ import Crypto.Fido2.Model.JavaScript.Types (Convert (JS))
 import qualified Crypto.Fido2.Model.JavaScript.Types as JS
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import qualified Crypto.Fido2.PublicKey as PublicKey
+import qualified Crypto.Fido2.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Base64.URL as Base64
 import Data.ByteString.Lazy (toStrict)
@@ -129,14 +130,14 @@ instance Encode [M.PublicKeyCredentialParameters] where
     where
       encodeParameters M.PublicKeyCredentialParameters {..} =
         JS.PublicKeyCredentialParameters
-          { typ = encode pkcpTyp,
+          { littype = encode pkcpTyp,
             alg = encode pkcpAlg
           }
 
 instance Encode M.PublicKeyCredentialDescriptor where
   encode M.PublicKeyCredentialDescriptor {..} =
     JS.PublicKeyCredentialDescriptor
-      { typ = encode pkcdTyp,
+      { littype = encode pkcdTyp,
         id = encode pkcdId,
         transports = encode pkcdTransports
       }
@@ -198,10 +199,10 @@ instance SingI t => Encode (M.CollectedClientData t) where
     let typ = case sing @t of
           SCreate -> "webauthn.create"
           SGet -> "webauthn.get"
-     in JS.URLEncodedBase64 . toStrict $
+     in IDL.URLEncodedBase64 . toStrict $
           Aeson.encode
             JS.ClientDataJSON
-              { typ = typ,
+              { littype = typ,
                 challenge = Text.decodeUtf8 . Base64.encode $ M.unChallenge ccdChallenge,
                 origin = M.unOrigin ccdOrigin,
                 crossOrigin = ccdCrossOrigin
@@ -211,9 +212,9 @@ instance Encode (M.AuthenticatorResponse 'M.Get) where
   encode M.AuthenticatorAssertionResponse {..} =
     JS.AuthenticatorAssertionResponse
       { clientDataJSON = encode argClientData,
-        authenticatorData = JS.URLEncodedBase64 $ M.adRawData argAuthenticatorData,
-        signature = JS.URLEncodedBase64 $ M.unAssertionSignature argSignature,
-        userHandle = JS.URLEncodedBase64 . M.unUserHandle <$> argUserHandle
+        authenticatorData = IDL.URLEncodedBase64 $ M.adRawData argAuthenticatorData,
+        signature = IDL.URLEncodedBase64 $ M.unAssertionSignature argSignature,
+        userHandle = IDL.URLEncodedBase64 . M.unUserHandle <$> argUserHandle
       }
 
 instance Encode (M.PublicKeyCredential 'M.Get) where
@@ -236,7 +237,7 @@ instance Encode (M.AuthenticatorResponse 'M.Create) where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
 instance Encode M.AttestationObject where
   encode M.AttestationObject {..} =
-    JS.URLEncodedBase64 . CBOR.toStrictByteString $ CBOR.encodeTerm term
+    IDL.URLEncodedBase64 . CBOR.toStrictByteString $ CBOR.encodeTerm term
     where
       term :: CBOR.Term
       term =
