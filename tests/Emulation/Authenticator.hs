@@ -3,16 +3,17 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Authenticator
+module Emulation.Authenticator
   ( PublicKeyCredentialSource (..),
     AuthenticatorSignatureCounter (..),
+    Conformance,
+    AuthenticatorNonConformingBehaviour (..),
     Authenticator (..),
     authenticatorMakeCredential,
     authenticatorGetAssertion,
   )
 where
 
-import qualified Client.PrivateKey as PrivateKey
 import qualified Codec.CBOR.Write as CBOR
 import Control.Monad (forM_, when)
 import qualified Crypto.Fido2.Model as M
@@ -24,8 +25,10 @@ import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
+import Data.Binary (Word8)
 import Data.Binary.Put (runPut)
 import qualified Data.Binary.Put as Put
+import Data.Bits (Bits (bit), (.|.))
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (toStrict)
@@ -34,6 +37,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
+import qualified Emulation.Client.PrivateKey as PrivateKey
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#public-key-credential-source)
 -- A stored credential.
@@ -51,13 +55,33 @@ data AuthenticatorSignatureCounter
   | PerCredential (Map.Map M.CredentialId M.SignatureCounter)
   deriving (Show)
 
+-- | Non Conforming behaviour the Authenticator should perform. Some behaviours
+-- cannot be performed at the same time. In such cases the superseding or
+-- superseded behaviours are marked.
+data AuthenticatorNonConformingBehaviour
+  = -- | Generates random data to be signed by the signing function
+    RandomSignatureData
+  | -- | Use a randomly generated private key for signing
+    RandomPrivateKey
+  | -- | Incorrectly unset the attestationData flag during attestation
+    WrongAttestationDataFlagAttestation
+  | -- | Incorrectly set the attestationData flag during assertion
+    WrongAttestationDataFlagAssertion
+  | -- | Don't increase the counter during attestation and assertion
+    StaticCounter
+  deriving (Eq, Ord, Show)
+
+type Conformance = Set.Set AuthenticatorNonConformingBehaviour
+
 -- | The datatype holding all information needed for attestation and assertion
 data Authenticator = AuthenticatorNone
   -- https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map
-  { aCredentials :: Map.Map (M.RpId, M.UserHandle) PublicKeyCredentialSource,
+  { aAAGUID :: M.AAGUID,
+    aCredentials :: Map.Map (M.RpId, M.UserHandle) PublicKeyCredentialSource,
     aSignatureCounter :: AuthenticatorSignatureCounter,
     aSupportedAlgorithms :: Set.Set PublicKey.COSEAlgorithmIdentifier,
-    aAAGUID :: M.AAGUID
+    aAuthenticatorDataFlags :: M.AuthenticatorDataFlags,
+    aConformance :: Conformance
   }
   deriving (Show)
 
@@ -224,7 +248,7 @@ authenticatorMakeCredential
       -- 9. Let processedExtensions be the result of authenticator extension
       -- processing for each supported extension identifier → authenticator
       -- extension input in extensions.
-      -- NOTE: Extensions are unsupported
+      -- NOTE: Extensions are unsupporteded
 
       -- 10. If the authenticator supports a per credential signature counter,
       -- allocate the counter, associate it with the new credential, and
@@ -250,21 +274,22 @@ authenticatorMakeCredential
       -- attestedCredentialData and processedExtensions, if any, as the
       -- extensions.
       let rpIdHash = hash . encodeUtf8 . M.unRpId $ rpId
+      let flags =
+            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $
+              if Set.member WrongAttestationDataFlagAttestation aConformance
+                then 0
+                else bit 6
       let authenticatorData =
             M.AuthenticatorData
               { M.adRpIdHash = M.RpIdHash rpIdHash,
-                M.adFlags =
-                  M.AuthenticatorDataFlags
-                    { adfUserPresent = True,
-                      adfUserVerified = True
-                    },
+                M.adFlags = aAuthenticatorDataFlags,
                 M.adSignCount = signatureCounter,
                 M.adAttestedCredentialData = attestedCredentialData,
                 M.adExtensions = Nothing,
                 M.adRawData =
                   -- TODO: Use Put?
                   BA.convert rpIdHash
-                    <> BS.singleton 0b01000101
+                    <> flags
                     <> (toStrict . runPut $ Put.putWord32be $ M.unSignatureCounter signatureCounter)
                     <> attestedCredentialDataBS
               }
@@ -288,10 +313,16 @@ authenticatorMakeCredential
 
       initialiseCounter :: M.CredentialId -> AuthenticatorSignatureCounter -> (M.SignatureCounter, AuthenticatorSignatureCounter)
       initialiseCounter _ Unsupported = (M.SignatureCounter 0, Unsupported)
-      initialiseCounter _ (Global c) = (c, Global (c + 1))
-      initialiseCounter key (PerCredential m) =
+      initialiseCounter _ (Global c) =
+        let increment =
+              if Set.member StaticCounter aConformance
+                then 0
+                else 1
+            new = increment + c
+         in (new, Global new)
+      initialiseCounter key (PerCredential m) = do
         let m' = Map.insert key 0 m
-         in (M.SignatureCounter 0, PerCredential m')
+        (0, PerCredential m')
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion)
 authenticatorGetAssertion ::
@@ -385,22 +416,23 @@ authenticatorGetAssertion
       -- Authenticator Data including processedExtensions, if any, as the
       -- extensions and excluding attestedCredentialData.
       -- NOTE: We don't just create the bytearray.
+      let flags =
+            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $
+              if Set.member WrongAttestationDataFlagAssertion aConformance
+                then bit 6
+                else 0
       let rpIdHash = hash . encodeUtf8 $ M.unRpId rpId
       let authenticatorData =
             M.AuthenticatorData
               { M.adRpIdHash = M.RpIdHash rpIdHash,
-                M.adFlags =
-                  M.AuthenticatorDataFlags
-                    { adfUserPresent = True,
-                      adfUserVerified = True
-                    },
+                M.adFlags = aAuthenticatorDataFlags,
                 M.adSignCount = signatureCounter,
                 M.adAttestedCredentialData = M.NoAttestedCredentialData,
                 M.adExtensions = Nothing,
                 M.adRawData =
                   -- TODO: Use Put?
                   BA.convert rpIdHash
-                    <> BS.singleton 0b00000101
+                    <> flags
                     <> (toStrict . runPut $ Put.putWord32be . M.unSignatureCounter $ signatureCounter)
               }
 
@@ -410,11 +442,19 @@ authenticatorGetAssertion
       -- safe to use here because the authenticator data describes its own
       -- length. The hash of the serialized client data (which potentially has
       -- a variable length) is always the last element.
+      privateKey <-
+        if Set.member RandomPrivateKey aConformance
+          then -- Generate a new private key with the same algorithm as expected
+            snd <$> newKeyPair (PrivateKey.toCOSEAlgorithmIdentifier $ pkcsPrivateKey selectedCredential)
+          else pure $ pkcsPrivateKey selectedCredential
+      msg <-
+        if Set.member RandomSignatureData aConformance
+          then Random.getRandomBytes 4
+          else pure $ M.adRawData authenticatorData <> BA.convert (M.unClientDataHash clientDataHash)
       signature <-
         PrivateKey.sign
-          (pkcsPrivateKey selectedCredential)
-          (M.adRawData authenticatorData <> BA.convert (M.unClientDataHash clientDataHash))
-
+          privateKey
+          msg
       -- 12. If any error occurred while generating the assertion signature,
       -- return an error code equivalent to "UnknownError" and terminate the
       -- operation.
@@ -426,12 +466,22 @@ authenticatorGetAssertion
       -- Increments the signature counter and results in the updated version
       incrementCounter :: M.CredentialId -> AuthenticatorSignatureCounter -> (M.SignatureCounter, AuthenticatorSignatureCounter)
       incrementCounter _ Unsupported = (M.SignatureCounter 0, Unsupported)
-      incrementCounter _ (Global c) = (c + 1, Global (c + 1))
+      incrementCounter _ (Global c) =
+        let increment =
+              if Set.member StaticCounter aConformance
+                then 0
+                else 1
+            new = increment + c
+         in (new, Global new)
       incrementCounter key (PerCredential m) =
-        -- updateLookupWithKey results in the updated value
-        -- NOTE: Rather sketchy, but should be fine for tests, this map should
-        -- have all credentials
-        let (Just c, m') = Map.updateLookupWithKey (\_ c -> Just $ c + 1) key m
+        let increment =
+              if Set.member StaticCounter aConformance
+                then 0
+                else 1
+            -- updateLookupWithKey results in the updated value
+            -- NOTE: Rather sketchy, but should be fine for tests, this map should
+            -- have all credentials
+            (Just c, m') = Map.updateLookupWithKey (\_ c -> Just $ increment + c) key m
          in (c, PerCredential m')
 
 -- TODO: Surely there must be a beter function than lookpMin . filter
@@ -454,3 +504,15 @@ newECDSAKeyPair ident = do
   let privateKey = fromMaybe (error "Not a ECDSAKey") $ PrivateKey.toECDSAKey ident private
       publicKey = fromMaybe (error "Not a ECDSAKey") $ PublicKey.toECDSAKey ident public
   pure (publicKey, privateKey)
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#flags)
+-- The second argument is the base value, the `AuthenticatorDataFlags` will be
+-- added to the existing bits set in the base value. We do this to workaround
+-- the fact that the `AuthenticatorDataFlags` doesn't store all flags (to avoid
+-- duplication)
+encodeAuthenticatorDataFlags :: M.AuthenticatorDataFlags -> Word8 -> BS.ByteString
+encodeAuthenticatorDataFlags M.AuthenticatorDataFlags {..} base =
+  BS.singleton $
+    (if adfUserPresent then bit 0 else 0)
+      .|. (if adfUserVerified then bit 2 else 0)
+      .|. base

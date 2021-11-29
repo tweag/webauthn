@@ -125,9 +125,9 @@ test-suite tests
     MetadataSpec,
     Spec.Types,
     Spec.Util,
-    Client,
-    Client.PrivateKey,
-    Authenticator
+    Emulation.Client,
+    Emulation.Client.PrivateKey,
+    Emulation.Authenticator
   build-depends:
     aeson,
     bytestring,

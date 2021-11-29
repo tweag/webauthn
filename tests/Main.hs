@@ -5,7 +5,6 @@ module Main
   )
 where
 
-import qualified Client
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
@@ -21,6 +20,7 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Either (isRight)
 import Data.Foldable (for_)
 import Data.Validation (toEither)
+import qualified Emulation.Client as Client
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
 import qualified PublicKeySpec
