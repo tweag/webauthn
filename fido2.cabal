@@ -127,7 +127,8 @@ test-suite tests
     Spec.Util,
     Emulation.Client,
     Emulation.Client.PrivateKey,
-    Emulation.Authenticator
+    Emulation.Authenticator,
+    Emulation.Authenticator.Arbitrary
   build-depends:
     aeson,
     bytestring,

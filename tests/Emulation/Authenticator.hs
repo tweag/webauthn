@@ -1,6 +1,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Emulation.Authenticator
@@ -11,6 +12,7 @@ module Emulation.Authenticator
     Authenticator (..),
     authenticatorMakeCredential,
     authenticatorGetAssertion,
+    isValidAuthenticator,
   )
 where
 
@@ -69,7 +71,7 @@ data AuthenticatorNonConformingBehaviour
     WrongAttestationDataFlagAssertion
   | -- | Don't increase the counter during attestation and assertion
     StaticCounter
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum, Bounded)
 
 type Conformance = Set.Set AuthenticatorNonConformingBehaviour
 
@@ -84,6 +86,12 @@ data Authenticator = AuthenticatorNone
     aConformance :: Conformance
   }
   deriving (Show)
+
+-- | Checks if an authenticator has no nonConforming behaviour and is otherwise
+-- capable of being an authenticator
+isValidAuthenticator :: Authenticator -> Bool
+isValidAuthenticator AuthenticatorNone {aSupportedAlgorithms, aConformance, aAuthenticatorDataFlags} =
+  not (Set.null aSupportedAlgorithms) && Set.null aConformance && M.adfUserPresent aAuthenticatorDataFlags
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-make-cred)
 authenticatorMakeCredential ::
@@ -321,8 +329,8 @@ authenticatorMakeCredential
             new = increment + c
          in (new, Global new)
       initialiseCounter key (PerCredential m) = do
-        let m' = Map.insert key 0 m
-        (0, PerCredential m')
+        let m' = Map.insert key 1 m
+        (1, PerCredential m')
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion)
 authenticatorGetAssertion ::
