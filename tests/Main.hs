@@ -177,9 +177,9 @@ main = Hspec.hspec $ do
                   pkCredential
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
 
-isExpectedAttestationResponse :: M.PublicKeyCredential 'M.Create -> M.PublicKeyCredentialOptions 'M.Create -> Either (NonEmpty AttestationError) Common.CredentialEntry -> Bool
+isExpectedAttestationResponse :: M.PublicKeyCredential 'M.Create 'True -> M.PublicKeyCredentialOptions 'M.Create -> Either (NonEmpty AttestationError) Common.CredentialEntry -> Bool
 isExpectedAttestationResponse _ _ (Left _) = False -- We should never receive errors
-isExpectedAttestationResponse M.PublicKeyCredential {..} M.PublicKeyCredentialCreationOptions {..} (Right ce@Common.CredentialEntry {..}) =
+isExpectedAttestationResponse M.PublicKeyCredential {..} M.PublicKeyCredentialCreationOptions {..} (Right ce) =
   ce == expectedCredentialEntry
   where
     expectedCredentialEntry :: Common.CredentialEntry
@@ -187,11 +187,16 @@ isExpectedAttestationResponse M.PublicKeyCredential {..} M.PublicKeyCredentialCr
       Common.CredentialEntry
         { ceCredentialId = pkcIdentifier,
           ceUserHandle = M.pkcueId pkcocUser,
-          cePublicKeyBytes = M.acdCredentialPublicKeyBytes . M.adAttestedCredentialData . M.aoAuthData $ M.arcAttestationObject pkcResponse,
+          cePublicKeyBytes =
+            M.PublicKeyBytes . M.unRaw
+              . M.acdCredentialPublicKeyBytes
+              . M.adAttestedCredentialData
+              . M.aoAuthData
+              $ M.arcAttestationObject pkcResponse,
           ceSignCounter = M.adSignCount . M.aoAuthData $ M.arcAttestationObject pkcResponse
         }
 
-defaultPublicKeyCredentialCreationOptions :: M.PublicKeyCredential 'M.Create -> M.PublicKeyCredentialOptions 'M.Create
+defaultPublicKeyCredentialCreationOptions :: M.PublicKeyCredential 'M.Create raw -> M.PublicKeyCredentialOptions 'M.Create
 defaultPublicKeyCredentialCreationOptions pkc =
   M.PublicKeyCredentialCreationOptions
     { M.pkcocRp =
@@ -219,7 +224,7 @@ defaultPublicKeyCredentialCreationOptions pkc =
       M.pkcocExtensions = Nothing
     }
 
-defaultPublicKeyCredentialRequestOptions :: M.PublicKeyCredential 'M.Get -> M.PublicKeyCredentialOptions 'M.Get
+defaultPublicKeyCredentialRequestOptions :: M.PublicKeyCredential 'M.Get raw -> M.PublicKeyCredentialOptions 'M.Get
 defaultPublicKeyCredentialRequestOptions pkc =
   M.PublicKeyCredentialRequestOptions
     { M.pkcogChallenge = M.ccdChallenge . M.argClientData $ M.pkcResponse pkc,

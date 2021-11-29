@@ -226,7 +226,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerificationError
 
-  asfVerify _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData, adAttestedCredentialData} clientDataHash = do
+  asfVerify _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to
     -- extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -234,7 +234,7 @@ instance M.AttestationStatementFormat Format where
     -- 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the
     -- public key in the first certificate in x5c with the algorithm specified in alg.
     -- TODO: Maybe use verifyX509Sig like in Packed.hs
-    let signedData = adRawData <> convert (M.unClientDataHash clientDataHash)
+    let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
     unless (PublicKey.verify pubKey signedData sig) . Left $ undefined
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the

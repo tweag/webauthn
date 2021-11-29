@@ -4,11 +4,9 @@
 
 module Crypto.Fido2.Model.JavaScript.Types
   ( Convert (..),
-    ClientDataJSON (..),
   )
 where
 
-import Crypto.Fido2.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import qualified Crypto.Fido2.PublicKey as PublicKey
@@ -17,31 +15,6 @@ import qualified Data.Aeson as Aeson
 import Data.Kind (Type)
 import Data.Map (Map)
 import Data.Text (Text)
-import GHC.Generics (Generic)
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
--- Intermediate type used to extract the JSON structure stored in the
--- CBOR-encoded [clientDataJSON](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson).
--- NOTE: Do not rely on the ToJSON instance of this type, it is not implemented according to spec.
-data ClientDataJSON = ClientDataJSON
-  { littype :: IDL.DOMString,
-    challenge :: IDL.DOMString,
-    origin :: IDL.DOMString,
-    crossOrigin :: Maybe Bool
-    -- TODO
-    -- tokenBinding :: Maybe TokenBinding
-  }
-  deriving (Generic)
-  -- Note: Encoding can NOT be derived automatically, and most likely not even
-  -- be provided correctly with the Aeson.ToJSON class, because it is only a
-  -- JSON-_compatible_ encoding, but it also contains some extra structure
-  -- allowing for verification without a full JSON parser
-  -- See <https://www.w3.org/TR/webauthn-2/#clientdatajson-serialization>
-  -- TODO/FIXME: As described above the ToJSON instance should not be derived,
-  -- but implemented manually using the description provided in the specification.
-  -- For now the ToJSON instance is only used for tests so it suffices, but
-  -- library users should not rely on it.
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding ClientDataJSON
 
 -- | @'Convert' hs@ indicates that the Haskell-specific type @hs@ has a more
 -- general JavaScript-specific type associated with it, which can be accessed with 'JS'.
@@ -123,29 +96,29 @@ instance Convert (M.PublicKeyCredentialOptions 'M.Create) where
 instance Convert (M.PublicKeyCredentialOptions 'M.Get) where
   type JS (M.PublicKeyCredentialOptions 'M.Get) = JS.PublicKeyCredentialRequestOptions
 
-instance Convert (M.PublicKeyCredential 'M.Create) where
-  type JS (M.PublicKeyCredential 'M.Create) = JS.PublicKeyCredential JS.AuthenticatorAttestationResponse
+instance Convert (M.PublicKeyCredential 'M.Create raw) where
+  type JS (M.PublicKeyCredential 'M.Create raw) = JS.PublicKeyCredential JS.AuthenticatorAttestationResponse
 
-instance Convert (M.AuthenticatorResponse 'M.Create) where
-  type JS (M.AuthenticatorResponse 'M.Create) = JS.AuthenticatorAttestationResponse
+instance Convert (M.AuthenticatorResponse 'M.Create raw) where
+  type JS (M.AuthenticatorResponse 'M.Create raw) = JS.AuthenticatorAttestationResponse
 
-instance Convert (M.PublicKeyCredential 'M.Get) where
-  type JS (M.PublicKeyCredential 'M.Get) = JS.PublicKeyCredential JS.AuthenticatorAssertionResponse
+instance Convert (M.PublicKeyCredential 'M.Get raw) where
+  type JS (M.PublicKeyCredential 'M.Get raw) = JS.PublicKeyCredential JS.AuthenticatorAssertionResponse
 
-instance Convert (M.AuthenticatorResponse 'M.Get) where
-  type JS (M.AuthenticatorResponse 'M.Get) = JS.AuthenticatorAssertionResponse
+instance Convert (M.AuthenticatorResponse 'M.Get raw) where
+  type JS (M.AuthenticatorResponse 'M.Get raw) = JS.AuthenticatorAssertionResponse
 
 instance Convert M.AuthenticationExtensionsClientOutputs where
   type JS M.AuthenticationExtensionsClientOutputs = Map Text Aeson.Value
 
-instance Convert (M.CollectedClientData t) where
-  type JS (M.CollectedClientData t) = IDL.ArrayBuffer
+instance Convert (M.CollectedClientData t 'True) where
+  type JS (M.CollectedClientData t 'True) = IDL.ArrayBuffer
 
-instance Convert M.AttestationObject where
-  type JS M.AttestationObject = IDL.ArrayBuffer
+instance Convert (M.AttestationObject raw) where
+  type JS (M.AttestationObject raw) = IDL.ArrayBuffer
 
 instance Convert M.AssertionSignature where
   type JS M.AssertionSignature = IDL.ArrayBuffer
 
-instance Convert (M.AuthenticatorData 'M.Get) where
-  type JS (M.AuthenticatorData 'M.Get) = IDL.ArrayBuffer
+instance Convert (M.AuthenticatorData 'M.Get raw) where
+  type JS (M.AuthenticatorData 'M.Get raw) = IDL.ArrayBuffer

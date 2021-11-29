@@ -61,6 +61,9 @@ module Crypto.Fido2.Model
     sasfSingleton,
     sasfLookup,
 
+    -- * Raw fields
+    RawField (..),
+
     -- * Top-level types
     PublicKeyCredentialOptions (..),
     PublicKeyCredential (..),
@@ -88,6 +91,15 @@ import Data.Word (Word32)
 import qualified Data.X509 as X509
 import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
 import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
+
+-- | A model field parametrized by whether it's empty ('False') or contains raw bytes ('True')
+data RawField (raw :: Bool) where
+  NoRaw :: RawField 'False
+  WithRaw :: {unRaw :: BS.ByteString} -> RawField 'True
+
+deriving instance Eq (RawField raw)
+
+deriving instance Show (RawField raw)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-publickeycredentialtype)
 -- This enumeration defines the valid credential types. It is an extension point;
@@ -734,7 +746,7 @@ deriving instance Show (PublicKeyCredentialOptions t)
 -- The client data represents the contextual bindings of both the
 -- [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)
 -- and the [client](https://www.w3.org/TR/webauthn-2/#client).
-data CollectedClientData (t :: WebauthnType) = CollectedClientData
+data CollectedClientData (t :: WebauthnType) raw = CollectedClientData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
     -- This member contains the challenge provided by the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
     -- See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges) security consideration.
@@ -748,10 +760,8 @@ data CollectedClientData (t :: WebauthnType) = CollectedClientData
     -- This member contains the inverse of the `sameOriginWithAncestors` argument value
     -- that was passed into the [internal method](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots).
     ccdCrossOrigin :: Maybe Bool,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data)
-    -- This is the hash (computed using SHA-256) of the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data),
-    -- as constructed by the client.
-    ccdHash :: ClientDataHash
+    -- | Raw data of the client data, for verification purposes
+    ccdRawData :: RawField raw
     -- TODO: Implement this
     -- tokenBinding :: Maybe TokenBinding,
   }
@@ -762,7 +772,7 @@ data CollectedClientData (t :: WebauthnType) = CollectedClientData
 -- [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- when generating an [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object)
 -- for a given credential.
-data AttestedCredentialData (t :: WebauthnType) where
+data AttestedCredentialData (t :: WebauthnType) raw where
   AttestedCredentialData ::
     { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
       acdAaguid :: AAGUID,
@@ -771,15 +781,15 @@ data AttestedCredentialData (t :: WebauthnType) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
       acdCredentialPublicKey :: PublicKey,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
-      acdCredentialPublicKeyBytes :: PublicKeyBytes
+      acdCredentialPublicKeyBytes :: RawField raw
     } ->
-    AttestedCredentialData 'Create
+    AttestedCredentialData 'Create raw
   NoAttestedCredentialData ::
-    AttestedCredentialData 'Get
+    AttestedCredentialData 'Get raw
 
-deriving instance Eq (AttestedCredentialData t)
+deriving instance Eq (AttestedCredentialData t raw)
 
-deriving instance Show (AttestedCredentialData t)
+deriving instance Show (AttestedCredentialData t raw)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data)
 -- The authenticator data structure encodes contextual bindings made by the
@@ -794,7 +804,7 @@ deriving instance Show (AttestedCredentialData t)
 -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
 -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
-data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
+data AuthenticatorData (t :: WebauthnType) raw = AuthenticatorData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rpidhash)
     -- SHA-256 hash of the [RP ID](https://www.w3.org/TR/webauthn-2/#rp-id) the
     -- [credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) is
@@ -807,12 +817,12 @@ data AuthenticatorData (t :: WebauthnType) = AuthenticatorData
     adSignCount :: SignatureCounter,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)
     -- [attested credential data](https://www.w3.org/TR/webauthn-2/#attested-credential-data) (if present)
-    adAttestedCredentialData :: AttestedCredentialData t,
+    adAttestedCredentialData :: AttestedCredentialData t raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authdataextensions)
     -- Extension-defined [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     adExtensions :: Maybe AuthenticatorExtensionOutputs,
     -- | Raw encoded data for verification purposes
-    adRawData :: BS.ByteString
+    adRawData :: RawField raw
   }
   deriving (Eq, Show)
 
@@ -864,7 +874,7 @@ class
   asfVerify ::
     a ->
     AttStmt a ->
-    AuthenticatorData 'Create ->
+    AuthenticatorData 'Create 'True ->
     ClientDataHash ->
     Either (AttStmtVerificationError a) AttestationType
 
@@ -914,7 +924,7 @@ sasfLookup :: Text -> SupportedAttestationStatementFormats -> Maybe SomeAttestat
 sasfLookup id (SupportedAttestationStatementFormats sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
-data AttestationObject = forall a.
+data AttestationObject raw = forall a.
   AttestationStatementFormat a =>
   AttestationObject
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
@@ -930,14 +940,14 @@ data AttestationObject = forall a.
     -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
     -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
-    aoAuthData :: AuthenticatorData 'Create,
+    aoAuthData :: AuthenticatorData 'Create raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)
     aoFmt :: a,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement)
     aoAttStmt :: AttStmt a
   }
 
-instance Eq AttestationObject where
+instance Eq (AttestationObject raw) where
   AttestationObject {aoAuthData = lAuthData, aoFmt = lFmt, aoAttStmt = lAttStmt}
     == AttestationObject {aoAuthData = rAuthData, aoFmt = rFmt, aoAttStmt = rAttStmt} =
       lAuthData == rAuthData
@@ -946,13 +956,13 @@ instance Eq AttestationObject where
           Just HRefl -> lAttStmt == rAttStmt
           Nothing -> False
 
-deriving instance Show AttestationObject
+deriving instance Show (AttestationObject raw)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticatorresponse)
 -- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) respond to
 -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) requests by
 -- returning an object derived from the `[AuthenticatorResponse](https://www.w3.org/TR/webauthn-2/#authenticatorresponse)` interface
-data AuthenticatorResponse (t :: WebauthnType) where
+data AuthenticatorResponse (t :: WebauthnType) raw where
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
   -- The 'AuthenticatorAttestationResponse' interface represents the
   -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)'s response
@@ -970,7 +980,7 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- passed to the authenticator by the client in order to generate this credential.
       -- The exact JSON serialization MUST be preserved, as the
       -- [hash of the serialized client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data) has been computed over it.
-      arcClientData :: CollectedClientData 'Create,
+      arcClientData :: CollectedClientData 'Create raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
       -- This attribute contains an [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object),
       -- which is opaque to, and cryptographically protected against tampering by, the client.
@@ -989,7 +999,7 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- For more details, see [§ 6.5 Attestation](https://www.w3.org/TR/webauthn-2/#sctn-attestation),
       -- [§ 6.5.4 Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object),
       -- and [Figure 6](https://www.w3.org/TR/webauthn-2/#fig-attStructs).
-      arcAttestationObject :: AttestationObject,
+      arcAttestationObject :: AttestationObject raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports)
       -- This [internal slot](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots)
       -- contains a sequence of zero or more unique `[DOMString](https://heycam.github.io/webidl/#idl-DOMString)`s
@@ -998,7 +1008,7 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- or an empty sequence if the information is unavailable.
       arcTransports :: Set AuthenticatorTransport
     } ->
-    AuthenticatorResponse 'Create
+    AuthenticatorResponse 'Create raw
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse)
   -- The 'AuthenticatorAssertionResponse' interface represents an
   -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)'s response
@@ -1018,11 +1028,11 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- passed to the authenticator by the client in order to generate this credential.
       -- The exact JSON serialization MUST be preserved, as the
       -- [hash of the serialized client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data) has been computed over it.
-      argClientData :: CollectedClientData 'Get,
+      argClientData :: CollectedClientData 'Get raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata)
       -- This attribute contains the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
       -- returned by the authenticator. See [§ 6.1 Authenticator Data](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data).
-      argAuthenticatorData :: AuthenticatorData 'Get,
+      argAuthenticatorData :: AuthenticatorData 'Get raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-signature)
       -- This attribute contains the raw signature returned from the authenticator.
       -- See [§ 6.3.3 The authenticatorGetAssertion Operation](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion).
@@ -1034,15 +1044,15 @@ data AuthenticatorResponse (t :: WebauthnType) where
       -- [§ 6.3.3 The authenticatorGetAssertion Operation](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion).
       argUserHandle :: Maybe UserHandle
     } ->
-    AuthenticatorResponse 'Get
+    AuthenticatorResponse 'Get raw
 
-deriving instance Eq (AuthenticatorResponse t)
+deriving instance Eq (AuthenticatorResponse t raw)
 
-deriving instance Show (AuthenticatorResponse t)
+deriving instance Show (AuthenticatorResponse t raw)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- The 'PublicKeyCredential' interface contains the attributes that are returned to the caller when a new credential is created, or a new assertion is requested.
-data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
+data PublicKeyCredential (t :: WebauthnType) raw = PublicKeyCredential
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-identifier-slot)
     -- Contains the [credential ID](https://www.w3.org/TR/webauthn-2/#credential-id),
     -- chosen by the authenticator. The [credential ID](https://www.w3.org/TR/webauthn-2/#credential-id)
@@ -1059,7 +1069,7 @@ data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
     -- otherwise, the `[PublicKeyCredential](https://www.w3.org/TR/webauthn-2/#publickeycredential)`
     -- was created in response to `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`,
     -- and this attribute’s value will be an `[AuthenticatorAssertionResponse](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse)`.
-    pkcResponse :: AuthenticatorResponse t,
+    pkcResponse :: AuthenticatorResponse t raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
     -- This operation returns the value of `[[[clientExtensionsResults]]](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-clientextensionsresults-slot)`,
     -- which is a [map](https://infra.spec.whatwg.org/#ordered-map) containing
@@ -1069,6 +1079,6 @@ data PublicKeyCredential (t :: WebauthnType) = PublicKeyCredential
     pkcClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
 
-deriving instance Eq (PublicKeyCredential t)
+deriving instance Eq (PublicKeyCredential t raw)
 
-deriving instance Show (PublicKeyCredential t)
+deriving instance Show (PublicKeyCredential t raw)

@@ -12,24 +12,16 @@ module Emulation.Client (clientAssertion, spec) where
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
 import Crypto.Fido2.Model (Challenge (Challenge))
 import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Model.JavaScript.Decoding
-  ( decodeCreateCollectedClientData,
-    decodeGetCollectedClientData,
-  )
-import qualified Crypto.Fido2.Model.JavaScript.Types as JS
+import qualified Crypto.Fido2.Model.Binary.Encoding as ME
 import qualified Crypto.Fido2.Operations.Assertion as Fido2
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
 import qualified Crypto.Fido2.PublicKey as PublicKey
-import qualified Crypto.Fido2.WebIDL as IDL
 import Crypto.Hash (hash)
 import Crypto.Random (getRandomBytes)
 import qualified Crypto.Random as Random
-import Data.Aeson (encode)
-import qualified Data.ByteString.Base64.URL as Base64
-import Data.ByteString.Lazy (toStrict)
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Validation (toEither)
 import Emulation.Authenticator
   ( Authenticator,
@@ -52,12 +44,7 @@ data AnnotatedOrigin = AnnotatedOrigin
 
 -- | Potential ways the UserAgent could not conform to the specification
 data UserAgentNonConformingBehaviour
-  = -- | Set the Client data type to the wrong value during attestation
-    WrongAttestationClientDataType
-  | -- | Set the Client data type to the wrong value during assertion
-    WrongAssertionClientDataType
-  | -- | Generate a random challenge instead of the one provided by
-    RandomChallenge
+  = RandomChallenge
   deriving (Eq, Ord)
 
 -- | The ways in which the UserAgent should not conform to the spec
@@ -89,34 +76,22 @@ clientAttestation ::
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  m (M.PublicKeyCredential 'M.Create, Authenticator)
+  m (M.PublicKeyCredential 'M.Create 'True, Authenticator)
 clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..} conformance authenticator = do
-  let typ =
-        if Set.member WrongAttestationClientDataType conformance
-          then "webauthn.get"
-          else "webauthn.create"
   challenge <-
     if Set.member RandomChallenge conformance
       then Challenge <$> Random.getRandomBytes 16
       else pure pkcocChallenge
-
-  -- We would ideally construct the M.CollectedClientData first, but this
-  -- is impossible since we need the hash. As a workaround we construct
-  -- the encoded version first by manually encoding the intermediate JSON
-  -- representation, allowing us to construct the hash and the
-  -- CollectedClientData from that.
-  let clientDataAB =
-        IDL.URLEncodedBase64 . toStrict $
-          encode
-            JS.ClientDataJSON
-              { JS.littype = typ,
-                JS.challenge = decodeUtf8 . Base64.encode $ M.unChallenge challenge,
-                JS.origin = M.unOrigin aoOrigin,
-                JS.crossOrigin = Nothing
-              }
+  let clientData =
+        ME.encodeRawCollectedClientData
+          M.CollectedClientData
+            { ccdChallenge = challenge,
+              ccdOrigin = aoOrigin,
+              ccdCrossOrigin = Nothing,
+              ccdRawData = M.NoRaw
+            }
       clientDataHash =
-        M.ClientDataHash . hash $ IDL.unUrlEncodedBase64 clientDataAB
-      clientData = either (error . ((++) "Test: could not decode encoded clientData: " . show)) id $ decodeCreateCollectedClientData clientDataAB
+        M.ClientDataHash $ hash $ M.unRaw $ M.ccdRawData clientData
   (attestationObject, authenticator') <-
     authenticatorMakeCredential
       authenticator
@@ -157,35 +132,24 @@ clientAssertion ::
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  m (M.PublicKeyCredential 'M.Get, Authenticator)
+  m (M.PublicKeyCredential 'M.Get 'True, Authenticator)
 clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} conformance authenticator = do
   let allowCredentialDescriptorList = case pkcogAllowCredentials of
         [] -> Nothing
         xs -> Just xs
-      typ =
-        if Set.member WrongAssertionClientDataType conformance
-          then "webauthn.create"
-          else "webauthn.get"
   challenge <-
     if Set.member RandomChallenge conformance
       then Challenge <$> Random.getRandomBytes 16
       else pure pkcogChallenge
-  -- We would ideally construct the M.CollectedClientData first, but this
-  -- is impossible since we need the hash. As a workaround we construct
-  -- the encoded version first by manually encoding the intermediate JSON
-  -- representation, allowing us to construct the hash and the
-  -- CollectedClientData from that.
-  let clientDataAB =
-        IDL.URLEncodedBase64 . toStrict $
-          encode
-            JS.ClientDataJSON
-              { JS.littype = typ,
-                JS.challenge = decodeUtf8 . Base64.encode $ M.unChallenge challenge,
-                JS.origin = M.unOrigin aoOrigin,
-                JS.crossOrigin = Nothing
-              }
-      clientDataHash = M.ClientDataHash . hash $ IDL.unUrlEncodedBase64 clientDataAB
-      clientData = either (error . ((++) "Test: could not decode encoded clientData: " . show)) id $ decodeGetCollectedClientData clientDataAB
+  let clientData =
+        ME.encodeRawCollectedClientData
+          M.CollectedClientData
+            { ccdChallenge = challenge,
+              ccdOrigin = aoOrigin,
+              ccdCrossOrigin = Nothing,
+              ccdRawData = M.NoRaw
+            }
+      clientDataHash = M.ClientDataHash $ hash $ M.unRaw $ M.ccdRawData clientData
   ((credentialId, authenticatorData, signature, userHandle), authenticator') <-
     authenticatorGetAssertion
       authenticator

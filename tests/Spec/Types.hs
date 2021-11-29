@@ -34,13 +34,16 @@ instance Arbitrary M.UserVerificationRequirement where
 instance Arbitrary M.AttestationConveyancePreference where
   arbitrary = arbitraryBoundedEnum
 
-instance Arbitrary (M.AuthenticatorResponse 'M.Create) where
+instance Arbitrary (M.AuthenticatorResponse 'M.Create 'False) where
   arbitrary = M.AuthenticatorAttestationResponse <$> arbitrary <*> arbitrary <*> arbitrary
 
-instance Arbitrary (M.CollectedClientData t) where
+instance Arbitrary (M.RawField 'False) where
+  arbitrary = pure M.NoRaw
+
+instance Arbitrary (M.CollectedClientData t 'False) where
   arbitrary = M.CollectedClientData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
-instance Arbitrary M.AttestationObject where
+instance Arbitrary (M.AttestationObject 'False) where
   arbitrary = do
     aoAuthData <- arbitrary
     ArbitraryAttestationStatementFormat aoFmt <- arbitrary
@@ -65,7 +68,7 @@ instance Arbitrary ArbitraryAttestationStatementFormat where
 instance Arbitrary M.SignatureCounter where
   arbitrary = M.SignatureCounter <$> arbitrary
 
-instance SingI t => Arbitrary (M.AuthenticatorData t) where
+instance SingI t => Arbitrary (M.AuthenticatorData t 'False) where
   arbitrary = M.AuthenticatorData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary M.Challenge where
@@ -83,7 +86,7 @@ instance Arbitrary M.RpIdHash where
 instance Arbitrary M.AuthenticatorDataFlags where
   arbitrary = M.AuthenticatorDataFlags <$> arbitrary <*> arbitrary
 
-instance SingI t => Arbitrary (M.AttestedCredentialData t) where
+instance SingI t => Arbitrary (M.AttestedCredentialData t raw) where
   arbitrary = case sing @t of
     SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> undefined
     SGet -> pure M.NoAttestedCredentialData

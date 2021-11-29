@@ -143,11 +143,11 @@ insertPendingOptions pendingOps = case sing @t of
 -- This deletes the options from memory again. If the challenge is expired an error is returned
 -- This function can be used for both register and login webauthn operations
 getPendingOptions ::
-  forall t.
+  forall t raw.
   SingI t =>
   PendingOps ->
   -- The credential that was received as a reply
-  M.PublicKeyCredential t ->
+  M.PublicKeyCredential t raw ->
   IO (Either String (M.PublicKeyCredentialOptions t))
 getPendingOptions pending cred = case sing @t of
   -- We extract the challenge from the response credential that was sent back
