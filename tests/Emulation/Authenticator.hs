@@ -65,10 +65,6 @@ data AuthenticatorNonConformingBehaviour
     RandomSignatureData
   | -- | Use a randomly generated private key for signing
     RandomPrivateKey
-  | -- | Incorrectly unset the attestationData flag during attestation
-    WrongAttestationDataFlagAttestation
-  | -- | Incorrectly set the attestationData flag during assertion
-    WrongAttestationDataFlagAssertion
   | -- | Don't increase the counter during attestation and assertion
     StaticCounter
   deriving (Eq, Ord, Show, Enum, Bounded)
@@ -283,10 +279,7 @@ authenticatorMakeCredential
       -- extensions.
       let rpIdHash = hash . encodeUtf8 . M.unRpId $ rpId
       let flags =
-            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $
-              if Set.member WrongAttestationDataFlagAttestation aConformance
-                then 0
-                else bit 6
+            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $ bit 6
       let authenticatorData =
             M.AuthenticatorData
               { M.adRpIdHash = M.RpIdHash rpIdHash,
@@ -425,10 +418,7 @@ authenticatorGetAssertion
       -- extensions and excluding attestedCredentialData.
       -- NOTE: We don't just create the bytearray.
       let flags =
-            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $
-              if Set.member WrongAttestationDataFlagAssertion aConformance
-                then bit 6
-                else 0
+            encodeAuthenticatorDataFlags aAuthenticatorDataFlags 0
       let rpIdHash = hash . encodeUtf8 $ M.unRpId rpId
       let authenticatorData =
             M.AuthenticatorData
