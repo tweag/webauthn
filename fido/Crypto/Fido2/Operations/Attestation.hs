@@ -13,6 +13,7 @@ import Control.Monad (unless)
 import Crypto.Fido2.Model (SupportedAttestationStatementFormats, sasfSingleton)
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
+import qualified Crypto.Fido2.Operations.Attestation.Apple as Apple
 import qualified Crypto.Fido2.Operations.Attestation.FidoU2F as FidoU2F
 import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.Operations.Attestation.Packed as Packed
@@ -28,7 +29,8 @@ allSupportedFormats =
     [ None.format,
       Packed.format,
       AndroidKey.format,
-      FidoU2F.format
+      FidoU2F.format,
+      Apple.format
     ]
 
 data AttestationError

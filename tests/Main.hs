@@ -152,6 +152,21 @@ main = Hspec.hspec $ do
                   (defaultPublicKeyCredentialCreationOptions pkCredential)
                   pkCredential
         registerResult `shouldSatisfy` isRight
+  describe "Apple register" $
+    it "tests whether the fixed apple register has a valid attestation" $
+      do
+        pkCredential <-
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
+            <$> decodeFile
+              "tests/responses/attestation/05-apple.json"
+        let registerResult = do
+              toEither $
+                Fido2.verifyAttestationResponse
+                  (M.Origin "https://6cc3c9e7967a.ngrok.io")
+                  (rpIdHash "6cc3c9e7967a.ngrok.io")
+                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  pkCredential
+        registerResult `shouldSatisfy` isRight
 
 {- Disabled because we can't yet reproduce a login response for the register-complete/02.json
   let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
