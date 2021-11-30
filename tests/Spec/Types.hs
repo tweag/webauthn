@@ -9,11 +9,17 @@
 
 module Spec.Types () where
 
+import Control.Monad.Cont (replicateM)
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import qualified Crypto.Fido2.Operations.Attestation.None as None
+import Crypto.Hash (hash)
+import qualified Data.ByteString as BS
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Text.Encoding (encodeUtf8)
 import qualified PublicKeySpec ()
-import Test.QuickCheck (Arbitrary (arbitrary), arbitraryBoundedEnum, elements)
+import Test.QuickCheck (Arbitrary (arbitrary), Gen, arbitraryBoundedEnum, elements, liftArbitrary, resize, shuffle, sublistOf)
 import Test.QuickCheck.Instances.Text ()
 
 instance Arbitrary M.PublicKeyCredentialType where
@@ -35,7 +41,18 @@ instance Arbitrary M.AttestationConveyancePreference where
   arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary (M.AuthenticatorResponse 'M.Create 'False) where
-  arbitrary = M.AuthenticatorAttestationResponse <$> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary = M.AuthenticatorAttestationResponse <$> arbitrary <*> arbitrary
+
+instance Arbitrary M.AssertionSignature where
+  arbitrary = M.AssertionSignature <$> arbitrary
+
+instance Arbitrary (M.AuthenticatorResponse 'M.Get 'False) where
+  arbitrary =
+    M.AuthenticatorAssertionResponse
+      <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+      <*> arbitrary
 
 instance Arbitrary (M.RawField 'False) where
   arbitrary = pure M.NoRaw
@@ -77,25 +94,128 @@ instance Arbitrary M.Challenge where
 instance Arbitrary M.Origin where
   arbitrary = M.Origin <$> arbitrary
 
-instance Arbitrary M.ClientDataHash where
-  arbitrary = undefined
-
 instance Arbitrary M.RpIdHash where
-  arbitrary = undefined
+  arbitrary = do
+    rpId <- encodeUtf8 <$> arbitrary
+    pure $ M.RpIdHash $ hash rpId
 
 instance Arbitrary M.AuthenticatorDataFlags where
   arbitrary = M.AuthenticatorDataFlags <$> arbitrary <*> arbitrary
 
-instance SingI t => Arbitrary (M.AttestedCredentialData t raw) where
+instance SingI t => Arbitrary (M.AttestedCredentialData t 'False) where
   arbitrary = case sing @t of
-    SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> undefined
+    SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
     SGet -> pure M.NoAttestedCredentialData
 
 instance Arbitrary M.AAGUID where
-  arbitrary = M.AAGUID <$> arbitrary
+  arbitrary = M.AAGUID <$> bytes 16
+
+bytes :: Int -> Gen BS.ByteString
+bytes n = BS.pack <$> replicateM n arbitrary
 
 instance Arbitrary M.CredentialId where
   arbitrary = M.CredentialId <$> arbitrary
 
 instance Arbitrary M.AuthenticatorExtensionOutputs where
   arbitrary = pure M.AuthenticatorExtensionOutputs {}
+
+instance Arbitrary M.RpId where
+  arbitrary = M.RpId <$> arbitrary
+
+instance Arbitrary M.RelyingPartyName where
+  arbitrary = M.RelyingPartyName <$> arbitrary
+
+instance Arbitrary M.PublicKeyCredentialRpEntity where
+  arbitrary =
+    M.PublicKeyCredentialRpEntity
+      <$> arbitrary
+      <*> arbitrary
+
+instance Arbitrary M.UserHandle where
+  arbitrary = M.UserHandle <$> arbitrary
+
+instance Arbitrary M.UserAccountDisplayName where
+  arbitrary = M.UserAccountDisplayName <$> arbitrary
+
+instance Arbitrary M.UserAccountName where
+  arbitrary = M.UserAccountName <$> arbitrary
+
+instance Arbitrary M.PublicKeyCredentialUserEntity where
+  arbitrary =
+    M.PublicKeyCredentialUserEntity
+      <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+
+instance Arbitrary M.Timeout where
+  arbitrary = M.Timeout <$> arbitrary
+
+instance Arbitrary M.PublicKeyCredentialDescriptor where
+  arbitrary =
+    M.PublicKeyCredentialDescriptor M.PublicKeyCredentialTypePublicKey
+      <$> arbitrary
+      <*> liftArbitrary shuffledSubset
+
+instance Arbitrary M.AuthenticatorSelectionCriteria where
+  arbitrary =
+    M.AuthenticatorSelectionCriteria
+      <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+
+instance Arbitrary M.AuthenticationExtensionsClientInputs where
+  arbitrary = pure M.AuthenticationExtensionsClientInputs
+
+instance Arbitrary (M.PublicKeyCredentialOptions 'M.Create) where
+  arbitrary =
+    M.PublicKeyCredentialCreationOptions
+      <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+      <*> parameters
+      <*> arbitrary
+      <*> resize 4 arbitrary
+      <*> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+
+instance Arbitrary (M.PublicKeyCredentialOptions 'M.Get) where
+  arbitrary =
+    M.PublicKeyCredentialRequestOptions
+      <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+      <*> resize 4 arbitrary
+      <*> arbitrary
+      <*> arbitrary
+
+instance Arbitrary M.AuthenticationExtensionsClientOutputs where
+  arbitrary = pure M.AuthenticationExtensionsClientOutputs
+
+instance Arbitrary (M.PublicKeyCredential 'M.Create 'False) where
+  arbitrary =
+    M.PublicKeyCredential
+      <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+
+instance Arbitrary (M.PublicKeyCredential 'M.Get 'False) where
+  arbitrary =
+    M.PublicKeyCredential
+      <$> arbitrary
+      <*> arbitrary
+      <*> arbitrary
+
+shuffledSubset :: (Ord a, Bounded a, Enum a) => Gen [a]
+shuffledSubset = subset >>= shuffle . Set.toList
+
+subset :: (Ord a, Bounded a, Enum a) => Gen (Set a)
+subset = Set.fromList <$> sublistOf (Set.toList completeSet)
+
+parameters :: Gen [M.PublicKeyCredentialParameters]
+parameters = do
+  algs <- shuffledSubset
+  pure $ M.PublicKeyCredentialParameters M.PublicKeyCredentialTypePublicKey <$> algs
+
+completeSet :: (Ord a, Bounded a, Enum a) => Set a
+completeSet = Set.fromList [minBound .. maxBound]
