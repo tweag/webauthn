@@ -84,7 +84,6 @@ import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
-import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text (Text)
 import Data.Word (Word32)
@@ -759,7 +758,7 @@ data CollectedClientData (t :: WebauthnType) raw = CollectedClientData
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-crossorigin)
     -- This member contains the inverse of the `sameOriginWithAncestors` argument value
     -- that was passed into the [internal method](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots).
-    ccdCrossOrigin :: Maybe Bool,
+    ccdCrossOrigin :: Bool,
     -- | Raw data of the client data, for verification purposes
     ccdRawData :: RawField raw
     -- TODO: Implement this
@@ -999,14 +998,15 @@ data AuthenticatorResponse (t :: WebauthnType) raw where
       -- For more details, see [§ 6.5 Attestation](https://www.w3.org/TR/webauthn-2/#sctn-attestation),
       -- [§ 6.5.4 Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object),
       -- and [Figure 6](https://www.w3.org/TR/webauthn-2/#fig-attStructs).
-      arcAttestationObject :: AttestationObject raw,
-      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports)
+      arcAttestationObject :: AttestationObject raw
+      -- TODO: This property is currently not propagated by webauthn-json
+      -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports)
       -- This [internal slot](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots)
       -- contains a sequence of zero or more unique `[DOMString](https://heycam.github.io/webidl/#idl-DOMString)`s
       -- in lexicographical order. These values are the transports that the
       -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) is believed to support,
       -- or an empty sequence if the information is unavailable.
-      arcTransports :: Set AuthenticatorTransport
+      -- arcTransports :: Set AuthenticatorTransport
     } ->
     AuthenticatorResponse 'Create raw
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse)

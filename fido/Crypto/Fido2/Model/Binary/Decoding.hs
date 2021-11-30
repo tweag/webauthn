@@ -39,7 +39,7 @@ import qualified Data.ByteString.Base64.URL as Base64Url
 import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import GHC.Generics (Generic)
@@ -238,7 +238,7 @@ data ClientDataJSON = ClientDataJSON
   { littype :: IDL.DOMString,
     challenge :: IDL.DOMString,
     origin :: IDL.DOMString,
-    crossOrigin :: Maybe Bool
+    crossOrigin :: Maybe IDL.Boolean
     -- TODO
     -- tokenBinding :: Maybe TokenBinding
   }
@@ -273,6 +273,6 @@ decodeCollectedClientData bytes = do
     M.CollectedClientData
       { ccdChallenge = M.Challenge challenge,
         ccdOrigin = M.Origin origin,
-        ccdCrossOrigin = crossOrigin,
+        ccdCrossOrigin = fromMaybe False crossOrigin,
         ccdRawData = M.WithRaw bytes
       }

@@ -36,7 +36,6 @@ import qualified Crypto.Fido2.WebIDL as IDL
 import Data.Bifunctor (first)
 import Data.Coerce (Coercible, coerce)
 import Data.Maybe (catMaybes, mapMaybe)
-import qualified Data.Set as Set
 
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be
 -- decoded from the more generic JavaScript type @'JS' a@ with the 'decode' function.
@@ -242,8 +241,6 @@ instance DecodeCreated (M.AuthenticatorResponse 'M.Create 'True) where
   decodeCreated asfMap JS.AuthenticatorAttestationResponse {..} = do
     arcClientData <- first MD.CreatedDecodingErrorCommon $ decode clientDataJSON
     arcAttestationObject <- decodeCreated asfMap attestationObject
-    -- TODO: The webauthn-json library doesn't currently pass the transports
-    let arcTransports = Set.empty
     pure $ M.AuthenticatorAttestationResponse {..}
 
 instance DecodeCreated (M.PublicKeyCredential 'M.Create 'True) where

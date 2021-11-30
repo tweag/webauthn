@@ -87,7 +87,7 @@ clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..}
           M.CollectedClientData
             { ccdChallenge = challenge,
               ccdOrigin = aoOrigin,
-              ccdCrossOrigin = Nothing,
+              ccdCrossOrigin = False,
               ccdRawData = M.NoRaw
             }
       clientDataHash =
@@ -112,10 +112,7 @@ clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..}
             M.pkcResponse =
               M.AuthenticatorAttestationResponse
                 { M.arcClientData = clientData,
-                  M.arcAttestationObject = attestationObject,
-                  -- Currently ignored by the library
-                  -- TODO: Policy
-                  M.arcTransports = Set.empty
+                  M.arcAttestationObject = attestationObject
                 },
             M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
           }
@@ -146,7 +143,7 @@ clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} co
           M.CollectedClientData
             { ccdChallenge = challenge,
               ccdOrigin = aoOrigin,
-              ccdCrossOrigin = Nothing,
+              ccdCrossOrigin = False,
               ccdRawData = M.NoRaw
             }
       clientDataHash = M.ClientDataHash $ hash $ M.unRaw $ M.ccdRawData clientData

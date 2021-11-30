@@ -33,7 +33,6 @@ import Data.ByteString.Builder (Builder, stringUtf8, toLazyByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Word (Word16, Word8)
@@ -175,7 +174,7 @@ encodeRawCollectedClientData M.CollectedClientData {..} = M.CollectedClientData 
     originValue = M.unOrigin ccdOrigin
 
     crossOriginValue :: Bool
-    crossOriginValue = fromMaybe False ccdCrossOrigin
+    crossOriginValue = ccdCrossOrigin
 
     jsonBuilder :: Aeson.ToJSON a => a -> Builder
     jsonBuilder = Aeson.fromEncoding . Aeson.toEncoding
