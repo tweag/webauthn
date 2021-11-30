@@ -12,7 +12,6 @@ module Emulation.Client (clientAssertion, spec) where
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
 import Crypto.Fido2.Model (Challenge (Challenge))
 import qualified Crypto.Fido2.Model as M
-import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Decoding
   ( decodeCreateCollectedClientData,
     decodeGetCollectedClientData,
@@ -28,25 +27,17 @@ import qualified Crypto.Random as Random
 import Data.Aeson (encode)
 import qualified Data.ByteString.Base64.URL as Base64
 import Data.ByteString.Lazy (toStrict)
-import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Validation (toEither)
 import Emulation.Authenticator
-  ( Authenticator
-      ( AuthenticatorNone,
-        aAAGUID,
-        aAuthenticatorDataFlags,
-        aConformance,
-        aCredentials,
-        aSignatureCounter,
-        aSupportedAlgorithms
-      ),
-    AuthenticatorSignatureCounter (Global),
+  ( Authenticator,
     authenticatorGetAssertion,
     authenticatorMakeCredential,
+    isValidAuthenticator,
   )
+import Emulation.Authenticator.Arbitrary ()
 import qualified Emulation.Client.PrivateKey as PrivateKey
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 import Test.QuickCheck (property)
@@ -249,53 +240,47 @@ attestationAndAssertion ao conformance authenticator = do
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
             options
             mPkcCreate
-  let Right credentialEntry = registerResult
+  Right credentialEntry <- pure registerResult
   attestationChallenge <- M.Challenge <$> Random.getRandomBytes 16
   let options = defaultPkcog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
   -- authenticator should now store the created credential
   (mPkcGet, _) <- clientAssertion options ao conformance authenticator
-  let Right loginResult =
-        toEither $
-          Fido2.verifyAssertionResponse
-            (aoOrigin ao)
-            (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
-            (Just userId)
-            credentialEntry
-            options
-            mPkcGet
+  Right loginResult <-
+    pure
+      . toEither
+      $ Fido2.verifyAssertionResponse
+        (aoOrigin ao)
+        (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
+        (Just userId)
+        credentialEntry
+        options
+        mPkcGet
   pure loginResult
 
 spec :: SpecWith ()
 spec =
   describe "None" $
     it "succeeds" $
-      property $ \seed ->
+      property $ \seed authenticator ->
         let annotatedOrigin =
               AnnotatedOrigin
                 { aoRpId = M.RpId "localhost",
                   aoOrigin = M.Origin "https://localhost:8080"
                 }
-            authenticatorConformance = Set.empty
             userAgentConformance = Set.empty
-            noneAuthenticator =
-              AuthenticatorNone
-                { aAAGUID = M.AAGUID "0000000000000000",
-                  aAuthenticatorDataFlags =
-                    M.AuthenticatorDataFlags
-                      { adfUserPresent = True,
-                        adfUserVerified = True
-                      },
-                  aCredentials = Map.empty,
-                  aSignatureCounter = Global 0,
-                  aSupportedAlgorithms = Set.singleton PublicKey.COSEAlgorithmIdentifierEdDSA,
-                  aConformance = authenticatorConformance
-                }
-            Right c = runApp seed $ attestationAndAssertion annotatedOrigin userAgentConformance noneAuthenticator
-         in c `shouldSatisfy` \case
-              Fido2.SignatureCounterZero -> True
-              Fido2.SignatureCounterUpdated _ -> True
-              Fido2.SignatureCounterPotentiallyCloned -> False
+            c = runApp seed $ attestationAndAssertion annotatedOrigin userAgentConformance authenticator
+         in if isValidAuthenticator authenticator
+              then
+                c `shouldSatisfy` \case
+                  Right Fido2.SignatureCounterZero -> True
+                  Right (Fido2.SignatureCounterUpdated _) -> True
+                  _ -> False
+              else
+                c `shouldSatisfy` \case
+                  Right Fido2.SignatureCounterPotentiallyCloned -> True
+                  Left _ -> True
+                  _ -> False
 
 -- | Create a default set of options for attestation. These options can be modified before using them in the tests
 defaultPkcoc :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
@@ -309,6 +294,14 @@ defaultPkcoc userEntity challenge =
         [ M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
               M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES384
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES512
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,

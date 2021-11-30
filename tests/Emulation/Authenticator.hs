@@ -1,6 +1,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Emulation.Authenticator
@@ -11,6 +12,7 @@ module Emulation.Authenticator
     Authenticator (..),
     authenticatorMakeCredential,
     authenticatorGetAssertion,
+    isValidAuthenticator,
   )
 where
 
@@ -63,13 +65,9 @@ data AuthenticatorNonConformingBehaviour
     RandomSignatureData
   | -- | Use a randomly generated private key for signing
     RandomPrivateKey
-  | -- | Incorrectly unset the attestationData flag during attestation
-    WrongAttestationDataFlagAttestation
-  | -- | Incorrectly set the attestationData flag during assertion
-    WrongAttestationDataFlagAssertion
   | -- | Don't increase the counter during attestation and assertion
     StaticCounter
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Enum, Bounded)
 
 type Conformance = Set.Set AuthenticatorNonConformingBehaviour
 
@@ -84,6 +82,12 @@ data Authenticator = AuthenticatorNone
     aConformance :: Conformance
   }
   deriving (Show)
+
+-- | Checks if an authenticator has no nonConforming behaviour and is otherwise
+-- capable of being an authenticator
+isValidAuthenticator :: Authenticator -> Bool
+isValidAuthenticator AuthenticatorNone {aSupportedAlgorithms, aConformance, aAuthenticatorDataFlags} =
+  not (Set.null aSupportedAlgorithms) && Set.null aConformance && M.adfUserPresent aAuthenticatorDataFlags
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-make-cred)
 authenticatorMakeCredential ::
@@ -275,10 +279,7 @@ authenticatorMakeCredential
       -- extensions.
       let rpIdHash = hash . encodeUtf8 . M.unRpId $ rpId
       let flags =
-            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $
-              if Set.member WrongAttestationDataFlagAttestation aConformance
-                then 0
-                else bit 6
+            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $ bit 6
       let authenticatorData =
             M.AuthenticatorData
               { M.adRpIdHash = M.RpIdHash rpIdHash,
@@ -321,8 +322,8 @@ authenticatorMakeCredential
             new = increment + c
          in (new, Global new)
       initialiseCounter key (PerCredential m) = do
-        let m' = Map.insert key 0 m
-        (0, PerCredential m')
+        let m' = Map.insert key 1 m
+        (1, PerCredential m')
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion)
 authenticatorGetAssertion ::
@@ -417,10 +418,7 @@ authenticatorGetAssertion
       -- extensions and excluding attestedCredentialData.
       -- NOTE: We don't just create the bytearray.
       let flags =
-            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $
-              if Set.member WrongAttestationDataFlagAssertion aConformance
-                then bit 6
-                else 0
+            encodeAuthenticatorDataFlags aAuthenticatorDataFlags 0
       let rpIdHash = hash . encodeUtf8 $ M.unRpId rpId
       let authenticatorData =
             M.AuthenticatorData
