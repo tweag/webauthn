@@ -25,6 +25,7 @@ import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (toEither)
 import qualified Emulation.Client as Client
+import qualified Encoding
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
 import qualified PublicKeySpec
@@ -75,6 +76,9 @@ main = Hspec.hspec $ do
   describe
     "Client Emulation"
     Client.spec
+  describe
+    "Encoding"
+    Encoding.spec
   describe "RegisterAndLogin" $
     it "tests whether the fixed register and login responses are matching" $
       do
