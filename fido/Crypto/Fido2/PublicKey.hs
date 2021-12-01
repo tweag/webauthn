@@ -15,6 +15,7 @@ module Crypto.Fido2.PublicKey
     encodePublicKey,
     toAlg,
     toPublicKey,
+    certPublicKey,
     toCOSEAlgorithmIdentifier,
     toECDSAKey,
     fromAlg,
@@ -252,6 +253,18 @@ toCOSEAlgorithmIdentifier (ES256PublicKey _) = COSEAlgorithmIdentifierES256
 toCOSEAlgorithmIdentifier (ES384PublicKey _) = COSEAlgorithmIdentifierES384
 toCOSEAlgorithmIdentifier (ES512PublicKey _) = COSEAlgorithmIdentifierES512
 toCOSEAlgorithmIdentifier (Ed25519PublicKey _) = COSEAlgorithmIdentifierEdDSA
+
+signatureAlgToCose :: MonadFail f => X509.SignatureALG -> f COSEAlgorithmIdentifier
+signatureAlgToCose (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) = pure COSEAlgorithmIdentifierES256
+signatureAlgToCose (X509.SignatureALG X509.HashSHA384 X509.PubKeyALG_EC) = pure COSEAlgorithmIdentifierES384
+signatureAlgToCose (X509.SignatureALG X509.HashSHA512 X509.PubKeyALG_EC) = pure COSEAlgorithmIdentifierES512
+signatureAlgToCose (X509.SignatureALG_IntrinsicHash X509.PubKeyALG_Ed25519) = pure COSEAlgorithmIdentifierEdDSA
+signatureAlgToCose alg = fail $ "Unknown signature algorithm " <> show alg
+
+certPublicKey :: MonadFail f => X509.Certificate -> f PublicKey
+certPublicKey cert = do
+  alg <- signatureAlgToCose $ X509.certSignatureAlg cert
+  toPublicKey alg (X509.certPubKey cert)
 
 toPublicKey :: MonadFail f => COSEAlgorithmIdentifier -> X509.PubKey -> f PublicKey
 toPublicKey COSEAlgorithmIdentifierEdDSA (X509.PubKeyEd25519 key) = pure $ Ed25519PublicKey key
