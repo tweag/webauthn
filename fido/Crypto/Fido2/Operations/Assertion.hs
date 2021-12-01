@@ -16,6 +16,7 @@ import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.Operations.Common (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
 import Crypto.Fido2.PublicKey (PublicKey, decodePublicKey)
 import qualified Crypto.Fido2.PublicKey as PublicKey
+import qualified Crypto.Hash as Hash
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
@@ -25,7 +26,7 @@ import Data.Validation (Validation)
 data AssertionError
   = -- | The provided Credential was not one explicitly allowed by the server
     -- (first: allowed credentials, second: received credential)
-    AssertionDisallowedCredential [M.PublicKeyCredentialDescriptor] (M.PublicKeyCredential 'M.Get)
+    AssertionDisallowedCredential [M.PublicKeyCredentialDescriptor] (M.PublicKeyCredential 'M.Get 'True)
   | -- | The received credential does not match the currently identified user
     -- (first: identified, second: received)
     AssertionIdentifiedUserHandleMismatch M.UserHandle M.UserHandle
@@ -80,7 +81,7 @@ verifyAssertionResponse ::
   -- | The options that were passed to the get() method
   M.PublicKeyCredentialOptions 'M.Get ->
   -- | The credential returned from get()
-  M.PublicKeyCredential 'M.Get ->
+  M.PublicKeyCredential 'M.Get 'True ->
   -- | Either a non-empty list of validation errors in case of the assertion
   -- being invalid
   -- Or in case of success a signature counter result, which should be dealt
@@ -161,7 +162,7 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
   -- clientDataJSON, authenticatorData, and signature respectively.
   let M.AuthenticatorAssertionResponse
         { M.argClientData = c,
-          M.argAuthenticatorData = authData,
+          M.argAuthenticatorData = authData@M.AuthenticatorData {M.adRawData = M.WithRaw rawData},
           M.argSignature = sig
         } = response
 
@@ -230,14 +231,14 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
   -- TODO
 
   -- 19. Let hash be the result of computing a hash over the cData using SHA-256.
-  -- NOTE: Done during decoding, since it relies on the specific serialization
-  -- used
-  let hash = convert (M.unClientDataHash (M.ccdHash c))
+  -- NOTE: Done on raw data from decoding so that we don't need to encode again
+  -- here and so that we use the exact some serialization
+  let hash = M.ClientDataHash $ Hash.hash $ M.unRaw $ M.ccdRawData c
 
   -- 20. Using credentialPublicKey, verify that sig is a valid signature over
   -- the binary concatenation of authData and hash.
   let pubKeyBytes = cePublicKeyBytes entry
-      message = M.adRawData authData <> hash
+      message = rawData <> convert (M.unClientDataHash hash)
   case CBOR.deserialiseFromBytes decodePublicKey (LBS.fromStrict (M.unPublicKeyBytes pubKeyBytes)) of
     Left err -> failure $ AssertionInvalidSignature (Left err)
     Right (_, pubKey) ->

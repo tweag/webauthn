@@ -134,7 +134,7 @@ instance M.AttestationStatementFormat Format where
 
       -- 2. Concatenate authenticatorData and clientDataHash to form
       -- nonceToHash.
-      let nonceToHash = adRawData <> BA.convert (M.unClientDataHash clientDataHash)
+      let nonceToHash = M.unRaw adRawData <> BA.convert (M.unClientDataHash clientDataHash)
 
       -- 3. Perform SHA-256 hash of nonceToHash to produce nonce.
       let nonce :: Digest SHA256 = hash nonceToHash

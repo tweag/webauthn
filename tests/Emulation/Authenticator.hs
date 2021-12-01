@@ -16,9 +16,9 @@ module Emulation.Authenticator
   )
 where
 
-import qualified Codec.CBOR.Write as CBOR
 import Control.Monad (forM_, when)
 import qualified Crypto.Fido2.Model as M
+import qualified Crypto.Fido2.Model.Binary.Encoding as ME
 import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
@@ -27,13 +27,7 @@ import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
-import Data.Binary (Word8)
-import Data.Binary.Put (runPut)
-import qualified Data.Binary.Put as Put
-import Data.Bits (Bits (bit), (.|.))
 import qualified Data.ByteArray as BA
-import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
 import Data.List (find)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
@@ -140,7 +134,7 @@ authenticatorMakeCredential ::
   -- extension inputs, created by the client based on the extensions requested
   -- by the Relying Party, if any.
   Maybe M.AuthenticationExtensionsClientInputs ->
-  m (M.AttestationObject, Authenticator)
+  m (M.AttestationObject 'True, Authenticator)
 authenticatorMakeCredential
   authenticator@AuthenticatorNone {..}
   _hash
@@ -274,32 +268,24 @@ authenticatorMakeCredential
               { M.acdAaguid = aAAGUID,
                 M.acdCredentialId = credentialId,
                 M.acdCredentialPublicKey = publicKey, -- This is selfsigned
-                M.acdCredentialPublicKeyBytes = M.PublicKeyBytes . CBOR.toStrictByteString $ PublicKey.encodePublicKey publicKey
+                M.acdCredentialPublicKeyBytes = M.NoRaw
               }
-          attestedCredentialDataBS =
-            encodeAttestedCredentialData attestedCredentialData
 
       -- 12. Let authenticatorData be the byte array specified in § 6.1
       -- Authenticator Data, including attestedCredentialData as the
       -- attestedCredentialData and processedExtensions, if any, as the
       -- extensions.
       let rpIdHash = hash . encodeUtf8 . M.unRpId $ rpId
-      let flags =
-            encodeAuthenticatorDataFlags aAuthenticatorDataFlags $ bit 6
       let authenticatorData =
-            M.AuthenticatorData
-              { M.adRpIdHash = M.RpIdHash rpIdHash,
-                M.adFlags = aAuthenticatorDataFlags,
-                M.adSignCount = signatureCounter,
-                M.adAttestedCredentialData = attestedCredentialData,
-                M.adExtensions = Nothing,
-                M.adRawData =
-                  -- TODO: Use Put?
-                  BA.convert rpIdHash
-                    <> flags
-                    <> (toStrict . runPut $ Put.putWord32be $ M.unSignatureCounter signatureCounter)
-                    <> attestedCredentialDataBS
-              }
+            ME.encodeRawAuthenticatorData
+              M.AuthenticatorData
+                { M.adRpIdHash = M.RpIdHash rpIdHash,
+                  M.adFlags = aAuthenticatorDataFlags,
+                  M.adSignCount = signatureCounter,
+                  M.adAttestedCredentialData = attestedCredentialData,
+                  M.adExtensions = Nothing,
+                  M.adRawData = M.NoRaw
+                }
       -- On successful completion of this operation, the authenticator returns
       -- the attestation object to the client.
       let attestationObject =
@@ -310,14 +296,6 @@ authenticatorMakeCredential
               }
       pure (attestationObject, authenticator {aCredentials = credentials, aSignatureCounter = aSignatureCounter'})
     where
-      -- https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data
-      encodeAttestedCredentialData :: M.AttestedCredentialData 'M.Create -> BS.ByteString
-      encodeAttestedCredentialData M.AttestedCredentialData {..} =
-        M.unAAGUID acdAaguid
-          <> (toStrict . runPut . Put.putWord16be . fromIntegral . BS.length $ M.unCredentialId acdCredentialId)
-          <> M.unCredentialId acdCredentialId
-          <> M.unPublicKeyBytes acdCredentialPublicKeyBytes
-
       initialiseCounter :: M.CredentialId -> AuthenticatorSignatureCounter -> (M.SignatureCounter, AuthenticatorSignatureCounter)
       initialiseCounter _ Unsupported = (M.SignatureCounter 0, Unsupported)
       initialiseCounter _ (Global c) =
@@ -353,7 +331,7 @@ authenticatorGetAssertion ::
   -- assertion, a Boolean value provided by the client.
   Bool ->
   Maybe M.AuthenticationExtensionsClientInputs ->
-  m ((M.CredentialId, M.AuthenticatorData 'M.Get, PrivateKey.Signature, Maybe M.UserHandle), Authenticator)
+  m ((M.CredentialId, M.AuthenticatorData 'M.Get 'True, PrivateKey.Signature, Maybe M.UserHandle), Authenticator)
 authenticatorGetAssertion _ _ _ _ False _ _ = fail "requireUserPresence set to False"
 authenticatorGetAssertion
   authenticator@AuthenticatorNone {..}
@@ -422,23 +400,17 @@ authenticatorGetAssertion
       -- 10. Let authenticatorData be the byte array specified in § 6.1
       -- Authenticator Data including processedExtensions, if any, as the
       -- extensions and excluding attestedCredentialData.
-      -- NOTE: We don't just create the bytearray.
-      let flags =
-            encodeAuthenticatorDataFlags aAuthenticatorDataFlags 0
       let rpIdHash = hash . encodeUtf8 $ M.unRpId rpId
       let authenticatorData =
-            M.AuthenticatorData
-              { M.adRpIdHash = M.RpIdHash rpIdHash,
-                M.adFlags = aAuthenticatorDataFlags,
-                M.adSignCount = signatureCounter,
-                M.adAttestedCredentialData = M.NoAttestedCredentialData,
-                M.adExtensions = Nothing,
-                M.adRawData =
-                  -- TODO: Use Put?
-                  BA.convert rpIdHash
-                    <> flags
-                    <> (toStrict . runPut $ Put.putWord32be . M.unSignatureCounter $ signatureCounter)
-              }
+            ME.encodeRawAuthenticatorData
+              M.AuthenticatorData
+                { M.adRpIdHash = M.RpIdHash rpIdHash,
+                  M.adFlags = aAuthenticatorDataFlags,
+                  M.adSignCount = signatureCounter,
+                  M.adAttestedCredentialData = M.NoAttestedCredentialData,
+                  M.adExtensions = Nothing,
+                  M.adRawData = M.NoRaw
+                }
 
       -- 11. Let signature be the assertion signature of the concatenation
       -- authenticatorData || hash using the privateKey of selectedCredential
@@ -454,7 +426,7 @@ authenticatorGetAssertion
       msg <-
         if Set.member RandomSignatureData aConformance
           then Random.getRandomBytes 4
-          else pure $ M.adRawData authenticatorData <> BA.convert (M.unClientDataHash clientDataHash)
+          else pure $ M.unRaw (M.adRawData authenticatorData) <> BA.convert (M.unClientDataHash clientDataHash)
       signature <-
         PrivateKey.sign
           privateKey
@@ -508,15 +480,3 @@ newECDSAKeyPair ident = do
   let privateKey = fromMaybe (error "Not a ECDSAKey") $ PrivateKey.toECDSAKey ident private
       publicKey = fromMaybe (error "Not a ECDSAKey") $ PublicKey.toECDSAKey ident public
   pure (publicKey, privateKey)
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#flags)
--- The second argument is the base value, the `AuthenticatorDataFlags` will be
--- added to the existing bits set in the base value. We do this to workaround
--- the fact that the `AuthenticatorDataFlags` doesn't store all flags (to avoid
--- duplication)
-encodeAuthenticatorDataFlags :: M.AuthenticatorDataFlags -> Word8 -> BS.ByteString
-encodeAuthenticatorDataFlags M.AuthenticatorDataFlags {..} base =
-  BS.singleton $
-    (if adfUserPresent then bit 0 else 0)
-      .|. (if adfUserVerified then bit 2 else 0)
-      .|. base

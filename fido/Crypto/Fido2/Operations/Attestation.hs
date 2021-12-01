@@ -19,6 +19,7 @@ import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.Operations.Attestation.Packed as Packed
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
 import qualified Crypto.Fido2.PublicKey as PublicKey
+import qualified Crypto.Hash as Hash
 import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (Validation, liftError)
 
@@ -62,7 +63,7 @@ verifyAttestationResponse ::
   -- | The options passed to the create() method
   M.PublicKeyCredentialOptions 'M.Create ->
   -- | The response from the authenticator
-  M.PublicKeyCredential 'M.Create ->
+  M.PublicKeyCredential 'M.Create 'True ->
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
   -- Or () in case of a result.
   Validation (NonEmpty AttestationError) CredentialEntry
@@ -136,8 +137,9 @@ verifyAttestationResponse
 
     -- 11. Let hash be the result of computing a hash over
     -- response.clientDataJSON using SHA-256.
-    -- NOTE: Done during decoding, since it relies on the specific
-    -- serialization used
+    -- NOTE: Done on raw data from decoding so that we don't need to encode again
+    -- here and so that we use the exact some serialization
+    let hash = M.ClientDataHash $ Hash.hash $ M.unRaw $ M.ccdRawData c
 
     -- 12. Perform CBOR decoding on the attestationObject field of the
     -- AuthenticatorAttestationResponse structure to obtain the attestation
@@ -203,7 +205,7 @@ verifyAttestationResponse
     -- fmt’s verification procedure given attStmt, authData and hash.
     _attType <-
       liftError (pure . AttestationFormatError . SomeException) $
-        M.asfVerify aoFmt aoAttStmt authData (M.ccdHash c)
+        M.asfVerify aoFmt aoAttStmt authData hash
 
     -- 20. If validation is successful, obtain a list of acceptable trust
     -- anchors (i.e. attestation root certificates) for that attestation type
@@ -233,6 +235,6 @@ verifyAttestationResponse
       CredentialEntry
         { ceUserHandle = M.pkcueId $ M.pkcocUser options,
           ceCredentialId = M.pkcIdentifier credential,
-          cePublicKeyBytes = acdCredentialPublicKeyBytes,
+          cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
           ceSignCounter = M.adSignCount authData
         }

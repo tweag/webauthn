@@ -123,9 +123,9 @@ instance M.AttestationStatementFormat Format where
   asfVerify
     _
     Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c}
-    M.AuthenticatorData {M.adRawData, M.adAttestedCredentialData = credData}
+    M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
-      let signedData = adRawData <> convert (M.unClientDataHash clientDataHash)
+      let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
       case stmtx5c of
         -- Self attestation
         Nothing -> do
