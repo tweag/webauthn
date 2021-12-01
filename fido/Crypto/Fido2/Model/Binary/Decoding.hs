@@ -14,6 +14,9 @@ module Crypto.Fido2.Model.Binary.Decoding
     decodeAuthenticatorData,
     decodeAttestationObject,
     decodeCollectedClientData,
+
+    -- * Stripping raw fields
+    stripRawPublicKeyCredential,
   )
 where
 
@@ -276,3 +279,54 @@ decodeCollectedClientData bytes = do
         ccdCrossOrigin = fromMaybe False crossOrigin,
         ccdRawData = M.WithRaw bytes
       }
+
+-- | Removes all raw fields from a 'M.PublicKeyCredential', useful for
+-- e.g. pretty-printing only the desired fields. This is the counterpart to
+-- 'Crypto.Fido2.Model.Binary.Encoding.encodeRawPublicKeyCredential'
+stripRawPublicKeyCredential :: forall t raw. SingI t => M.PublicKeyCredential t raw -> M.PublicKeyCredential t 'False
+stripRawPublicKeyCredential M.PublicKeyCredential {..} =
+  M.PublicKeyCredential
+    { pkcResponse = case sing @t of
+        SCreate -> stripRawAuthenticatorAttestationResponse pkcResponse
+        SGet -> stripRawAuthenticatorAssertionResponse pkcResponse,
+      ..
+    }
+  where
+    stripRawAuthenticatorAssertionResponse :: M.AuthenticatorResponse 'M.Get raw -> M.AuthenticatorResponse 'M.Get 'False
+    stripRawAuthenticatorAssertionResponse M.AuthenticatorAssertionResponse {..} =
+      M.AuthenticatorAssertionResponse
+        { argClientData = stripRawCollectedClientData argClientData,
+          argAuthenticatorData = stripRawAuthenticatorData argAuthenticatorData,
+          ..
+        }
+
+    stripRawAuthenticatorAttestationResponse :: M.AuthenticatorResponse 'M.Create raw -> M.AuthenticatorResponse 'M.Create 'False
+    stripRawAuthenticatorAttestationResponse M.AuthenticatorAttestationResponse {..} =
+      M.AuthenticatorAttestationResponse
+        { arcClientData = stripRawCollectedClientData arcClientData,
+          arcAttestationObject = stripRawAttestationObject arcAttestationObject,
+          ..
+        }
+
+    stripRawAttestationObject :: M.AttestationObject raw -> M.AttestationObject 'False
+    stripRawAttestationObject M.AttestationObject {..} =
+      M.AttestationObject
+        { aoAuthData = stripRawAuthenticatorData aoAuthData,
+          ..
+        }
+
+    stripRawAuthenticatorData :: forall t raw. SingI t => M.AuthenticatorData t raw -> M.AuthenticatorData t 'False
+    stripRawAuthenticatorData M.AuthenticatorData {..} =
+      M.AuthenticatorData
+        { adRawData = M.NoRaw,
+          adAttestedCredentialData = stripRawAttestedCredentialData adAttestedCredentialData,
+          ..
+        }
+
+    stripRawAttestedCredentialData :: forall t raw. SingI t => M.AttestedCredentialData t raw -> M.AttestedCredentialData t 'False
+    stripRawAttestedCredentialData = case sing @t of
+      SCreate -> \M.AttestedCredentialData {..} -> M.AttestedCredentialData {acdCredentialPublicKeyBytes = M.NoRaw, ..}
+      SGet -> \M.NoAttestedCredentialData -> M.NoAttestedCredentialData
+
+    stripRawCollectedClientData :: forall t raw. SingI t => M.CollectedClientData t raw -> M.CollectedClientData t 'False
+    stripRawCollectedClientData M.CollectedClientData {..} = M.CollectedClientData {ccdRawData = M.NoRaw, ..}

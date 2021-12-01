@@ -11,6 +11,7 @@ import Control.Monad (when)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import qualified Crypto.Fido2.Model as M
+import qualified Crypto.Fido2.Model.Binary.Decoding as MD
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
 import Crypto.Fido2.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
@@ -176,6 +177,7 @@ completeLogin origin rpIdHash db pending = do
   cred <- case decodeRequestedPublicKeyCredential credential of
     Left err -> fail $ show err
     Right result -> pure result
+  Scotty.liftAndCatchIO $ putStrLn $ "/login/complete, received " <> show (MD.stripRawPublicKeyCredential cred)
 
   options <-
     Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
@@ -221,7 +223,7 @@ completeRegistration origin rpIdHash db pending = do
   cred <- case decodeCreatedPublicKeyCredential allSupportedFormats credential of
     Left err -> fail $ show err
     Right result -> pure result
-  Scotty.liftAndCatchIO $ putStrLn $ "/register/complete, received " <> show cred
+  Scotty.liftAndCatchIO $ putStrLn $ "/register/complete, received " <> show (MD.stripRawPublicKeyCredential cred)
 
   options <-
     Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
@@ -276,7 +278,7 @@ defaultPkcco userEntity challenge =
               M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
               M.ascUserVerification = M.UserVerificationRequirementPreferred
             },
-      M.pkcocAttestation = M.AttestationConveyancePreferenceNone,
+      M.pkcocAttestation = M.AttestationConveyancePreferenceDirect,
       M.pkcocExtensions = Nothing
     }
 

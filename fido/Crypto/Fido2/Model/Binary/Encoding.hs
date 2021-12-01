@@ -38,7 +38,8 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Word (Word16, Word8)
 
 -- | Encodes all raw fields of a 'M.PublicKeyCredential'. This function is
--- mainly useful for testing that the encoding/decoding functions are correct
+-- mainly useful for testing that the encoding/decoding functions are correct.
+-- The counterpart to this function is 'Crypto.Fido2.Model.Binary.Decoding.stripRawPublicKeyCredential'
 encodeRawPublicKeyCredential :: forall t raw. SingI t => M.PublicKeyCredential t raw -> M.PublicKeyCredential t 'True
 encodeRawPublicKeyCredential M.PublicKeyCredential {..} =
   M.PublicKeyCredential
