@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main
   ( main,
@@ -9,6 +11,7 @@ import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
 import qualified Crypto.Fido2.Operations.Assertion as Fido2
+import Crypto.Fido2.Operations.Attestation (AttestationError)
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
 import qualified Crypto.Fido2.Operations.Common as Common
 import qualified Crypto.Fido2.PublicKey as PublicKey
@@ -19,6 +22,7 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Either (isRight)
 import Data.Foldable (for_)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (toEither)
 import qualified Emulation.Client as Client
 import GHC.Stack (HasCallStack)
@@ -78,14 +82,15 @@ main = Hspec.hspec $ do
           either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/01-none.json"
-        let registerResult = do
+        let options = defaultPublicKeyCredentialCreationOptions pkCredential
+            registerResult =
               toEither $
                 Fido2.verifyAttestationResponse
                   (M.Origin "http://localhost:8080")
                   (rpIdHash "localhost")
-                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  options
                   pkCredential
-        registerResult `shouldSatisfy` isRight
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
         let Right credentialEntry = registerResult
         loginReq <-
           either (error . show) id . JS.decodeRequestedPublicKeyCredential
@@ -114,14 +119,15 @@ main = Hspec.hspec $ do
           either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/02-packed.json"
-        let registerResult = do
+        let options = defaultPublicKeyCredentialCreationOptions pkCredential
+            registerResult =
               toEither $
                 Fido2.verifyAttestationResponse
                   (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
-                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  options
                   pkCredential
-        registerResult `shouldSatisfy` isRight
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
   describe "AndroidKey register" $
     it "tests whether the fixed android key register has a valid attestation" $
       do
@@ -129,14 +135,15 @@ main = Hspec.hspec $ do
           either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/03-android-key.json"
-        let registerResult = do
+        let options = defaultPublicKeyCredentialCreationOptions pkCredential
+            registerResult =
               toEither $
                 Fido2.verifyAttestationResponse
                   (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
-                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  options
                   pkCredential
-        registerResult `shouldSatisfy` isRight
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
   describe "U2F register" $
     it "tests whether the fixed fido-u2f register has a valid attestation" $
       do
@@ -144,14 +151,15 @@ main = Hspec.hspec $ do
           either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/04-u2f.json"
-        let registerResult = do
+        let options = defaultPublicKeyCredentialCreationOptions pkCredential
+            registerResult =
               toEither $
                 Fido2.verifyAttestationResponse
                   (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
-                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  options
                   pkCredential
-        registerResult `shouldSatisfy` isRight
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
   describe "Apple register" $
     it "tests whether the fixed apple register has a valid attestation" $
       do
@@ -159,33 +167,29 @@ main = Hspec.hspec $ do
           either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/05-apple.json"
-        let registerResult = do
+        let options = defaultPublicKeyCredentialCreationOptions pkCredential
+            registerResult =
               toEither $
                 Fido2.verifyAttestationResponse
                   (M.Origin "https://6cc3c9e7967a.ngrok.io")
                   (rpIdHash "6cc3c9e7967a.ngrok.io")
-                  (defaultPublicKeyCredentialCreationOptions pkCredential)
+                  options
                   pkCredential
-        registerResult `shouldSatisfy` isRight
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
 
-{- Disabled because we can't yet reproduce a login response for the register-complete/02.json
-  let (Right Fido2.AttestedCredentialData {credentialId, credentialPublicKey}) = registerResult
-  loginReq <-
-    decodeFile
-      @(Fido2.PublicKeyCredential Fido2.AuthenticatorAssertionResponse)
-      "tests/fixtures/login-complete/02.json"
-  let Fido2.PublicKeyCredential {response} = loginReq
-  let Fido2.AuthenticatorAssertionResponse {clientData} = response
-  let Fido2.ClientData {challenge} = clientData
-  let signInResult =
-        Fido2.verifyAssertionResponse
-          Fido2.RelyingPartyConfig {origin = Fido2.Origin "https://localhost:44329", rpId = Fido2.RpId "localhost"}
-          challenge
-          [Fido2.Credential {id = credentialId, publicKey = credentialPublicKey}]
-          Fido2.UserVerificationPreferred
-          loginReq
-  signInResult `shouldSatisfy` isRight
--}
+isExpectedAttestationResponse :: M.PublicKeyCredential 'M.Create -> M.PublicKeyCredentialOptions 'M.Create -> Either (NonEmpty AttestationError) Common.CredentialEntry -> Bool
+isExpectedAttestationResponse _ _ (Left _) = False -- We should never receive errors
+isExpectedAttestationResponse M.PublicKeyCredential {..} M.PublicKeyCredentialCreationOptions {..} (Right ce@Common.CredentialEntry {..}) =
+  ce == expectedCredentialEntry
+  where
+    expectedCredentialEntry :: Common.CredentialEntry
+    expectedCredentialEntry =
+      Common.CredentialEntry
+        { ceCredentialId = pkcIdentifier,
+          ceUserHandle = M.pkcueId pkcocUser,
+          cePublicKeyBytes = M.acdCredentialPublicKeyBytes . M.adAttestedCredentialData . M.aoAuthData $ M.arcAttestationObject pkcResponse,
+          ceSignCounter = M.adSignCount . M.aoAuthData $ M.arcAttestationObject pkcResponse
+        }
 
 defaultPublicKeyCredentialCreationOptions :: M.PublicKeyCredential 'M.Create -> M.PublicKeyCredentialOptions 'M.Create
 defaultPublicKeyCredentialCreationOptions pkc =

@@ -86,8 +86,14 @@ data Authenticator = AuthenticatorNone
 -- | Checks if an authenticator has no nonConforming behaviour and is otherwise
 -- capable of being an authenticator
 isValidAuthenticator :: Authenticator -> Bool
-isValidAuthenticator AuthenticatorNone {aSupportedAlgorithms, aConformance, aAuthenticatorDataFlags} =
-  not (Set.null aSupportedAlgorithms) && Set.null aConformance && M.adfUserPresent aAuthenticatorDataFlags
+isValidAuthenticator AuthenticatorNone {aSupportedAlgorithms, aConformance, aAuthenticatorDataFlags, aSignatureCounter} =
+  not (Set.null aSupportedAlgorithms) && M.adfUserPresent aAuthenticatorDataFlags
+    -- A static counter has no meaning for an authenticator that doesn't have a
+    -- signature counter, so we accept the StaticCounter behaviour explicitly
+    -- only if the authenticator doesn't have a signature counter.
+    && case aSignatureCounter of
+      Unsupported -> Set.null aConformance || aConformance == Set.singleton StaticCounter
+      _ -> Set.null aConformance
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-make-cred)
 authenticatorMakeCredential ::
