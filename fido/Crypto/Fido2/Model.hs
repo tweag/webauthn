@@ -86,6 +86,7 @@ import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.String (IsString)
 import Data.Text (Text)
+import Data.UUID (UUID)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
 import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
@@ -333,7 +334,7 @@ data AttestationType
   deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
-newtype AAGUID = AAGUID {unAAGUID :: BS.ByteString}
+newtype AAGUID = AAGUID {unAAGUID :: UUID}
   deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rp-id)

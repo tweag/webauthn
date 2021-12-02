@@ -36,8 +36,10 @@ library
     asn1-parse,
     asn1-types,
     bytestring,
+    base16-bytestring,
     base64-bytestring,
     containers,
+    hashable,
     cryptonite,
     memory,
     cborg,
@@ -57,6 +59,7 @@ library
     lens,
     mtl,
     validation,
+    uuid,
   exposed-modules:
     Crypto.Fido2.Operations.Assertion,
     Crypto.Fido2.Operations.Attestation,

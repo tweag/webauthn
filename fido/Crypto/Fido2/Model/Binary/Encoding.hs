@@ -35,6 +35,7 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
+import qualified Data.UUID as UUID
 import Data.Word (Word16, Word8)
 
 -- | Encodes all raw fields of a 'M.PublicKeyCredential'. This function is
@@ -125,7 +126,7 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
     -- https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data
     encodeAttestedCredentialData :: M.AttestedCredentialData 'M.Create 'True -> Builder
     encodeAttestedCredentialData M.AttestedCredentialData {..} =
-      Binary.execPut (Binary.putByteString $ M.unAAGUID acdAaguid)
+      Binary.execPut (Binary.putLazyByteString $ UUID.toByteString $ M.unAAGUID acdAaguid)
         <> Binary.execPut (Binary.putWord16be credentialLength)
         <> Binary.execPut (Binary.putByteString $ M.unCredentialId acdCredentialId)
         <> Binary.execPut (Binary.putByteString $ M.unRaw acdCredentialPublicKeyBytes)
