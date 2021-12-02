@@ -15,19 +15,23 @@ import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.Binary.Encoding as ME
 import qualified Crypto.Fido2.Operations.Assertion as Fido2
 import qualified Crypto.Fido2.Operations.Attestation as Fido2
+import Crypto.Fido2.Operations.Common
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
 import Crypto.Random (getRandomBytes)
 import qualified Crypto.Random as Random
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
 import Data.Validation (toEither)
+import Debug.Trace
 import Emulation.Authenticator
-  ( Authenticator,
+  ( Authenticator (AuthenticatorNone, aConformance, aSignatureCounter),
+    AuthenticatorNonConformingBehaviour (RandomPrivateKey, RandomSignatureData, StaticCounter),
+    AuthenticatorSignatureCounter (Unsupported),
     authenticatorGetAssertion,
     authenticatorMakeCredential,
-    isValidAuthenticator,
   )
 import Emulation.Authenticator.Arbitrary ()
 import qualified Emulation.Client.PrivateKey as PrivateKey
@@ -173,13 +177,13 @@ clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} co
 
 -- | Performs attestation to generate a credential, and then uses that
 -- credential to perform assertion.
-attestationAndAssertion ::
+register ::
   (Random.MonadRandom m, MonadFail m) =>
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  m Fido2.SignatureCounterResult
-attestationAndAssertion ao conformance authenticator = do
+  m (Either (NE.NonEmpty Fido2.AttestationError) CredentialEntry, Authenticator)
+register ao conformance authenticator = do
   -- Generate new random input
   assertionChallenge <- M.Challenge <$> Random.getRandomBytes 16
   userId <- M.UserHandle <$> Random.getRandomBytes 16
@@ -201,47 +205,87 @@ attestationAndAssertion ao conformance authenticator = do
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
             options
             mPkcCreate
-  Right credentialEntry <- pure registerResult
+  pure (registerResult, authenticator)
+
+login ::
+  (Random.MonadRandom m, MonadFail m) =>
+  AnnotatedOrigin ->
+  UserAgentConformance ->
+  Authenticator ->
+  CredentialEntry ->
+  m (Either (NE.NonEmpty Fido2.AssertionError) Fido2.SignatureCounterResult)
+login ao conformance authenticator ce@CredentialEntry {..} = do
   attestationChallenge <- M.Challenge <$> Random.getRandomBytes 16
   let options = defaultPkcog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
   -- authenticator should now store the created credential
   (mPkcGet, _) <- clientAssertion options ao conformance authenticator
-  Right loginResult <-
-    pure
-      . toEither
-      $ Fido2.verifyAssertionResponse
-        (aoOrigin ao)
-        (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
-        (Just userId)
-        credentialEntry
-        options
-        mPkcGet
-  pure loginResult
+  pure
+    . toEither
+    $ Fido2.verifyAssertionResponse
+      (aoOrigin ao)
+      (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
+      (Just ceUserHandle)
+      ce
+      options
+      mPkcGet
 
 spec :: SpecWith ()
 spec =
   describe "None" $
     it "succeeds" $
-      property $ \seed authenticator ->
+      property $ \attestationSeed assertionSeed authenticator -> do
         let annotatedOrigin =
               AnnotatedOrigin
                 { aoRpId = M.RpId "localhost",
                   aoOrigin = M.Origin "https://localhost:8080"
                 }
             userAgentConformance = Set.empty
-            c = runApp seed $ attestationAndAssertion annotatedOrigin userAgentConformance authenticator
-         in if isValidAuthenticator authenticator
-              then
-                c `shouldSatisfy` \case
-                  Right Fido2.SignatureCounterZero -> True
-                  Right (Fido2.SignatureCounterUpdated _) -> True
-                  _ -> False
-              else
-                c `shouldSatisfy` \case
-                  Right Fido2.SignatureCounterPotentiallyCloned -> True
-                  Left _ -> True
-                  _ -> False
+        -- We are not currently interested in client or authenticator fails, we
+        -- only wish to test our relying party implementation and are thus only
+        -- interested in its errors.
+        let Right (registerResult, authenticator') = runApp attestationSeed (register annotatedOrigin userAgentConformance authenticator)
+        registerResult `shouldSatisfy` validAttestationResult authenticator
+        -- Only if attestation succeeded can we continue with assertion
+        case registerResult of
+          Right credentialEntry -> do
+            let Right loginResult = runApp assertionSeed (login annotatedOrigin userAgentConformance authenticator' credentialEntry)
+            loginResult `shouldSatisfy` validAssertionResult authenticator
+          _ -> pure ()
+
+-- | Validates the result of assertion. Ensures that the proper errors are
+-- resulted in if the authenticator exhibits nonconforming behaviour, and
+-- checks if the correct result was given if the authenticator does not exhibit
+-- any nonconforming behaviour.
+validAssertionResult :: Authenticator -> Either (NE.NonEmpty Fido2.AssertionError) Fido2.SignatureCounterResult -> Bool
+-- We can only result in a 0 signature counter if the authenticator doesn't
+-- have a counter and is either conforming or only has a static counter
+validAssertionResult AuthenticatorNone {..} (Right Fido2.SignatureCounterZero) =
+  aSignatureCounter == Unsupported && (Set.null aConformance || aConformance == Set.singleton StaticCounter)
+-- A valid response must only happen if we have no non-confirming behaviour
+validAssertionResult AuthenticatorNone {..} (Right (Fido2.SignatureCounterUpdated _)) = Set.null aConformance
+-- A potentially cloned counter must imply that we only exhibited the static
+-- counter non-conforming behaviour
+validAssertionResult AuthenticatorNone {..} (Right Fido2.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
+-- If we did result in errors, we want every piece of non-conforming behaviour
+-- to be validated by some kind of error
+validAssertionResult AuthenticatorNone {..} (Left errors) = all isValidated aConformance
+  where
+    isValidated :: AuthenticatorNonConformingBehaviour -> Bool
+    -- Signing random data should result in an invalid signature
+    isValidated RandomSignatureData = any (\case (Fido2.AssertionInvalidSignature _) -> True; _ -> False) errors
+    -- Signing with a random key should result in an invalid signature
+    isValidated RandomPrivateKey = any (\case (Fido2.AssertionInvalidSignature _) -> True; _ -> False) errors
+    -- A static counter results in a cloned signature, it isn't relevant if it
+    -- results in any other errors.
+    isValidated StaticCounter = True
+
+-- | Validates the result of attestation. Ensures that the proper errors are
+-- resulted in if the authenticator exhibits nonconforming behaviour, and
+-- checks if the correct result was given if the authenticator does not exhibit
+-- any nonconforming behaviour.
+validAttestationResult :: Authenticator -> Either (NE.NonEmpty Fido2.AttestationError) CredentialEntry -> Bool
+validAttestationResult AuthenticatorNone {..} result = True
 
 -- | Create a default set of options for attestation. These options can be modified before using them in the tests
 defaultPkcoc :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create

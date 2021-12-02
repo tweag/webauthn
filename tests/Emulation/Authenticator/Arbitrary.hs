@@ -5,13 +5,19 @@ module Emulation.Authenticator.Arbitrary () where
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Random as Random
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Emulation.Authenticator
   ( Authenticator (AuthenticatorNone),
     AuthenticatorNonConformingBehaviour,
     AuthenticatorSignatureCounter (Global, PerCredential, Unsupported),
   )
 import PublicKeySpec ()
-import Test.QuickCheck (Arbitrary (arbitrary), arbitraryBoundedEnum, oneof)
+import Test.QuickCheck
+  ( Arbitrary (arbitrary),
+    NonEmptyList (getNonEmpty),
+    arbitraryBoundedEnum,
+    oneof,
+  )
 
 instance Arbitrary AuthenticatorNonConformingBehaviour where
   arbitrary = arbitraryBoundedEnum
@@ -44,6 +50,7 @@ instance Arbitrary Authenticator where
       <$> arbitrary
       <*> pure Map.empty
       <*> arbitrary
-      <*> arbitrary
+      -- An authenticator without any supported algorithms is useless to our tests
+      <*> (Set.fromList . getNonEmpty <$> arbitrary)
       <*> arbitrary
       <*> arbitrary
