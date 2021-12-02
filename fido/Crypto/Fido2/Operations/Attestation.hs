@@ -6,7 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.Fido2.Operations.Attestation (AttestationError, verifyAttestationResponse, allSupportedFormats) where
+module Crypto.Fido2.Operations.Attestation (AttestationError (..), verifyAttestationResponse, allSupportedFormats) where
 
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
