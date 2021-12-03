@@ -24,7 +24,7 @@ import Data.Either (isRight)
 import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (toEither)
-import qualified Emulation.Client as Client
+import qualified Emulation
 import qualified Encoding
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
@@ -74,8 +74,8 @@ main = Hspec.hspec $ do
     "Metadata"
     MetadataSpec.spec
   describe
-    "Client Emulation"
-    Client.spec
+    "Emulation"
+    Emulation.spec
   describe
     "Encoding"
     Encoding.spec

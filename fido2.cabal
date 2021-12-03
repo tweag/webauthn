@@ -129,7 +129,9 @@ test-suite tests
     Spec.Types,
     Spec.Util,
     Encoding,
+    Emulation,
     Emulation.Client,
+    Emulation.Client.Arbitrary,
     Emulation.Client.PrivateKey,
     Emulation.Authenticator,
     Emulation.Authenticator.Arbitrary
