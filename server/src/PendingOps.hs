@@ -31,7 +31,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import System.Clock (Clock (RealtimeCoarse), TimeSpec (sec), getTime)
+import System.Clock (Clock (Realtime), TimeSpec (sec), getTime)
 import System.Random.Stateful (globalStdGen, uniformByteStringM)
 
 -- | Configuration for the pending operation management
@@ -77,7 +77,7 @@ getNow =
     -- problem since our expiration times are on the order of minutes, and it's
     -- pretty clear that realtime isn't a security problem, see
     -- <https://security.stackexchange.com/questions/187316/is-exposing-the-server-time-a-security-risk>
-    <$> getTime RealtimeCoarse
+    <$> getTime Realtime
 
 isExpired :: Int64 -> ExpiringChallenge -> Bool
 isExpired now challenge = expiredAfter challenge < now

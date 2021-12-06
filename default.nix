@@ -47,7 +47,7 @@ let
       entr
       fd
       niv
-      python310
+      python3
       yarn
       nodejs
       deploy
