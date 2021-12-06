@@ -7,32 +7,29 @@
 -- | This modules provdes a way to emulate certain client behaviour for testing
 -- purposes. It DOES NOT implement the webauthn specification because there is
 -- no need for it in our tests.
-module Emulation.Client (clientAssertion, spec) where
+module Emulation.Client
+  ( AnnotatedOrigin (..),
+    UserAgentNonConformingBehaviour (..),
+    UserAgentConformance,
+    clientAssertion,
+    clientAttestation,
+  )
+where
 
-import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
 import Crypto.Fido2.Model (Challenge (Challenge))
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.Binary.Encoding as ME
-import qualified Crypto.Fido2.Operations.Assertion as Fido2
-import qualified Crypto.Fido2.Operations.Attestation as Fido2
-import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
-import Crypto.Random (getRandomBytes)
 import qualified Crypto.Random as Random
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
-import Data.Text.Encoding (encodeUtf8)
-import Data.Validation (toEither)
 import Emulation.Authenticator
   ( Authenticator,
     authenticatorGetAssertion,
     authenticatorMakeCredential,
-    isValidAuthenticator,
   )
 import Emulation.Authenticator.Arbitrary ()
 import qualified Emulation.Client.PrivateKey as PrivateKey
-import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
-import Test.QuickCheck (property)
 
 -- | The annotated Origin is the origin with the derived (or provided) rpID. It
 -- is a workaround for the fact that we do not derive the rpID from the origin.
@@ -45,27 +42,10 @@ data AnnotatedOrigin = AnnotatedOrigin
 -- | Potential ways the UserAgent could not conform to the specification
 data UserAgentNonConformingBehaviour
   = RandomChallenge
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 -- | The ways in which the UserAgent should not conform to the spec
 type UserAgentConformance = Set.Set UserAgentNonConformingBehaviour
-
--- | Custom type to combine the MonadPseudoRandom with the Except monad. We
--- force the ChaChaDRG to ensure the App type is completely pure, and
--- evaluating the monad has no side effects.
-newtype App a = App (ExceptT String (Random.MonadPseudoRandom Random.ChaChaDRG) a)
-  deriving newtype (Functor, Applicative, Monad, MonadError String)
-
-instance MonadFail App where
-  fail = throwError
-
-instance Random.MonadRandom App where
-  getRandomBytes n = App $ lift $ getRandomBytes n
-
-runApp :: Integer -> App a -> Either String a
-runApp seed (App except) =
-  let rng = Random.drgNewSeed $ Random.seedFromInteger seed
-   in fst $ Random.withDRG rng $ runExceptT except
 
 -- | Emulates the client-side operation for attestation given an authenticator.
 -- MonadRandom is required during the generation of the new credentials, and
@@ -170,127 +150,3 @@ clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} co
             M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
           }
   pure (response, authenticator')
-
--- | Performs attestation to generate a credential, and then uses that
--- credential to perform assertion.
-attestationAndAssertion ::
-  (Random.MonadRandom m, MonadFail m) =>
-  AnnotatedOrigin ->
-  UserAgentConformance ->
-  Authenticator ->
-  m Fido2.SignatureCounterResult
-attestationAndAssertion ao conformance authenticator = do
-  -- Generate new random input
-  assertionChallenge <- M.Challenge <$> Random.getRandomBytes 16
-  userId <- M.UserHandle <$> Random.getRandomBytes 16
-  -- Create dummy user
-  let user =
-        M.PublicKeyCredentialUserEntity
-          { M.pkcueId = userId,
-            M.pkcueDisplayName = M.UserAccountDisplayName "John Doe",
-            M.pkcueName = M.UserAccountName "john-doe"
-          }
-  let options = defaultPkcoc user assertionChallenge
-  -- Perform client Attestation emulation with a fresh authenticator
-  (mPkcCreate, authenticator) <- clientAttestation options ao conformance authenticator
-  -- Verify the result
-  let registerResult =
-        toEither $
-          Fido2.verifyAttestationResponse
-            (aoOrigin ao)
-            (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
-            options
-            mPkcCreate
-  Right credentialEntry <- pure registerResult
-  attestationChallenge <- M.Challenge <$> Random.getRandomBytes 16
-  let options = defaultPkcog attestationChallenge
-  -- Perform client assertion emulation with the same authenticator, this
-  -- authenticator should now store the created credential
-  (mPkcGet, _) <- clientAssertion options ao conformance authenticator
-  Right loginResult <-
-    pure
-      . toEither
-      $ Fido2.verifyAssertionResponse
-        (aoOrigin ao)
-        (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
-        (Just userId)
-        credentialEntry
-        options
-        mPkcGet
-  pure loginResult
-
-spec :: SpecWith ()
-spec =
-  describe "None" $
-    it "succeeds" $
-      property $ \seed authenticator ->
-        let annotatedOrigin =
-              AnnotatedOrigin
-                { aoRpId = M.RpId "localhost",
-                  aoOrigin = M.Origin "https://localhost:8080"
-                }
-            userAgentConformance = Set.empty
-            c = runApp seed $ attestationAndAssertion annotatedOrigin userAgentConformance authenticator
-         in if isValidAuthenticator authenticator
-              then
-                c `shouldSatisfy` \case
-                  Right Fido2.SignatureCounterZero -> True
-                  Right (Fido2.SignatureCounterUpdated _) -> True
-                  _ -> False
-              else
-                c `shouldSatisfy` \case
-                  Right Fido2.SignatureCounterPotentiallyCloned -> True
-                  Left _ -> True
-                  _ -> False
-
--- | Create a default set of options for attestation. These options can be modified before using them in the tests
-defaultPkcoc :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
-defaultPkcoc userEntity challenge =
-  M.PublicKeyCredentialCreationOptions
-    { M.pkcocRp = M.PublicKeyCredentialRpEntity {M.pkcreId = Nothing, M.pkcreName = "ACME"},
-      M.pkcocUser = userEntity,
-      M.pkcocChallenge = challenge,
-      -- Empty credentialparameters are not supported.
-      M.pkcocPubKeyCredParams =
-        [ M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
-            },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES384
-            },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES512
-            },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierEdDSA
-            }
-        ],
-      M.pkcocTimeout = Nothing,
-      M.pkcocExcludeCredentials = [],
-      M.pkcocAuthenticatorSelection =
-        Just
-          M.AuthenticatorSelectionCriteria
-            { M.ascAuthenticatorAttachment = Nothing,
-              M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
-              M.ascUserVerification = M.UserVerificationRequirementPreferred
-            },
-      M.pkcocAttestation = M.AttestationConveyancePreferenceDirect,
-      M.pkcocExtensions = Nothing
-    }
-
--- | Create a default set of options for assertion. These options can be modified before using them in the tests
-defaultPkcog :: M.Challenge -> M.PublicKeyCredentialOptions 'M.Get
-defaultPkcog challenge =
-  M.PublicKeyCredentialRequestOptions
-    { M.pkcogChallenge = challenge,
-      M.pkcogTimeout = Nothing,
-      M.pkcogRpId = Just "localhost",
-      -- We currently only support client-side discoverable credentials
-      M.pkcogAllowCredentials = [],
-      M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
-      M.pkcogExtensions = Nothing
-    }
