@@ -50,7 +50,7 @@ library
     x509-validation,
     random >= 1.2.0,
     singletons,
-    time,
+    hourglass,
     x509,
     x509-validation,
     x509-store,

@@ -7,6 +7,7 @@ module Crypto.Fido2.Metadata.Service.IDL
     StatusReport (..),
     AuthenticatorStatus (..),
     MetadataBLOBPayload (..),
+    MetadataServiceRegistry (..),
   )
 where
 
@@ -19,7 +20,10 @@ import Crypto.Fido2.Metadata.Statement.IDL (AAGUID, MetadataStatement)
 import qualified Crypto.Fido2.UAF as UAF
 import qualified Crypto.Fido2.WebIDL as IDL
 import qualified Data.Aeson as Aeson
+import qualified Data.ByteString as BS
+import Data.HashMap.Strict (HashMap)
 import Data.List.NonEmpty (NonEmpty)
+import Data.UUID (UUID)
 import GHC.Generics (Generic)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-entry-dictionary)
@@ -122,3 +126,8 @@ data MetadataBLOBPayload = MetadataBLOBPayload
   }
   deriving (Show, Eq, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding MetadataBLOBPayload
+
+data MetadataServiceRegistry = MetadataServiceRegistry
+  { fido2Entries :: HashMap UUID MetadataBLOBPayloadEntry,
+    fidoU2FEntries :: HashMap BS.ByteString MetadataBLOBPayloadEntry
+  }

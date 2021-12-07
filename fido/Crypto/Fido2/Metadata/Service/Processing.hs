@@ -98,13 +98,8 @@ getPayload blob rootCert = do
     Aeson.Success payload -> return payload
     Aeson.Error err -> throwError $ MetadataServiceErrorJSONDecodingError err
 
-data MetadataServiceRegistry = MetadataServiceRegistry
-  { fido2Entries :: HashMap UUID Service.MetadataBLOBPayloadEntry,
-    fidoU2FEntries :: HashMap BS.ByteString Service.MetadataBLOBPayloadEntry
-  }
-
-createMetadataRegistry :: Service.MetadataBLOBPayload -> MetadataServiceRegistry
-createMetadataRegistry payload = MetadataServiceRegistry {..}
+createMetadataRegistry :: Service.MetadataBLOBPayload -> Service.MetadataServiceRegistry
+createMetadataRegistry payload = Service.MetadataServiceRegistry {..}
   where
     fido2Entries :: HashMap UUID Service.MetadataBLOBPayloadEntry
     fido2Entries = HashMap.fromList $ mapMaybe extractFido2Entry $ Service.entries payload
@@ -128,10 +123,10 @@ createMetadataRegistry payload = MetadataServiceRegistry {..}
       Left _err -> Nothing
       Right result -> return result
 
-metadataByKeyIdentifier :: X509.ExtSubjectKeyId -> MetadataServiceRegistry -> Maybe Service.MetadataBLOBPayloadEntry
-metadataByKeyIdentifier (X509.ExtSubjectKeyId keyId) registry =
-  HashMap.lookup keyId (fidoU2FEntries registry)
+metadataByKeyIdentifier :: Service.MetadataServiceRegistry -> X509.ExtSubjectKeyId -> Maybe Service.MetadataBLOBPayloadEntry
+metadataByKeyIdentifier registry (X509.ExtSubjectKeyId keyId) =
+  HashMap.lookup keyId (Service.fidoU2FEntries registry)
 
-metadataByAaguid :: M.AAGUID -> MetadataServiceRegistry -> Maybe Service.MetadataBLOBPayloadEntry
-metadataByAaguid (M.AAGUID aaguid) registry = do
-  HashMap.lookup aaguid (fido2Entries registry)
+metadataByAaguid :: Service.MetadataServiceRegistry -> M.AAGUID -> Maybe Service.MetadataBLOBPayloadEntry
+metadataByAaguid registry (M.AAGUID aaguid) = do
+  HashMap.lookup aaguid (Service.fido2Entries registry)

@@ -13,9 +13,11 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
+import Crypto.Fido2.Metadata.Service.IDL (metadataStatement)
+import Crypto.Fido2.Metadata.Service.Processing (metadataByKeyIdentifier)
+import Crypto.Fido2.Metadata.Statement.IDL (attestationTypes)
 import Crypto.Fido2.Model
-  ( AttestationType (AttestationTypeUncertain),
-    AttestedCredentialData (AttestedCredentialData, acdCredentialId, acdCredentialPublicKey),
+  ( AttestedCredentialData (AttestedCredentialData, acdCredentialId, acdCredentialPublicKey),
     AuthenticatorData (AuthenticatorData, adAttestedCredentialData, adRpIdHash),
     ClientDataHash (unClientDataHash),
     CredentialId (unCredentialId),
@@ -23,6 +25,7 @@ import Crypto.Fido2.Model
   )
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.PublicKey (PublicKey (ES256PublicKey))
+import Crypto.Fido2.Registry (AuthenticatorAttestationType (ATTESTATION_ATTCA, ATTESTATION_BASIC_FULL))
 import Crypto.Number.Serialize (i2osp)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1), Point (Point))
@@ -30,6 +33,7 @@ import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.HashMap.Strict as Map
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
@@ -48,6 +52,7 @@ data DecodingError
     MultipleX5C
   | -- | There was an error decoding the x5c certificate, string is the error resulted by the `Data.X509.decodeSignedCertificate` function
     DecodingErrorX5C String
+  | DecodingErrorCertificateExtension String
   deriving (Show, Exception)
 
 data VerifyingError
@@ -63,7 +68,8 @@ data VerifyingError
 
 data Statement = Statement
   { sig :: ByteString,
-    attCert :: X509.SignedCertificate
+    attCert :: X509.SignedCertificate,
+    keyIdentifier :: Maybe X509.ExtSubjectKeyId
   }
   deriving (Show, Eq)
 
@@ -84,7 +90,12 @@ instance M.AttestationStatementFormat Format where
       Just (CBOR.TList []) -> Left NoX5C
       Just (CBOR.TList _) -> Left MultipleX5C
       _ -> Left NoX5C
-    pure $ Statement sig attCert
+
+    keyId <- case X509.extensionGetE (X509.certExtensions (X509.getCertificate attCert)) of
+      Just (Right ext) -> pure $ Just ext
+      Just (Left err) -> Left $ DecodingErrorCertificateExtension err
+      Nothing -> pure Nothing
+    pure $ Statement sig attCert keyId
 
   asfEncode _ Statement {sig, attCert} =
     CBOR.TMap
@@ -94,7 +105,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerifyingError
 
-  asfVerify _ Statement {attCert, sig} AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
+  asfVerify _ Statement {attCert, sig, keyIdentifier} registry AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above
     -- and perform CBOR decoding on it to extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -156,16 +167,19 @@ instance M.AttestationStatementFormat Format where
 
     -- 7. Optionally, inspect x5c and consult externally provided knowledge to
     -- determine whether attStmt conveys a Basic or AttCA attestation.
-    -- TODO: Metadata
+    let verifiableAttType = case keyIdentifier >>= metadataByKeyIdentifier registry >>= metadataStatement of
+          -- 8. If successful, return implementation-specific values representing
+          -- attestation type Basic, AttCA or uncertainty, and attestation trust path
+          -- x5c.
+          Nothing -> M.VerifiableAttestationTypeUncertain
+          Just statement -> case attestationTypes statement of
+            ATTESTATION_BASIC_FULL :| _ -> M.VerifiableAttestationTypeBasic
+            ATTESTATION_ATTCA :| _ -> M.VerifiableAttestationTypeAttCA
+            _ -> M.VerifiableAttestationTypeUncertain
 
-    -- 8. If successful, return implementation-specific values representing
-    -- attestation type Basic, AttCA or uncertainty, and attestation trust path
-    -- x5c.
-    -- TODO: Metadata
-    -- Currently result in a Uncertain Attestation Type because we could not
-    -- determine Basic or CA attestation without access to a metadata service
-    -- containing the parent certificates.
-    pure . AttestationTypeUncertain $ pure attCert
+    pure (M.AttestationTypeVerifiable verifiableAttType $ pure attCert, M.UnknownAuthenticator, Nothing)
+
+  asfTrustAnchors _ _ = mempty
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

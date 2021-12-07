@@ -125,6 +125,7 @@ instance M.AttestationStatementFormat Format where
   asfVerify
     _
     Statement {..}
+    _meta
     M.AuthenticatorData {M.adRawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
       -- 1. Let authenticatorData denote the authenticator data for the
@@ -150,7 +151,9 @@ instance M.AttestationStatementFormat Format where
 
       -- 6. If successful, return implementation-specific values representing
       -- attestation type Anonymization CA and attestation trust path x5c.
-      pure $ M.AttestationTypeAnonCA x5c
+      pure (M.AttestationTypeVerifiable M.VerifiableAttestationTypeAnonCA x5c, M.UnknownAuthenticator, Nothing)
+
+  asfTrustAnchors _ _ = mempty
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

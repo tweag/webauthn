@@ -125,6 +125,7 @@ instance M.AttestationStatementFormat Format where
   asfVerify
     _
     Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c}
+    _meta
     M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
       let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
@@ -140,7 +141,7 @@ instance M.AttestationStatementFormat Format where
           -- authenticatorData and clientDataHash using the credential public key with alg.
           unless (PublicKey.verify key signedData stmtSig) . Left $ VerificationErrorInvalidSignature
 
-          pure M.AttestationTypeSelf
+          pure (M.AttestationTypeSelf, M.UnknownAuthenticator, Nothing)
 
         -- Basic, AttCA
         Just x5c@(certCred :| _) -> do
@@ -178,7 +179,7 @@ instance M.AttestationStatementFormat Format where
           -- TODO: Inspect x5c and consult externally provided knowledge to
           -- determine whether attStmt conveys a Basic or AttCA attestation. Blocked
           -- by https://github.com/tweag/haskell-fido2/pull/11
-          pure $ M.AttestationTypeUncertain x5c
+          pure (M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain x5c, M.UnknownAuthenticator, Nothing)
       where
         hasDnElement :: X509.DnElement -> [(OID.OID, X509.ASN1CharacterString)] -> Bool
         hasDnElement el = isJust . findDnElement el
@@ -195,6 +196,8 @@ instance M.AttestationStatementFormat Format where
           case asn1 of
             [OctetString (UUID.fromByteString . LBS.fromStrict -> Just s)] -> Right $ M.AAGUID s
             _ -> Left VerificationErrorCredentialAAGUIDMissing
+
+  asfTrustAnchors _ _ = mempty
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

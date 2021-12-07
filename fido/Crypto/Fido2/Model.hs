@@ -18,6 +18,7 @@ module Crypto.Fido2.Model
     AttestationConveyancePreference (..),
     NonEmptyCertificateChain,
     AttestationType (..),
+    VerifiableAttestationType (..),
 
     -- * Newtypes
     AAGUID (..),
@@ -70,11 +71,15 @@ module Crypto.Fido2.Model
 
     -- * Reexports
     module Crypto.Fido2.Model.WebauthnType,
+
+    -- * Others
+    AuthenticatorModel(..)
   )
 where
 
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
+import qualified Crypto.Fido2.Metadata.Service.IDL as Meta
 import Crypto.Fido2.Model.WebauthnType (WebauthnType (Create, Get))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import Crypto.Hash (Digest)
@@ -89,6 +94,7 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
 import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
 import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 
@@ -262,24 +268,12 @@ data AttestationConveyancePreference
 
 type NonEmptyCertificateChain = NonEmpty X509.SignedCertificate
 
--- TODO: There has to be a better representation for this. The
--- 'AttestationTypeUncertain' and the repeated 'NonEmptyCertificateChain's are nasty.
-
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
 -- WebAuthn supports several [attestation types](https://www.w3.org/TR/webauthn-2/#attestation-type),
 -- defining the semantics of [attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
 -- and their underlying trust models:
 data AttestationType
-  = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#basic-attestation)
-    -- In the case of basic attestation [UAFProtocol](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
-    -- the authenticator’s [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair)
-    -- is specific to an authenticator "model", i.e., a "batch" of authenticators.
-    -- Thus, authenticators of the same, or similar, model often share the same
-    -- [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
-    -- See [§ 14.4.1 Attestation Privacy](https://www.w3.org/TR/webauthn-2/#sctn-attestation-privacy)
-    -- for further information.
-    AttestationTypeBasic NonEmptyCertificateChain
-  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#self-attestation)
+  = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#self-attestation)
     -- In the case of [self attestation](https://www.w3.org/TR/webauthn-2/#self-attestation),
     -- also known as surrogate basic attestation [UAFProtocol](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
     -- the Authenticator does not have any specific [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
@@ -289,6 +283,35 @@ data AttestationType
     -- [attestation private key](https://www.w3.org/TR/webauthn-2/#attestation-private-key)
     -- typically use this attestation type.
     AttestationTypeSelf
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#none)
+    -- In this case, no attestation information is available. See also
+    -- [§ 8.7 None Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-none-attestation).
+    AttestationTypeNone
+  | -- | Grouping of attestations that are verifiable by a certificate chain
+    AttestationTypeVerifiable VerifiableAttestationType NonEmptyCertificateChain
+  deriving (Eq, Show)
+
+data VerifiableAttestationType
+  = -- | [Attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+    -- conveying [attestations](https://www.w3.org/TR/webauthn-2/#attestation) of
+    -- [type](https://www.w3.org/TR/webauthn-2/#attestation-type)
+    -- [AttCA](https://www.w3.org/TR/webauthn-2/#attca) or
+    -- [AnonCA](https://www.w3.org/TR/webauthn-2/#anonca) use the same data
+    -- structure as those of [type](https://www.w3.org/TR/webauthn-2/#attestation-type)
+    -- [Basic](https://www.w3.org/TR/webauthn-2/#basic), so the three attestation
+    -- types are, in general, distinguishable only with externally provided knowledge regarding the contents
+    -- of the [attestation certificates](https://www.w3.org/TR/webauthn-2/#attestation-certificate)
+    -- conveyed in the [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement).
+    VerifiableAttestationTypeUncertain
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#basic-attestation)
+    -- In the case of basic attestation [UAFProtocol](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
+    -- the authenticator’s [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair)
+    -- is specific to an authenticator "model", i.e., a "batch" of authenticators.
+    -- Thus, authenticators of the same, or similar, model often share the same
+    -- [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
+    -- See [§ 14.4.1 Attestation Privacy](https://www.w3.org/TR/webauthn-2/#sctn-attestation-privacy)
+    -- for further information.
+    VerifiableAttestationTypeBasic
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attca)
     -- In this case, an [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
     -- is based on a Trusted Platform Module (TPM) and holds an authenticator-specific
@@ -306,7 +329,7 @@ data AttestationType
     -- [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
     -- individually, and conveyed to [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- as [attestation certificates](https://www.w3.org/TR/webauthn-2/#attestation-certificate).
-    AttestationTypeAttCA NonEmptyCertificateChain
+    VerifiableAttestationTypeAttCA
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#anonca)
     -- In this case, the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
     -- uses an [Anonymization CA](https://www.w3.org/TR/webauthn-2/#anonymization-ca)
@@ -315,22 +338,7 @@ data AttestationType
     -- such that the [attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
     -- presented to [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- do not provide uniquely identifiable information, e.g., that might be used for tracking purposes.
-    AttestationTypeAnonCA NonEmptyCertificateChain
-  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#none)
-    -- In this case, no attestation information is available. See also
-    -- [§ 8.7 None Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-none-attestation).
-    AttestationTypeNone
-  | -- | [Attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
-    -- conveying [attestations](https://www.w3.org/TR/webauthn-2/#attestation) of
-    -- [type](https://www.w3.org/TR/webauthn-2/#attestation-type)
-    -- [AttCA](https://www.w3.org/TR/webauthn-2/#attca) or
-    -- [AnonCA](https://www.w3.org/TR/webauthn-2/#anonca) use the same data
-    -- structure as those of [type](https://www.w3.org/TR/webauthn-2/#attestation-type)
-    -- [Basic](https://www.w3.org/TR/webauthn-2/#basic), so the three attestation
-    -- types are, in general, distinguishable only with externally provided knowledge regarding the contents
-    -- of the [attestation certificates](https://www.w3.org/TR/webauthn-2/#attestation-certificate)
-    -- conveyed in the [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement).
-    AttestationTypeUncertain NonEmptyCertificateChain
+    VerifiableAttestationTypeAnonCA
   deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
@@ -826,6 +834,11 @@ data AuthenticatorData (t :: WebauthnType) raw = AuthenticatorData
   }
   deriving (Eq, Show)
 
+data AuthenticatorModel
+  = UnknownAuthenticator
+  | Fido2Authenticator AAGUID
+  | FidoU2FAuthenticator X509.ExtSubjectKeyId
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
 -- This class is used to specify an [attestation statement format](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)'s
 -- [identifier](https://www.w3.org/TR/webauthn-2/#sctn-attstn-fmt-ids)
@@ -874,9 +887,15 @@ class
   asfVerify ::
     a ->
     AttStmt a ->
+    Meta.MetadataServiceRegistry ->
     AuthenticatorData 'Create 'True ->
     ClientDataHash ->
-    Either (AttStmtVerificationError a) AttestationType
+    Either (AttStmtVerificationError a) (AttestationType, AuthenticatorModel, Maybe Meta.MetadataBLOBPayloadEntry)
+
+  asfTrustAnchors ::
+    a ->
+    VerifiableAttestationType ->
+    X509.CertificateStore
 
   -- | The type of decoding errors that can occur when decoding this
   -- attestation statement using 'asfDecode'

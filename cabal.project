@@ -1,1 +1,10 @@
 packages: .
+
+-- https://github.com/vincenthz/hs-certificate/pull/126
+source-repository-package
+  type: git
+  location: https://github.com/tweag/hs-certificate
+  tag: cf94e073ac628e9d89c99bb0b6da7abf4b725580
+  --sha256: 0j6qwdi1b3jabrzfrh5kh5s2gl1hr5cp5kiiiaiqvyic1q51wiiv
+  subdir:
+    x509-validation
