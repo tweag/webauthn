@@ -4,6 +4,9 @@ version: 0.1.0.0
 maintainer: silvan.mosberger@tweag.io
 build-type: Simple
 license-file: LICENSE
+copyright:
+  2020 - 2021: Arian van Putten
+  2021 -     : Tweag I/O
 
 common sanity
   default-language: Haskell2010
