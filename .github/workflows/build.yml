@@ -33,5 +33,5 @@ jobs:
 
     - name: "Build"
       run: |
-        nix-build -A fido2.checks
-        nix-build -A fido2.components.exes
+        nix-build -A webauthn.checks
+        nix-build -A webauthn.components.exes

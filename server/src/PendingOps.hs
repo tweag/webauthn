@@ -21,8 +21,8 @@ where
 import Control.Concurrent (forkIO, threadDelay)
 import qualified Control.Concurrent.STM as STM
 import Control.Monad (forever, unless, when)
-import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI, sing)
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI, sing)
 import Data.Binary (Binary (get, put))
 import qualified Data.Binary as Binary
 import Data.Binary.Get as Binary (getInt64le, getRemainingLazyByteString)

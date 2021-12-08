@@ -16,11 +16,11 @@ module Emulation.Client
   )
 where
 
-import Crypto.Fido2.Model (Challenge (Challenge))
-import qualified Crypto.Fido2.Model as M
-import qualified Crypto.Fido2.Model.Binary.Encoding as ME
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import Crypto.WebAuthn.Model (Challenge (Challenge))
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Emulation.Authenticator

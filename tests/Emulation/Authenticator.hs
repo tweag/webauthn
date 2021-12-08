@@ -16,16 +16,16 @@ module Emulation.Authenticator
 where
 
 import Control.Monad (forM_, when)
-import qualified Crypto.Fido2.Model as M
-import qualified Crypto.Fido2.Model.Binary.Encoding as ME
-import qualified Crypto.Fido2.Operations.Attestation.None as None
-import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
 import qualified Crypto.PubKey.ECC.Generate as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
+import qualified Crypto.WebAuthn.Operations.Attestation.None as None
+import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ByteArray as BA
 import Data.List (find)
 import qualified Data.Map as Map

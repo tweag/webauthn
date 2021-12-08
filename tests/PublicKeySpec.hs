@@ -15,7 +15,14 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 import qualified Codec.CBOR.Read as Read
 import Codec.CBOR.Write (toLazyByteString)
 import qualified Codec.CBOR.Write as Write
-import Crypto.Fido2.PublicKey
+import Crypto.Hash (SHA384 (SHA384))
+import Crypto.Hash.Algorithms (HashAlgorithm, SHA256 (SHA256), SHA512 (SHA512))
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Generate as ECC
+import qualified Crypto.PubKey.ECC.Types as ECC
+import qualified Crypto.PubKey.Ed25519 as Ed25519
+import qualified Crypto.Random as Random
+import Crypto.WebAuthn.PublicKey
   ( COSEAlgorithmIdentifier
       ( COSEAlgorithmIdentifierES256,
         COSEAlgorithmIdentifierES384,
@@ -33,13 +40,6 @@ import Crypto.Fido2.PublicKey
     toECDSAKey,
     verify,
   )
-import Crypto.Hash (SHA384 (SHA384))
-import Crypto.Hash.Algorithms (HashAlgorithm, SHA256 (SHA256), SHA512 (SHA512))
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import qualified Crypto.PubKey.ECC.Generate as ECC
-import qualified Crypto.PubKey.ECC.Types as ECC
-import qualified Crypto.PubKey.Ed25519 as Ed25519
-import qualified Crypto.Random as Random
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1

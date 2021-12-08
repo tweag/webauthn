@@ -10,7 +10,11 @@ module Emulation.Client.PrivateKey
   )
 where
 
-import Crypto.Fido2.PublicKey
+import qualified Crypto.Hash as Hash
+import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.Ed25519 as Ed25519
+import Crypto.Random (MonadRandom)
+import Crypto.WebAuthn.PublicKey
   ( COSEAlgorithmIdentifier
       ( COSEAlgorithmIdentifierES256,
         COSEAlgorithmIdentifierES384,
@@ -18,11 +22,7 @@ import Crypto.Fido2.PublicKey
         COSEAlgorithmIdentifierEdDSA
       ),
   )
-import qualified Crypto.Fido2.PublicKey as PublicKey
-import qualified Crypto.Hash as Hash
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import qualified Crypto.PubKey.Ed25519 as Ed25519
-import Crypto.Random (MonadRandom)
+import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1

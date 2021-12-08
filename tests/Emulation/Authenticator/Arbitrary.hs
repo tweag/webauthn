@@ -2,8 +2,8 @@
 
 module Emulation.Authenticator.Arbitrary () where
 
-import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Model as M
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Emulation.Authenticator

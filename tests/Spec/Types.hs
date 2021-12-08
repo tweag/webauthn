@@ -10,10 +10,10 @@
 module Spec.Types () where
 
 import Control.Monad.Cont (replicateM)
-import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
-import qualified Crypto.Fido2.Operations.Attestation.None as None
 import Crypto.Hash (hash)
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
+import qualified Crypto.WebAuthn.Operations.Attestation.None as None
 import qualified Data.ByteString as BS
 import Data.Set (Set)
 import qualified Data.Set as Set

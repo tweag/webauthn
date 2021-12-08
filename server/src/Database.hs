@@ -24,8 +24,8 @@ module Database
   )
 where
 
-import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import Data.Word (Word32)
