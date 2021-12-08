@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Crypto.Fido2.Operations.Attestation.FidoU2F
   ( format,
@@ -12,7 +13,7 @@ where
 
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
-import Control.Monad (unless)
+import Control.Monad (unless, void)
 import Crypto.Fido2.Metadata.Service.IDL (metadataStatement)
 import Crypto.Fido2.Metadata.Service.Processing (metadataByKeyIdentifier)
 import Crypto.Fido2.Metadata.Statement.IDL (attestationTypes)
@@ -37,6 +38,15 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
+import Debug.Trace (trace, traceShow)
+import Data.ASN1.Object (toASN1)
+import Data.ASN1.Parse (runParseASN1, ParseASN1, onNextContainer, getNextContainer, getNext)
+import Data.ASN1.Types (ASN1ConstructionType(Sequence), ASN1 (BitString))
+import Data.ASN1.BitArray (bitArrayGetData, bitArrayLength)
+import Crypto.Hash (Digest, SHA1, hash)
+import Data.ByteArray (convert)
+import qualified Data.ByteString.Base16 as Base16
+import Data.Text.Encoding (decodeUtf8)
 
 data Format = Format
 
@@ -69,7 +79,7 @@ data VerifyingError
 data Statement = Statement
   { sig :: ByteString,
     attCert :: X509.SignedCertificate,
-    keyIdentifier :: Maybe X509.ExtSubjectKeyId
+    keyIdentifier :: X509.ExtAuthorityKeyId
   }
   deriving (Show, Eq)
 
@@ -91,11 +101,32 @@ instance M.AttestationStatementFormat Format where
       Just (CBOR.TList _) -> Left MultipleX5C
       _ -> Left NoX5C
 
-    keyId <- case X509.extensionGetE (X509.certExtensions (X509.getCertificate attCert)) of
-      Just (Right ext) -> pure $ Just ext
-      Just (Left err) -> Left $ DecodingErrorCertificateExtension err
-      Nothing -> pure Nothing
-    pure $ Statement sig attCert keyId
+    let x = toASN1 (X509.certPubKey $ X509.getCertificate attCert) []
+        Right (y :: BS.ByteString) = runParseASN1 p x
+        {-
+        SubjectPublicKeyInfo  ::=  SEQUENCE  {
+             algorithm            AlgorithmIdentifier,
+             subjectPublicKey     BIT STRING  }
+        -}
+        p :: ParseASN1 BS.ByteString
+        p = onNextContainer Sequence $ do
+          {-
+          AlgorithmIdentifier  ::=  SEQUENCE  {
+               algorithm               OBJECT IDENTIFIER,
+               parameters              ANY DEFINED BY algorithm OPTIONAL  }
+          -}
+          -- We're not interested in this
+          void $ getNextContainer Sequence
+          BitString bitArray <- getNext
+          unless (bitArrayLength bitArray `mod` 8 == 0) $ fail "bitArray has padding"
+          pure $ bitArrayGetData bitArray
+        h :: Digest SHA1 = trace ("Public key bytes are: " <> Text.unpack (decodeUtf8 (Base16.encode y))) $ hash y
+    let keyId = trace ("Public key id is: " <> Text.unpack (decodeUtf8 (Base16.encode (convert h)))) $ X509.ExtAuthorityKeyId $ convert h
+      -- case X509.extensionGetE (X509.certExtensions (X509.getCertificate attCert)) of
+      --Just (Right ext) -> trace "Got a key id" $ pure $ Just ext
+      --Just (Left err) -> trace "Failed to decode key id" $ Left $ DecodingErrorCertificateExtension err
+      --Nothing -> trace "No key id!" $ pure Nothing
+    pure $ traceShow x $ Statement sig attCert keyId
 
   asfEncode _ Statement {sig, attCert} =
     CBOR.TMap
@@ -167,7 +198,8 @@ instance M.AttestationStatementFormat Format where
 
     -- 7. Optionally, inspect x5c and consult externally provided knowledge to
     -- determine whether attStmt conveys a Basic or AttCA attestation.
-    let verifiableAttType = case keyIdentifier >>= metadataByKeyIdentifier registry >>= metadataStatement of
+    let metadataEntry = metadataByKeyIdentifier registry keyIdentifier
+        verifiableAttType = case metadataEntry >>= metadataStatement of
           -- 8. If successful, return implementation-specific values representing
           -- attestation type Basic, AttCA or uncertainty, and attestation trust path
           -- x5c.
@@ -177,7 +209,7 @@ instance M.AttestationStatementFormat Format where
             ATTESTATION_ATTCA :| _ -> M.VerifiableAttestationTypeAttCA
             _ -> M.VerifiableAttestationTypeUncertain
 
-    pure (M.AttestationTypeVerifiable verifiableAttType $ pure attCert, M.UnknownAuthenticator, Nothing)
+    pure (M.AttestationTypeVerifiable verifiableAttType $ pure attCert, M.FidoU2FAuthenticator keyIdentifier, metadataEntry)
 
   asfTrustAnchors _ _ = mempty
 

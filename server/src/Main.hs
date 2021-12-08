@@ -8,23 +8,27 @@ module Main
 where
 
 import Control.Monad (when)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
+import Crypto.Fido2.Metadata.Service.Processing (RootCertificate (RootCertificate), createMetadataRegistry, getPayload)
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Model.Binary.Decoding as MD
 import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
 import Crypto.Fido2.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
 import Crypto.Fido2.Operations.Assertion (verifyAssertionResponse)
-import Crypto.Fido2.Operations.Attestation (AttestationError, allSupportedFormats, verifyAttestationResponse)
+import Crypto.Fido2.Operations.Attestation (AttestationError, AttestationResult (rEntry), allSupportedFormats, verifyAttestationResponse)
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Crypto.Hash (hash)
 import Data.Aeson (FromJSON, Value (String))
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.PEM as PEM
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -32,12 +36,14 @@ import qualified Data.Text.IO as Text
 import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.Encoding as LText
 import Data.Validation (Validation (Failure, Success))
+import qualified Data.X509 as X509
 import qualified Database
 import GHC.Generics (Generic)
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (addBase, staticPolicy)
 import PendingOps (PendingOps, defaultPendingOpsConfig, getPendingOptions, insertPendingOptions, newPendingOps)
 import System.Environment (getArgs)
+import System.Hourglass (dateCurrent)
 import System.Random.Stateful (globalStdGen, uniformM)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
@@ -231,12 +237,24 @@ completeRegistration origin rpIdHash db pending = do
       Right result -> pure result
 
   let userHandle = M.pkcueId $ M.pkcocUser options
+  now <- Scotty.liftAndCatchIO dateCurrent
+  bytes <- Scotty.liftAndCatchIO $ LBS.readFile "../tests/golden-metadata/big/blob.jwt"
+  certBytes <- Scotty.liftAndCatchIO $ BS.readFile "../tests/golden-metadata/big/root.crt"
+  let Right [PEM.pemContent -> pem] = PEM.pemParseBS certBytes
+      Right cert = X509.decodeSignedCertificate pem
+  epay <- Scotty.liftAndCatchIO $ runExceptT $ getPayload bytes (RootCertificate cert "mds.fidoalliance.org")
+  payload <- case epay of
+    Left err -> Scotty.raiseStatus HTTP.status401 (LText.pack $ show err)
+    Right result -> return result
+  let registry = createMetadataRegistry payload
   -- step 1 to 17
   -- We abort if we couldn't attest the credential
   -- FIXME
-  entry <- case verifyAttestationResponse origin rpIdHash options cred of
+  entry <- case verifyAttestationResponse origin rpIdHash registry now options cred of
     Failure (err :| _) -> fail $ show err
-    Success result -> pure result
+    Success result -> do
+      Scotty.liftAndCatchIO $ print result
+      pure $ rEntry result
   -- if the credential was succesfully attested, we will see if the
   -- credential doesn't exist yet, and if it doesn't, insert it.
   result <- Scotty.liftAndCatchIO $

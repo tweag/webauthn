@@ -73,7 +73,7 @@ module Crypto.Fido2.Model
     module Crypto.Fido2.Model.WebauthnType,
 
     -- * Others
-    AuthenticatorModel(..)
+    AuthenticatorModel (..),
   )
 where
 
@@ -837,7 +837,8 @@ data AuthenticatorData (t :: WebauthnType) raw = AuthenticatorData
 data AuthenticatorModel
   = UnknownAuthenticator
   | Fido2Authenticator AAGUID
-  | FidoU2FAuthenticator X509.ExtSubjectKeyId
+  | FidoU2FAuthenticator X509.ExtAuthorityKeyId
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
 -- This class is used to specify an [attestation statement format](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)'s

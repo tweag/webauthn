@@ -37,6 +37,7 @@ import qualified Data.UUID as UUID
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
+import Debug.Trace (trace)
 
 data RootCertificate = RootCertificate
   { -- | The root certificate itself
@@ -81,6 +82,7 @@ instance VerificationKeyStore (ExceptT JWTError IO) (JWSHeader ()) p RootCertifi
 data MetadataServiceError
   = MetadataServiceErrorJWTError JWTError
   | MetadataServiceErrorJSONDecodingError String
+  deriving (Eq, Show)
 
 -- | Decodes and verifies a FIDO Metadata Service blob according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
 getPayload ::
@@ -123,9 +125,10 @@ createMetadataRegistry payload = Service.MetadataServiceRegistry {..}
       Left _err -> Nothing
       Right result -> return result
 
-metadataByKeyIdentifier :: Service.MetadataServiceRegistry -> X509.ExtSubjectKeyId -> Maybe Service.MetadataBLOBPayloadEntry
-metadataByKeyIdentifier registry (X509.ExtSubjectKeyId keyId) =
-  HashMap.lookup keyId (Service.fidoU2FEntries registry)
+metadataByKeyIdentifier :: Service.MetadataServiceRegistry -> X509.ExtAuthorityKeyId -> Maybe Service.MetadataBLOBPayloadEntry
+metadataByKeyIdentifier registry (X509.ExtAuthorityKeyId keyId) =
+  trace ("Looking up " <> show keyId <> " in all ids: " <> show (HashMap.keys (Service.fidoU2FEntries registry)))
+  $ HashMap.lookup keyId (Service.fidoU2FEntries registry)
 
 metadataByAaguid :: Service.MetadataServiceRegistry -> M.AAGUID -> Maybe Service.MetadataBLOBPayloadEntry
 metadataByAaguid registry (M.AAGUID aaguid) = do

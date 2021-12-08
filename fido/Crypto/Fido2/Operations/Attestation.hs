@@ -5,11 +5,13 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 
-module Crypto.Fido2.Operations.Attestation (AttestationError (..), verifyAttestationResponse, allSupportedFormats) where
+module Crypto.Fido2.Operations.Attestation (AttestationError (..), AttestationResult (..), verifyAttestationResponse, allSupportedFormats) where
 
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
+import qualified Data.PEM as PEM
 import qualified Crypto.Fido2.Metadata.Service.IDL as Meta
 import Crypto.Fido2.Model (SupportedAttestationStatementFormats, sasfSingleton)
 import qualified Crypto.Fido2.Model as M
@@ -21,12 +23,20 @@ import qualified Crypto.Fido2.Operations.Attestation.Packed as Packed
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
 import qualified Crypto.Fido2.PublicKey as PublicKey
 import qualified Crypto.Hash as Hash
+import Data.ASN1.Types (asn1CharacterToString)
 import Data.Hourglass (DateTime)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (catMaybes)
 import Data.Validation (Validation)
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
+import Debug.Trace (trace, traceShow, traceShowId)
+import Crypto.Fido2.Metadata.Statement.IDL (MetadataStatement(attestationRootCertificates))
+import qualified Crypto.Fido2.WebIDL as IDL
+import qualified Data.ByteString.Base64 as Base64
+import Data.Text.Encoding (encodeUtf8)
+import qualified Data.X509.CertificateStore as X509
 
 allSupportedFormats :: SupportedAttestationStatementFormats
 allSupportedFormats =
@@ -67,6 +77,7 @@ data AttestationResult = AttestationResult
     rMetadataEntry :: Maybe Meta.MetadataBLOBPayloadEntry,
     rAttestationType :: M.AttestationType
   }
+  deriving (Eq, Show)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- This function implements step 8 - 21 of the spec, step 1-7 are done
@@ -250,8 +261,14 @@ verifyAttestationResponse
                   -- attestedCredentialData in authData.
                   let formatRootCerts = M.asfTrustAnchors aoFmt verifiableAttType
                       metadataRootCerts = case metadataEntry >>= Meta.metadataStatement of
-                        Nothing -> mempty
-                        Just _entries -> undefined -- FIXME
+                        Nothing -> trace "No statement" mempty
+                        Just statement -> X509.makeCertificateStore x
+                          where x = map d $ attestationRootCertificates statement
+                                d :: IDL.DOMString -> X509.SignedCertificate
+                                d string = traceShowId cert
+                                  where
+                                    Right bytes = Base64.decode (encodeUtf8 string)
+                                    Right cert = X509.decodeSignedCertificate bytes
 
                       -- 21. Assess the attestation trustworthiness using the outputs of the
                       -- verification procedure in step 19, as follows:
@@ -269,12 +286,24 @@ verifyAttestationResponse
                         X509.validatePure
                           currentTime
                           X509.defaultHooks
+                            { X509.hookValidateName = \_fqhn cert -> traceShow (getNames cert) []
+                            }
                           X509.defaultChecks
                           (formatRootCerts <> metadataRootCerts)
-                          ("FIXME?", mempty)
+                          ("", mempty)
                           (X509.CertificateChain (NE.toList chain))
                    in case NE.nonEmpty chainValidationFailures of
                         Just ne -> failure $ AttestationChainValidationError ne
                         Nothing -> pure result
                 _ -> pure result
       pure x
+
+getNames :: X509.Certificate -> (Maybe String, [String])
+getNames cert = (commonName >>= asn1CharacterToString, altNames)
+  where
+    commonName = X509.getDnElement X509.DnCommonName $ X509.certSubjectDN cert
+    altNames = maybe [] toAltName $ X509.extensionGet $ X509.certExtensions cert
+    toAltName (X509.ExtSubjectAltName names) = catMaybes $ map unAltName names
+      where
+        unAltName (X509.AltNameDNS s) = Just s
+        unAltName _ = Nothing

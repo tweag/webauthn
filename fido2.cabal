@@ -40,6 +40,7 @@ library
     base64-bytestring,
     containers,
     hashable,
+    pem,
     cryptonite,
     memory,
     cborg,
@@ -105,8 +106,10 @@ executable server
     cookie,
     cryptonite,
     fido2,
+    hourglass,
     http-types,
     mtl,
+    pem,
     random,
     scotty,
     sqlite-simple,
@@ -117,7 +120,8 @@ executable server
     validation,
     wai,
     wai-middleware-static,
-    warp
+    warp,
+    x509
 
 test-suite tests
   import: sanity
