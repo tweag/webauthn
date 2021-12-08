@@ -1,63 +1,98 @@
-# Haskell FIDO2 Library
+# Haskell WebAuthn Library
 
-This library implements FIDO2's WebAuthn specification. We intend to bring
-passwordless authentication using security keys or your platforms TPM chip to
-Haskell web applications.
+This library implements the
+[Web Authentication Relying Party specification Level 2][spec]. The goal of Web
+Authentication (WebAuthn) is to bring passwordless login/second factor
+authentication to the web, logging in using a FIDO U2F Security Key, finger
+print scanner and some other authenticator.
 
- - Read https://webauthn.guide/ for an overview of the problems that are solved
-   by the specification.
- - Go to https://webauthn.io/ for a demo of the WebAuthn specification. You can
-   use a security key which supports WebAuthn (like a Yubikey) or your platform's
-   TPM chip (if you don't have a Yubikey but do have an Android phone).
+## Setting up the environment
+We assume Nix is used for the development of this library. If not using Nix,
+take a look at `default.nix` for the dependencies and GHC version. All
+instructions below assume the use of Nix.
 
-We're working on a demo of our own.
+### Nix Caches
+We highly recommend using the IOHK Binary Cache to avoid building of several
+copies of GHC. Setting up the IOHK binary cache is easily done following the
+[instructions][cache] provided by IOHK.
 
-## Status
+Additionally, Tweag provides a Cachix cache for the library itself and all
+non-Haskell dependencies, setting up the `tweag-haskell-fido2` cache can be
+done using the [instructions][cachix] provided by Cachix.
 
-This library is experimental and currently does some untested funky stuff.
-Especially the crypto things are in flux and need to be verified by someone
-competent.
+### Nix Shell
+The Nix shell provides all libraries and tools required to build the library,
+tests, and example server. Simply call `nix-shell` to enter a shell. If the
+binary caches have been configured properly, this should take little time. If
+they have not been properly configured, entering the Nix shell will take
+multiple hours.
 
-We're also changing things left and right and make no guarantees about backwards
-compatibility. Do not depend on this yet.
+All further instructions in this README assume that you are in a Nix shell.
 
-## How to's
+## Developing the Library
+The [Haskell Language Server (hls)][hls] and [Ormolu][ormolu] are highly
+recommended for the development of this library. The hls
+[documentation][hls-editor] describes how to configure your editor to use it.
+We also recommend enabling auto-format using Ormolu for your editor. We do,
+however, also provide a bash script in `bin/autoformat.sh` that uses Ormolu to
+format all Haskell source files in the repository.
 
-### Sync Nix files with the Cabal files
+Code not formatted using Ormolu will be rejected in CI.
 
-```console
-$ nix-shell
-$ cabal2nix . > ./fido2.nix
+## Running the tests
+Tests are provided in the `tests` directory. Running these tests is done via
+cabal:
+```bash
+cabal run test-suite:tests
 ```
 
-### Run the interactive demo
-
-```console
-$ nix-shell
-$ cd server
-$ ./run.sh
+## Running the demo
+The library comes with an example implementation for a server that makes use of
+it, which can be found in the `server` directory. All dependencies required to
+build the example server are included in the Nix shell.
+```bash
+cd server
+./run.sh
 ```
 
-### Autoformat all Haskell code
+Changes to the server's source files automatically trigger a rebuild of the
+server.
 
-```console
-$ nix-shell
-$ ./bin/autoformat.sh
+## Testing with an Authenticator
+The easiest way to test the server, or your own application, is to use the
+Chrome WebAuthn development tool. Simply open the Chrome DevTools, click on the
+three dots in the top right, select "More tools -> WebAuthn", and then enable
+the virtual environment.
+
+Testing with a physical authenticator is easiest using an Android or iOS phone
+supporting it, or a dedicated token like a [YubiKey][yubikey] or the
+open-source [SoloKey][solokey]. Testing with a phone requires setting up a
+certificate for the domain of the relying party as WebAuthn only works via
+https, with an exception being made for `localhost`.
+
+## LICENSE
+```text
+Copyright
+  2020 - 2021 Arian van Putten
+  2021 -      Tweag I/O
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
 ```
 
-### Using the binary cache
-
-A binary cache for both MacOS and Linux is maintained by CI and served by
-https://cachix.org
-
-```console
-$ cachix use haskell-fido2
-```
-
-### Using VSCode + GHCIDE
-
-1. Install [Nix Environment Selector][nix-env-selector]
-2. Install [ghcide][ghcide]
-
-[ghcide]:https://marketplace.visualstudio.com/items?itemName=DigitalAssetHoldingsLLC.ghcide
-[nix-env-selector]:https://marketplace.visualstudio.com/items?itemName=arrterian.nix-env-selector
+[cache]: https://input-output-hk.github.io/haskell.nix/tutorials/getting-started.html#setting-up-the-binary-cache
+[cachix]: https://app.cachix.org/cache/tweag-haskell-fido2
+[hls-editor]: https://haskell-language-server.readthedocs.io/en/latest/configuration.html#configuring-your-editor
+[hls]: https://github.com/haskell/haskell-language-server
+[ormolu]: https://github.com/tweag/ormolu
+[solokey]: https://solokeys.com/
+[spec]: https://www.w3.org/TR/webauthn-2/
+[yubikey]: https://www.yubico.com/
