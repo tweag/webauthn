@@ -174,6 +174,9 @@ data VerificationError
   | -- | The purpose field(s) were not equal to the singleton set containing
     -- KM_PURPOSE_SIGN
     VerificationErrorAndroidKeyPurposeFieldInvalid
+  | -- | The Public key cannot verify the signature over the authenticatorData
+    -- and the clientDataHash.
+    VerificationErrorVerificationFailure
   deriving (Show, Exception)
 
 -- | [(spec)](https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h)
@@ -233,9 +236,8 @@ instance M.AttestationStatementFormat Format where
 
     -- 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the
     -- public key in the first certificate in x5c with the algorithm specified in alg.
-    -- TODO: Maybe use verifyX509Sig like in Packed.hs
     let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
-    unless (PublicKey.verify pubKey signedData sig) . Left $ undefined
+    unless (PublicKey.verify pubKey signedData sig) $ Left VerificationErrorVerificationFailure
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the
     -- attestedCredentialData in authenticatorData.
