@@ -30,12 +30,12 @@ import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
 import Crypto.WebAuthn.Model.JavaScript.Types (Convert (JS))
-import Crypto.WebAuthn.Model.WebauthnType (SingI)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Bifunctor (first)
 import Data.Coerce (Coercible, coerce)
 import Data.Maybe (catMaybes, mapMaybe)
+import Data.Singletons (SingI)
 
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be
 -- decoded from the more generic JavaScript type @'JS' a@ with the 'decode' function.

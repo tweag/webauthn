@@ -61,7 +61,7 @@ data VerificationError
 -- We extend the statement to include values we would further have to decode
 -- during the verification procedure.
 data Statement = Statement
-  { x5c :: M.NonEmptyCertificateChain,
+  { x5c :: NE.NonEmpty X509.SignedCertificate,
     sNonce :: Digest SHA256,
     subjectPublicKey :: PublicKey.PublicKey
   }
@@ -150,7 +150,9 @@ instance M.AttestationStatementFormat Format where
 
       -- 6. If successful, return implementation-specific values representing
       -- attestation type Anonymization CA and attestation trust path x5c.
-      pure $ M.AttestationTypeAnonCA x5c
+      pure $
+        M.SomeAttestationType $
+          M.AttestationTypeVerifiable M.VerifiableAttestationTypeAnonCA (M.Fido2Chain x5c)
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

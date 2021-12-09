@@ -14,8 +14,8 @@ module Crypto.WebAuthn.Metadata.Service.Types
 where
 
 import qualified Crypto.WebAuthn.Metadata.Service.IDL as ServiceIDL
-import qualified Crypto.WebAuthn.Metadata.Statement.IDL as StatementIDL
-import Crypto.WebAuthn.Metadata.Statement.Types (MetadataEntryIdentifier, MetadataStatement)
+import Crypto.WebAuthn.Metadata.Statement.Types (MetadataStatement)
+import qualified Crypto.WebAuthn.Model as M
 import Data.Hourglass (Date)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Singletons (SingI)
@@ -40,12 +40,8 @@ data MetadataPayload = MetadataPayload
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-entry-dictionary)
 -- Same as 'StatementIDL.MetadataBLOBPayloadEntry', but fully decoded. This type
 -- is parametrized over the 'StatementIDL.ProtocolFamily' this metadata entry is for
-data MetadataEntry (p :: StatementIDL.ProtocolFamily) = MetadataEntry
-  { -- | Either an [aaguid](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-aaguid)
-    -- or an [attestationCertificateKeyIdentifiers](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-attestationcertificatekeyidentifiers),
-    -- depending on the 'StatementIDL.ProtocolFamily'
-    meIdentifier :: MetadataEntryIdentifier p,
-    -- [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-metadatastatement)
+data MetadataEntry (p :: M.ProtocolKind) = MetadataEntry
+  { -- [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-metadatastatement)
     meMetadataStatement :: Maybe (MetadataStatement p),
     -- TODO: Implement this, currently not used in the blob however
     -- meBiometricStatusReports :: Maybe (NonEmpty BiometricStatusReport),
@@ -57,9 +53,10 @@ data MetadataEntry (p :: StatementIDL.ProtocolFamily) = MetadataEntry
     -- rogueListURL, rogueListHash. TODO, but not currently used in the
     -- BLOB and difficult to implement since it involves JWT
   }
+  deriving (Eq, Show)
 
 -- | Same as 'MetadataEntry', but with its type parameter erased
-data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (MetadataEntry p)
+data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (M.AuthenticatorIdentifier p) (MetadataEntry p)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#statusreport-dictionary)
 -- Same as 'StatementIDL.StatusReport', but fully decoded.
@@ -83,3 +80,4 @@ data StatusReport = StatusReport
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-statusreport-certificationrequirementsversion)
     srCertificationRequirementsVersion :: Maybe Text
   }
+  deriving (Eq, Show)

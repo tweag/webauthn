@@ -1,10 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Crypto.WebAuthn.Metadata.Statement.Types
   ( MetadataStatement (..),
-    MetadataEntryIdentifier (..),
     ProtocolVersion (..),
     WebauthnAttestationType (..),
   )
@@ -13,7 +13,6 @@ where
 import qualified Crypto.WebAuthn.Metadata.Statement.IDL as StatementIDL
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Registry as Registry
-import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
@@ -22,12 +21,11 @@ import qualified Data.X509 as X509
 import GHC.Word (Word16)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-keys)
-data MetadataStatement (p :: StatementIDL.ProtocolFamily) = MetadataStatement
+data MetadataStatement (p :: M.ProtocolKind) = MetadataStatement
   { -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-legalheader)
     msLegalHeader :: Text,
-    -- | Either the AAGUID in case of FIDO 2 or a list of
-    -- SubjectKeyIdentifier's in case of FIDO U2F identifying this authenticator
-    msIdentifier :: MetadataEntryIdentifier p,
+    -- msAaid, msAaguid, attestationCertificateKeyIdentifiers: These fields are the key of the hashmaps in MetadataServiceRegistry
+
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-description)
     msDescription :: Text,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-alternativedescriptions)
@@ -76,34 +74,27 @@ data MetadataStatement (p :: StatementIDL.ProtocolFamily) = MetadataStatement
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-authenticatorgetinfo)
     msAuthenticatorGetInfo :: Maybe StatementIDL.AuthenticatorGetInfo
   }
-
--- | A way to identify an authenticator
-data MetadataEntryIdentifier (p :: StatementIDL.ProtocolFamily) where
-  -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-aaguid)
-  -- FIDO 2 authenticators are identified using an AAGUID
-  MetadataEntryIdentifierFido2 ::
-    {idAaguid :: M.AAGUID} ->
-    MetadataEntryIdentifier 'StatementIDL.ProtocolFamilyFIDO2
-  -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-attestationcertificatekeyidentifiers)
-  -- FIDO U2F authenticators are identified using a subject key identifier
-  MetadataEntryIdentifierFidoU2F ::
-    {idSubjectKeyIdentifiers :: NonEmpty SubjectKeyIdentifier} ->
-    MetadataEntryIdentifier 'StatementIDL.ProtocolFamilyU2F
+  deriving (Eq, Show)
 
 -- | FIDO protocol versions, parametrized by the protocol family
-data ProtocolVersion (p :: StatementIDL.ProtocolFamily) where
+data ProtocolVersion (p :: M.ProtocolKind) where
   -- | FIDO U2F 1.0
-  U2F1_0 :: ProtocolVersion 'StatementIDL.ProtocolFamilyU2F
+  U2F1_0 :: ProtocolVersion 'M.FidoU2F
   -- | FIDO U2F 1.1
-  U2F1_1 :: ProtocolVersion 'StatementIDL.ProtocolFamilyU2F
+  U2F1_1 :: ProtocolVersion 'M.FidoU2F
   -- | FIDO U2F 1.2
-  U2F1_2 :: ProtocolVersion 'StatementIDL.ProtocolFamilyU2F
+  U2F1_2 :: ProtocolVersion 'M.FidoU2F
   -- | FIDO 2, CTAP 2.0
-  CTAP2_0 :: ProtocolVersion 'StatementIDL.ProtocolFamilyFIDO2
+  CTAP2_0 :: ProtocolVersion 'M.Fido2
   -- | FIDO 2, CTAP 2.1
-  CTAP2_1 :: ProtocolVersion 'StatementIDL.ProtocolFamilyFIDO2
+  CTAP2_1 :: ProtocolVersion 'M.Fido2
+
+deriving instance Eq (ProtocolVersion p)
+
+deriving instance Show (ProtocolVersion p)
 
 -- | Values of 'Registry.AuthenticatorAttestationType' but limited to the ones possible with Webauthn, see https://www.w3.org/TR/webauthn-2/#sctn-attestation-types
 data WebauthnAttestationType
   = WebauthnAttestationBasic
   | WebauthnAttestationAttCA
+  deriving (Eq, Show)

@@ -155,16 +155,12 @@ instance M.AttestationStatementFormat Format where
 
       -- 7. Optionally, inspect x5c and consult externally provided knowledge to
       -- determine whether attStmt conveys a Basic or AttCA attestation.
-      -- TODO: Metadata
-
       -- 8. If successful, return implementation-specific values representing
       -- attestation type Basic, AttCA or uncertainty, and attestation trust path
       -- x5c.
-      -- TODO: Metadata
-      -- Currently result in a Uncertain Attestation Type because we could not
-      -- determine Basic or CA attestation without access to a metadata service
-      -- containing the parent certificates.
-      pure . M.AttestationTypeUncertain $ pure attCert
+      pure $
+        M.SomeAttestationType $
+          M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain (M.FidoU2FCert attCert)
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

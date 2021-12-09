@@ -22,7 +22,6 @@ module Crypto.WebAuthn.Metadata.Statement.IDL
     AlternativeDescriptions (..),
     AuthenticatorGetInfo (..),
     ProtocolFamily (..),
-    SProtocolFamily (..),
 
     -- * Metadata Statement
     MetadataStatement (..),
@@ -30,15 +29,12 @@ module Crypto.WebAuthn.Metadata.Statement.IDL
 where
 
 import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), EnumJSONEncoding, JSONEncoding)
-import Crypto.WebAuthn.Model.WebauthnType (sing)
 import qualified Crypto.WebAuthn.Registry as Registry
 import qualified Crypto.WebAuthn.UAF as UAF
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
-import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
-import Data.Singletons (Sing, SingI)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 
@@ -259,23 +255,3 @@ data ProtocolFamily
   | ProtocolFamilyFIDO2
   deriving (Show, Eq, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "ProtocolFamily" ProtocolFamily
-
-data SProtocolFamily :: ProtocolFamily -> Type where
-  SProtocolFamilyUAF :: SProtocolFamily 'ProtocolFamilyUAF
-  SProtocolFamilyU2F :: SProtocolFamily 'ProtocolFamilyU2F
-  SProtocolFamilyFIDO2 :: SProtocolFamily 'ProtocolFamilyFIDO2
-
-deriving instance Show (SProtocolFamily p)
-
-deriving instance Eq (SProtocolFamily p)
-
-type instance Sing = SProtocolFamily
-
-instance SingI 'ProtocolFamilyUAF where
-  sing = SProtocolFamilyUAF
-
-instance SingI 'ProtocolFamilyU2F where
-  sing = SProtocolFamilyU2F
-
-instance SingI 'ProtocolFamilyFIDO2 where
-  sing = SProtocolFamilyFIDO2

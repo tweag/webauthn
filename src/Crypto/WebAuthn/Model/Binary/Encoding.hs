@@ -20,7 +20,6 @@ import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import qualified Codec.Serialise as CBOR
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI, sing)
 import Crypto.WebAuthn.PublicKey (encodePublicKey)
 import qualified Data.Aeson as Aeson
 import qualified Data.Binary.Put as Binary
@@ -33,6 +32,7 @@ import Data.ByteString.Builder (Builder, stringUtf8, toLazyByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import Data.Singletons (SingI, sing)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.UUID as UUID
@@ -45,8 +45,8 @@ encodeRawPublicKeyCredential :: forall t raw. SingI t => M.PublicKeyCredential t
 encodeRawPublicKeyCredential M.PublicKeyCredential {..} =
   M.PublicKeyCredential
     { pkcResponse = case sing @t of
-        SCreate -> encodeRawAuthenticatorAttestationResponse pkcResponse
-        SGet -> encodeRawAuthenticatorAssertionResponse pkcResponse,
+        M.SCreate -> encodeRawAuthenticatorAttestationResponse pkcResponse
+        M.SGet -> encodeRawAuthenticatorAssertionResponse pkcResponse,
       ..
     }
   where
@@ -99,8 +99,8 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
         userPresentFlag = if M.adfUserPresent adFlags then Bits.bit 0 else 0
         userVerifiedFlag = if M.adfUserVerified adFlags then Bits.bit 2 else 0
         attestedCredentialDataPresentFlag = case sing @t of
-          SCreate -> Bits.bit 6
-          SGet -> 0
+          M.SCreate -> Bits.bit 6
+          M.SGet -> 0
         extensionsPresentFlag = case adExtensions of
           Just _ -> Bits.bit 7
           Nothing -> 0
@@ -112,8 +112,8 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
         <> Binary.execPut (Binary.putWord8 flags)
         <> Binary.execPut (Binary.putWord32be $ M.unSignatureCounter adSignCount)
         <> ( case sing @t of
-               SCreate -> encodeAttestedCredentialData rawAttestedCredentialData
-               SGet -> mempty
+               M.SCreate -> encodeAttestedCredentialData rawAttestedCredentialData
+               M.SGet -> mempty
            )
         <> maybe mempty encodeExtensions adExtensions
 
@@ -136,13 +136,13 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
 
     encodeRawAttestedCredentialData :: forall t raw. SingI t => M.AttestedCredentialData t raw -> M.AttestedCredentialData t 'True
     encodeRawAttestedCredentialData = case sing @t of
-      SCreate -> \M.AttestedCredentialData {..} ->
+      M.SCreate -> \M.AttestedCredentialData {..} ->
         M.AttestedCredentialData
           { acdCredentialPublicKeyBytes =
               M.WithRaw $ LBS.toStrict $ CBOR.toLazyByteString $ encodePublicKey acdCredentialPublicKey,
             ..
           }
-      SGet -> \M.NoAttestedCredentialData -> M.NoAttestedCredentialData
+      M.SGet -> \M.NoAttestedCredentialData -> M.NoAttestedCredentialData
 
 -- | Encodes all raw fields of a 'M.CollectedClientData'. This function is
 -- needed for a client implementation
@@ -166,8 +166,8 @@ encodeRawCollectedClientData M.CollectedClientData {..} = M.CollectedClientData 
 
     typeValue :: Text
     typeValue = case sing @t of
-      SCreate -> "webauthn.create"
-      SGet -> "webauthn.get"
+      M.SCreate -> "webauthn.create"
+      M.SGet -> "webauthn.get"
 
     challengeValue :: Text
     challengeValue = decodeUtf8 (Base64Url.encode (M.unChallenge ccdChallenge))

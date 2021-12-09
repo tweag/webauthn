@@ -12,12 +12,13 @@ module Spec.Types () where
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
+import Crypto.WebAuthn.Model.Kinds (SWebauthnKind (SCreate, SGet))
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
 import qualified Data.ByteString.Lazy as LBS
 import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Singletons (SingI, sing)
 import Data.Text.Encoding (encodeUtf8)
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID

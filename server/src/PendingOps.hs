@@ -22,7 +22,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import qualified Control.Concurrent.STM as STM
 import Control.Monad (forever, unless, when)
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI, sing)
+import Crypto.WebAuthn.Model.Kinds (SWebauthnKind (SCreate, SGet))
 import Data.Binary (Binary (get, put))
 import qualified Data.Binary as Binary
 import Data.Binary.Get as Binary (getInt64le, getRemainingLazyByteString)
@@ -31,6 +31,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Singletons (SingI, sing)
 import System.Clock (Clock (Realtime), TimeSpec (sec), getTime)
 import System.Random.Stateful (globalStdGen, uniformByteStringM)
 

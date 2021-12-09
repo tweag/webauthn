@@ -23,11 +23,11 @@ import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
 import Crypto.WebAuthn.Model.JavaScript.Types (Convert (JS))
-import Crypto.WebAuthn.Model.WebauthnType (SingI)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Map as Map
+import Data.Singletons (SingI)
 
 -- | @'Encode' hs@ indicates that the Haskell-specific type @hs@ can be
 -- encoded to the more generic JavaScript type @'JS' hs@ with the 'encode' function.
