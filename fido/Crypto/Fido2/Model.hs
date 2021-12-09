@@ -17,6 +17,7 @@ module Crypto.Fido2.Model
     UserVerificationRequirement (..),
     AttestationConveyancePreference (..),
     NonEmptyCertificateChain,
+    AttestationKind (..),
     AttestationType (..),
     VerifiableAttestationType (..),
 
@@ -74,12 +75,12 @@ module Crypto.Fido2.Model
 
     -- * Others
     AuthenticatorModel (..),
+    AttStmtVerificationResult (..),
   )
 where
 
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
-import qualified Crypto.Fido2.Metadata.Service.IDL as Meta
 import Crypto.Fido2.Model.WebauthnType (WebauthnType (Create, Get))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import Crypto.Hash (Digest)
@@ -268,28 +269,35 @@ data AttestationConveyancePreference
 
 type NonEmptyCertificateChain = NonEmpty X509.SignedCertificate
 
+data AttestationKind
+  = Unverifiable
+  | Verifiable
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
 -- WebAuthn supports several [attestation types](https://www.w3.org/TR/webauthn-2/#attestation-type),
 -- defining the semantics of [attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
 -- and their underlying trust models:
-data AttestationType
-  = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#self-attestation)
-    -- In the case of [self attestation](https://www.w3.org/TR/webauthn-2/#self-attestation),
-    -- also known as surrogate basic attestation [UAFProtocol](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
-    -- the Authenticator does not have any specific [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
-    -- Instead it uses the [credential private key](https://www.w3.org/TR/webauthn-2/#credential-private-key)
-    -- to create the [attestation signature](https://www.w3.org/TR/webauthn-2/#attestation-signature).
-    -- Authenticators without meaningful protection measures for an
-    -- [attestation private key](https://www.w3.org/TR/webauthn-2/#attestation-private-key)
-    -- typically use this attestation type.
-    AttestationTypeSelf
-  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#none)
-    -- In this case, no attestation information is available. See also
-    -- [§ 8.7 None Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-none-attestation).
-    AttestationTypeNone
-  | -- | Grouping of attestations that are verifiable by a certificate chain
-    AttestationTypeVerifiable VerifiableAttestationType NonEmptyCertificateChain
-  deriving (Eq, Show)
+data AttestationType (k :: AttestationKind) where
+  -- | [(spec)](https://www.w3.org/TR/webauthn-2/#none)
+  -- In this case, no attestation information is available. See also
+  -- [§ 8.7 None Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-none-attestation).
+  AttestationTypeNone :: AttestationType 'Unverifiable
+  -- | [(spec)](https://www.w3.org/TR/webauthn-2/#self-attestation)
+  -- In the case of [self attestation](https://www.w3.org/TR/webauthn-2/#self-attestation),
+  -- also known as surrogate basic attestation [UAFProtocol](https://www.w3.org/TR/webauthn-2/#biblio-uafprotocol),
+  -- the Authenticator does not have any specific [attestation key pair](https://www.w3.org/TR/webauthn-2/#attestation-key-pair).
+  -- Instead it uses the [credential private key](https://www.w3.org/TR/webauthn-2/#credential-private-key)
+  -- to create the [attestation signature](https://www.w3.org/TR/webauthn-2/#attestation-signature).
+  -- Authenticators without meaningful protection measures for an
+  -- [attestation private key](https://www.w3.org/TR/webauthn-2/#attestation-private-key)
+  -- typically use this attestation type.
+  AttestationTypeSelf :: AttestationType 'Unverifiable
+  -- | Grouping of attestations that are verifiable by a certificate chain
+  AttestationTypeVerifiable :: VerifiableAttestationType -> NonEmptyCertificateChain -> AttestationType 'Verifiable
+
+deriving instance Eq (AttestationType k)
+
+deriving instance Show (AttestationType k)
 
 data VerifiableAttestationType
   = -- | [Attestation statements](https://www.w3.org/TR/webauthn-2/#attestation-statement)
@@ -834,11 +842,16 @@ data AuthenticatorData (t :: WebauthnType) raw = AuthenticatorData
   }
   deriving (Eq, Show)
 
-data AuthenticatorModel
-  = UnknownAuthenticator
-  | Fido2Authenticator AAGUID
-  | FidoU2FAuthenticator X509.ExtAuthorityKeyId
-  deriving (Eq, Show)
+data AuthenticatorModel (k :: AttestationKind) where
+  UnknownAuthenticator :: AuthenticatorModel 'Unverifiable
+  KnownFido2Authenticator :: AAGUID -> AuthenticatorModel 'Verifiable
+  KnownFidoU2FAuthenticator :: X509.ExtAuthorityKeyId -> AuthenticatorModel 'Verifiable
+
+deriving instance Eq (AuthenticatorModel k)
+
+deriving instance Show (AuthenticatorModel k)
+
+data AttStmtVerificationResult = forall k. AttStmtVerificationResult (AttestationType k) (AuthenticatorModel k)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
 -- This class is used to specify an [attestation statement format](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)'s
@@ -888,10 +901,9 @@ class
   asfVerify ::
     a ->
     AttStmt a ->
-    Meta.MetadataServiceRegistry ->
     AuthenticatorData 'Create 'True ->
     ClientDataHash ->
-    Either (AttStmtVerificationError a) (AttestationType, AuthenticatorModel, Maybe Meta.MetadataBLOBPayloadEntry)
+    Either (AttStmtVerificationError a) AttStmtVerificationResult
 
   asfTrustAnchors ::
     a ->

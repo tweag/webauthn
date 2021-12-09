@@ -1,6 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Crypto.Fido2.Operations.Attestation.FidoU2F
   ( format,
@@ -14,9 +14,6 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless, void)
-import Crypto.Fido2.Metadata.Service.IDL (metadataStatement)
-import Crypto.Fido2.Metadata.Service.Processing (metadataByKeyIdentifier)
-import Crypto.Fido2.Metadata.Statement.IDL (attestationTypes)
 import Crypto.Fido2.Model
   ( AttestedCredentialData (AttestedCredentialData, acdCredentialId, acdCredentialPublicKey),
     AuthenticatorData (AuthenticatorData, adAttestedCredentialData, adRpIdHash),
@@ -26,27 +23,24 @@ import Crypto.Fido2.Model
   )
 import qualified Crypto.Fido2.Model as M
 import Crypto.Fido2.PublicKey (PublicKey (ES256PublicKey))
-import Crypto.Fido2.Registry (AuthenticatorAttestationType (ATTESTATION_ATTCA, ATTESTATION_BASIC_FULL))
+import Crypto.Hash (Digest, SHA1, hash)
 import Crypto.Number.Serialize (i2osp)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1), Point (Point))
+import Data.ASN1.BitArray (bitArrayGetData, bitArrayLength)
+import Data.ASN1.Parse (ParseASN1, getNext, getNextContainer, onNextContainer, runParseASN1)
+import Data.ASN1.Types (ASN1 (BitString), ASN1ConstructionType (Sequence), toASN1)
+import Data.ByteArray (convert)
 import qualified Data.ByteArray as BA
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as Base16
 import qualified Data.HashMap.Strict as Map
-import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8)
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 import Debug.Trace (trace, traceShow)
-import Data.ASN1.Object (toASN1)
-import Data.ASN1.Parse (runParseASN1, ParseASN1, onNextContainer, getNextContainer, getNext)
-import Data.ASN1.Types (ASN1ConstructionType(Sequence), ASN1 (BitString))
-import Data.ASN1.BitArray (bitArrayGetData, bitArrayLength)
-import Crypto.Hash (Digest, SHA1, hash)
-import Data.ByteArray (convert)
-import qualified Data.ByteString.Base16 as Base16
-import Data.Text.Encoding (decodeUtf8)
 
 data Format = Format
 
@@ -122,10 +116,10 @@ instance M.AttestationStatementFormat Format where
           pure $ bitArrayGetData bitArray
         h :: Digest SHA1 = trace ("Public key bytes are: " <> Text.unpack (decodeUtf8 (Base16.encode y))) $ hash y
     let keyId = trace ("Public key id is: " <> Text.unpack (decodeUtf8 (Base16.encode (convert h)))) $ X509.ExtAuthorityKeyId $ convert h
-      -- case X509.extensionGetE (X509.certExtensions (X509.getCertificate attCert)) of
-      --Just (Right ext) -> trace "Got a key id" $ pure $ Just ext
-      --Just (Left err) -> trace "Failed to decode key id" $ Left $ DecodingErrorCertificateExtension err
-      --Nothing -> trace "No key id!" $ pure Nothing
+    -- case X509.extensionGetE (X509.certExtensions (X509.getCertificate attCert)) of
+    --Just (Right ext) -> trace "Got a key id" $ pure $ Just ext
+    --Just (Left err) -> trace "Failed to decode key id" $ Left $ DecodingErrorCertificateExtension err
+    --Nothing -> trace "No key id!" $ pure Nothing
     pure $ traceShow x $ Statement sig attCert keyId
 
   asfEncode _ Statement {sig, attCert} =
@@ -136,7 +130,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerifyingError
 
-  asfVerify _ Statement {attCert, sig, keyIdentifier} registry AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
+  asfVerify _ Statement {attCert, sig, keyIdentifier} AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above
     -- and perform CBOR decoding on it to extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -198,18 +192,12 @@ instance M.AttestationStatementFormat Format where
 
     -- 7. Optionally, inspect x5c and consult externally provided knowledge to
     -- determine whether attStmt conveys a Basic or AttCA attestation.
-    let metadataEntry = metadataByKeyIdentifier registry keyIdentifier
-        verifiableAttType = case metadataEntry >>= metadataStatement of
-          -- 8. If successful, return implementation-specific values representing
-          -- attestation type Basic, AttCA or uncertainty, and attestation trust path
-          -- x5c.
-          Nothing -> M.VerifiableAttestationTypeUncertain
-          Just statement -> case attestationTypes statement of
-            ATTESTATION_BASIC_FULL :| _ -> M.VerifiableAttestationTypeBasic
-            ATTESTATION_ATTCA :| _ -> M.VerifiableAttestationTypeAttCA
-            _ -> M.VerifiableAttestationTypeUncertain
-
-    pure (M.AttestationTypeVerifiable verifiableAttType $ pure attCert, M.FidoU2FAuthenticator keyIdentifier, metadataEntry)
+    -- NOTE: Done generically in Attestation.hs
+    -- 8. If successful, return implementation-specific values representing
+    -- attestation type Basic, AttCA or uncertainty, and attestation trust path
+    -- x5c.
+    let attType = M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain $ pure attCert
+    pure $ M.AttStmtVerificationResult attType (M.KnownFidoU2FAuthenticator keyIdentifier)
 
   asfTrustAnchors _ _ = mempty
 

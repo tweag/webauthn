@@ -125,7 +125,6 @@ instance M.AttestationStatementFormat Format where
   asfVerify
     _
     Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c}
-    _meta
     M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
       let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
@@ -141,7 +140,7 @@ instance M.AttestationStatementFormat Format where
           -- authenticatorData and clientDataHash using the credential public key with alg.
           unless (PublicKey.verify key signedData stmtSig) . Left $ VerificationErrorInvalidSignature
 
-          pure (M.AttestationTypeSelf, M.UnknownAuthenticator, Nothing)
+          pure $ M.AttStmtVerificationResult M.AttestationTypeSelf M.UnknownAuthenticator
 
         -- Basic, AttCA
         Just x5c@(certCred :| _) -> do
@@ -176,10 +175,8 @@ instance M.AttestationStatementFormat Format where
               certAAGUID <- decodeAAGUID (X509.extRawContent ext)
               unless (aaguid == certAAGUID) (Left VerificationErrorCertificateAAGUIDMismatch)
 
-          -- TODO: Inspect x5c and consult externally provided knowledge to
-          -- determine whether attStmt conveys a Basic or AttCA attestation. Blocked
-          -- by https://github.com/tweag/haskell-fido2/pull/11
-          pure (M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain x5c, M.UnknownAuthenticator, Nothing)
+          let attType = M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain x5c
+          pure $ M.AttStmtVerificationResult attType (M.KnownFido2Authenticator aaguid)
       where
         hasDnElement :: X509.DnElement -> [(OID.OID, X509.ASN1CharacterString)] -> Bool
         hasDnElement el = isJust . findDnElement el

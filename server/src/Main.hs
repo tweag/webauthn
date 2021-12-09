@@ -18,7 +18,7 @@ import qualified Crypto.Fido2.Model.JavaScript as JS
 import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
 import Crypto.Fido2.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
 import Crypto.Fido2.Operations.Assertion (verifyAssertionResponse)
-import Crypto.Fido2.Operations.Attestation (AttestationError, AttestationResult (rEntry), allSupportedFormats, verifyAttestationResponse)
+import Crypto.Fido2.Operations.Attestation (AttestationError, AttestationResult (rEntry), SomeAttestationResult (SomeAttestationResult), allSupportedFormats, verifyAttestationResponse)
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
 import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Crypto.Hash (hash)
@@ -252,7 +252,7 @@ completeRegistration origin rpIdHash db pending = do
   -- FIXME
   entry <- case verifyAttestationResponse origin rpIdHash registry now options cred of
     Failure (err :| _) -> fail $ show err
-    Success result -> do
+    Success (SomeAttestationResult result) -> do
       Scotty.liftAndCatchIO $ print result
       pure $ rEntry result
   -- if the credential was succesfully attested, we will see if the

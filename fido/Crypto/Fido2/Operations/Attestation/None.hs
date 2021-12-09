@@ -25,7 +25,7 @@ instance M.AttestationStatementFormat Format where
   asfEncode _ _ = CBOR.TMap []
 
   type AttStmtVerificationError Format = Void
-  asfVerify _ _ _ _ _ = Right (M.AttestationTypeNone, M.UnknownAuthenticator, Nothing)
+  asfVerify _ _ _ _ = pure $ M.AttStmtVerificationResult M.AttestationTypeNone M.UnknownAuthenticator
 
   asfTrustAnchors _ _ = mempty
 

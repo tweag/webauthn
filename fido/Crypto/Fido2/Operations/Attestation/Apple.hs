@@ -22,12 +22,15 @@ import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
 import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base64 as Base64
 import Data.HashMap.Strict (HashMap, (!?))
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
 
 data Format = Format
 
@@ -125,7 +128,6 @@ instance M.AttestationStatementFormat Format where
   asfVerify
     _
     Statement {..}
-    _meta
     M.AuthenticatorData {M.adRawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
       -- 1. Let authenticatorData denote the authenticator data for the
@@ -151,9 +153,19 @@ instance M.AttestationStatementFormat Format where
 
       -- 6. If successful, return implementation-specific values representing
       -- attestation type Anonymization CA and attestation trust path x5c.
-      pure (M.AttestationTypeVerifiable M.VerifiableAttestationTypeAnonCA x5c, M.UnknownAuthenticator, Nothing)
+      let attType = M.AttestationTypeVerifiable M.VerifiableAttestationTypeAnonCA x5c
+          aaguid = M.acdAaguid credData
+      pure $ M.AttStmtVerificationResult attType (M.KnownFido2Authenticator aaguid)
 
-  asfTrustAnchors _ _ = mempty
+  asfTrustAnchors _ _ = X509.makeCertificateStore [rootCert]
+
+rootCertBytes :: BS.ByteString
+Right rootCertBytes = Base64.decode "MIICEjCCAZmgAwIBAgIQaB0BbHo84wIlpQGUKEdXcTAKBggqhkjOPQQDAzBLMR8wHQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJbmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTIwMDMxODE4MjEzMloXDTQ1MDMxNTAwMDAwMFowSzEfMB0GA1UEAwwWQXBwbGUgV2ViQXV0aG4gUm9vdCBDQTETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49AgEGBSuBBAAiA2IABCJCQ2pTVhzjl4Wo6IhHtMSAzO2cv+H9DQKev3//fG59G11kxu9eI0/7o6V5uShBpe1u6l6mS19S1FEh6yGljnZAJ+2GNP1mi/YK2kSXIuTHjxA/pcoRf7XkOtO4o1qlcaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUJtdk2cV4wlpn0afeaxLQG2PxxtcwDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2cAMGQCMFrZ+9DsJ1PW9hfNdBywZDsWDbWFp28it1d/5w2RPkRX3Bbn/UbDTNLx7Jr3jAGGiQIwHFj+dJZYUJR786osByBelJYsVZd2GbHQu209b5RCmGQ21gpSAk9QZW4B1bWeT0vT"
+
+rootCert :: X509.SignedCertificate
+Right rootCert = X509.decodeSignedCertificate rootCertBytes
+
+-- https://www.apple.com/certificateauthority/private/
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

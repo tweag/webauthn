@@ -1,18 +1,28 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Crypto.Fido2.Operations.Attestation (AttestationError (..), AttestationResult (..), verifyAttestationResponse, allSupportedFormats) where
+module Crypto.Fido2.Operations.Attestation
+  ( AttestationError (..),
+    AttestationResult (..),
+    SomeAttestationResult (..),
+    verifyAttestationResponse,
+    allSupportedFormats,
+  )
+where
 
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
-import qualified Data.PEM as PEM
 import qualified Crypto.Fido2.Metadata.Service.IDL as Meta
+import Crypto.Fido2.Metadata.Service.Processing (metadataByAaguid, metadataByKeyIdentifier)
+import Crypto.Fido2.Metadata.Statement.IDL (MetadataStatement (attestationRootCertificates, attestationTypes))
 import Crypto.Fido2.Model (SupportedAttestationStatementFormats, sasfSingleton)
 import qualified Crypto.Fido2.Model as M
 import qualified Crypto.Fido2.Operations.Attestation.AndroidKey as AndroidKey
@@ -22,21 +32,21 @@ import qualified Crypto.Fido2.Operations.Attestation.None as None
 import qualified Crypto.Fido2.Operations.Attestation.Packed as Packed
 import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
 import qualified Crypto.Fido2.PublicKey as PublicKey
+import Crypto.Fido2.Registry (AuthenticatorAttestationType (ATTESTATION_ATTCA, ATTESTATION_BASIC_FULL))
+import qualified Crypto.Fido2.WebIDL as IDL
 import qualified Crypto.Hash as Hash
 import Data.ASN1.Types (asn1CharacterToString)
+import qualified Data.ByteString.Base64 as Base64
 import Data.Hourglass (DateTime)
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (catMaybes)
+import Data.Maybe (mapMaybe)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Validation (Validation)
 import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import Debug.Trace (trace, traceShow, traceShowId)
-import Crypto.Fido2.Metadata.Statement.IDL (MetadataStatement(attestationRootCertificates))
-import qualified Crypto.Fido2.WebIDL as IDL
-import qualified Data.ByteString.Base64 as Base64
-import Data.Text.Encoding (encodeUtf8)
-import qualified Data.X509.CertificateStore as X509
 
 allSupportedFormats :: SupportedAttestationStatementFormats
 allSupportedFormats =
@@ -68,16 +78,26 @@ data AttestationError
   | AttestationChainValidationError (NonEmpty X509.FailedReason)
   deriving (Show)
 
-data AttestationResult = AttestationResult
-  { -- | credential to store in the database, needs to be passed in
-    -- future verifyAssertionResponse calls
-    rEntry :: CredentialEntry,
-    -- | The authenticator model used
-    rAuthenticatorModel :: M.AuthenticatorModel,
-    rMetadataEntry :: Maybe Meta.MetadataBLOBPayloadEntry,
-    rAttestationType :: M.AttestationType
+data AuthenticatorMetadata (k :: M.AttestationKind) where
+  NoMetadata :: AuthenticatorMetadata k
+  Metadata :: Meta.MetadataBLOBPayloadEntry -> AuthenticatorMetadata 'M.Verifiable
+
+deriving instance Eq (AuthenticatorMetadata k)
+
+deriving instance Show (AuthenticatorMetadata k)
+
+data AttestationResult k = AttestationResult
+  { rEntry :: CredentialEntry,
+    rAttestationType :: M.AttestationType k,
+    rAuthenticatorModel :: M.AuthenticatorModel k,
+    rMetadata :: AuthenticatorMetadata k
   }
-  deriving (Eq, Show)
+
+deriving instance Eq (AttestationResult k)
+
+deriving instance Show (AttestationResult k)
+
+data SomeAttestationResult = forall k. SomeAttestationResult (AttestationResult k)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- This function implements step 8 - 21 of the spec, step 1-7 are done
@@ -95,7 +115,7 @@ verifyAttestationResponse ::
   M.PublicKeyCredential 'M.Create 'True ->
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
   -- Or () in case of a result.
-  Validation (NonEmpty AttestationError) AttestationResult
+  Validation (NonEmpty AttestationError) SomeAttestationResult
 verifyAttestationResponse
   rpOrigin
   rpIdHash
@@ -235,75 +255,107 @@ verifyAttestationResponse
       -- 19. Verify that attStmt is a correct attestation statement, conveying a
       -- valid attestation signature, by using the attestation statement format
       -- fmt’s verification procedure given attStmt, authData and hash.
-      x <- case M.asfVerify aoFmt aoAttStmt registry authData hash of
+      let entry =
+            CredentialEntry
+              { ceUserHandle = M.pkcueId $ M.pkcocUser options,
+                ceCredentialId = M.pkcIdentifier credential,
+                cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
+                ceSignCounter = M.adSignCount authData
+              }
+      x <- case M.asfVerify aoFmt aoAttStmt authData hash of
         Left err -> failure $ AttestationFormatError $ SomeException err
-        Right (attType, authModel, metadataEntry) ->
-          let result =
-                AttestationResult
-                  { rEntry =
-                      CredentialEntry
-                        { ceUserHandle = M.pkcueId $ M.pkcocUser options,
-                          ceCredentialId = M.pkcIdentifier credential,
-                          cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
-                          ceSignCounter = M.adSignCount authData
-                        },
-                    rAuthenticatorModel = authModel,
-                    rMetadataEntry = metadataEntry,
-                    rAttestationType = attType
-                  }
-           in case attType of
-                M.AttestationTypeVerifiable verifiableAttType chain ->
-                  -- 20. If validation is successful, obtain a list of acceptable trust
-                  -- anchors (i.e. attestation root certificates) for that attestation type
-                  -- and attestation statement format fmt, from a trusted source or from
-                  -- policy. For example, the FIDO Metadata Service [FIDOMetadataService]
-                  -- provides one way to obtain such information, using the aaguid in the
-                  -- attestedCredentialData in authData.
-                  let formatRootCerts = M.asfTrustAnchors aoFmt verifiableAttType
-                      metadataRootCerts = case metadataEntry >>= Meta.metadataStatement of
-                        Nothing -> trace "No statement" mempty
-                        Just statement -> X509.makeCertificateStore x
-                          where x = map d $ attestationRootCertificates statement
-                                d :: IDL.DOMString -> X509.SignedCertificate
-                                d string = traceShowId cert
-                                  where
-                                    Right bytes = Base64.decode (encodeUtf8 string)
-                                    Right cert = X509.decodeSignedCertificate bytes
-
-                      -- 21. Assess the attestation trustworthiness using the outputs of the
-                      -- verification procedure in step 19, as follows:
-                      --
-                      -- -> If no attestation was provided, verify that None attestation is
-                      --    acceptable under Relying Party policy.
-                      -- -> If self attestation was used, verify that self attestation is
-                      --    acceptable under Relying Party policy.
-                      -- -> Otherwise, use the X.509 certificates returned as the attestation
-                      --    trust path from the verification procedure to verify that the
-                      --    attestation public key either correctly chains up to an acceptable
-                      --    root certificate, or is itself an acceptable certificate (i.e., it
-                      --    and the root certificate obtained in Step 20 may be the same).
-                      chainValidationFailures =
-                        X509.validatePure
-                          currentTime
-                          X509.defaultHooks
-                            { X509.hookValidateName = \_fqhn cert -> traceShow (getNames cert) []
-                            }
-                          X509.defaultChecks
-                          (formatRootCerts <> metadataRootCerts)
-                          ("", mempty)
-                          (X509.CertificateChain (NE.toList chain))
-                   in case NE.nonEmpty chainValidationFailures of
-                        Just ne -> failure $ AttestationChainValidationError ne
-                        Nothing -> pure result
-                _ -> pure result
+        Right (M.AttStmtVerificationResult attType model) ->
+          SomeAttestationResult <$> verifyAuthenticatorModel currentTime registry aoFmt entry attType model
       pure x
+
+verifyAuthenticatorModel ::
+  M.AttestationStatementFormat a =>
+  DateTime ->
+  Meta.MetadataServiceRegistry ->
+  a ->
+  CredentialEntry ->
+  M.AttestationType k ->
+  M.AuthenticatorModel k ->
+  Validation (NonEmpty AttestationError) (AttestationResult k)
+verifyAuthenticatorModel _ _ _ entry attType M.UnknownAuthenticator =
+  pure $
+    AttestationResult
+      { rEntry = entry,
+        rAttestationType = attType,
+        rAuthenticatorModel = M.UnknownAuthenticator,
+        rMetadata = NoMetadata
+      }
+verifyAuthenticatorModel currentTime registry fmt entry (M.AttestationTypeVerifiable verifiableAttType chain) authenticator =
+  let metadataEntry = case authenticator of
+        M.KnownFido2Authenticator aaguid -> traceShow aaguid $ metadataByAaguid registry aaguid
+        M.KnownFidoU2FAuthenticator keyId -> metadataByKeyIdentifier registry keyId
+      statement = metadataEntry >>= Meta.metadataStatement
+      -- 20. If validation is successful, obtain a list of acceptable trust
+      -- anchors (i.e. attestation root certificates) for that attestation type
+      -- and attestation statement format fmt, from a trusted source or from
+      -- policy. For example, the FIDO Metadata Service [FIDOMetadataService]
+      -- provides one way to obtain such information, using the aaguid in the
+      -- attestedCredentialData in authData.
+      formatRootCerts = M.asfTrustAnchors fmt verifiableAttType
+      metadataRootCerts = case statement of
+        Nothing -> trace "No statement" mempty
+        Just statement -> X509.makeCertificateStore x
+          where
+            x = map d $ attestationRootCertificates statement
+            d :: IDL.DOMString -> X509.SignedCertificate
+            d string = traceShowId cert
+              where
+                Right bytes = Base64.decode (encodeUtf8 string)
+                Right cert = X509.decodeSignedCertificate bytes
+      -- 21. Assess the attestation trustworthiness using the outputs of the
+      -- verification procedure in step 19, as follows:
+      --
+      -- -> If no attestation was provided, verify that None attestation is
+      --    acceptable under Relying Party policy.
+      -- -> If self attestation was used, verify that self attestation is
+      --    acceptable under Relying Party policy.
+      -- -> Otherwise, use the X.509 certificates returned as the attestation
+      --    trust path from the verification procedure to verify that the
+      --    attestation public key either correctly chains up to an acceptable
+      --    root certificate, or is itself an acceptable certificate (i.e., it
+      --    and the root certificate obtained in Step 20 may be the same).
+      chainValidationFailures =
+        X509.validatePure
+          currentTime
+          X509.defaultHooks
+            { X509.hookValidateName = \_fqhn cert -> traceShow (getNames cert) []
+            }
+          X509.defaultChecks
+          (formatRootCerts <> metadataRootCerts)
+          ("", mempty)
+          (X509.CertificateChain (NE.toList chain))
+      fixedUpType = maybe verifiableAttType (fixupVerifiableAttestationType verifiableAttType) statement
+   in case NE.nonEmpty chainValidationFailures of
+        Just ne -> failure $ AttestationChainValidationError ne
+        Nothing ->
+          pure
+            AttestationResult
+              { rEntry = entry,
+                rAttestationType = M.AttestationTypeVerifiable fixedUpType chain,
+                rAuthenticatorModel = authenticator,
+                rMetadata = maybe NoMetadata Metadata metadataEntry
+              }
+
+fixupVerifiableAttestationType :: M.VerifiableAttestationType -> MetadataStatement -> M.VerifiableAttestationType
+fixupVerifiableAttestationType M.VerifiableAttestationTypeUncertain statement = firstAttestationType (attestationTypes statement)
+fixupVerifiableAttestationType certain _ = certain
+
+firstAttestationType :: NonEmpty AuthenticatorAttestationType -> M.VerifiableAttestationType
+firstAttestationType (ATTESTATION_BASIC_FULL :| _) = M.VerifiableAttestationTypeBasic
+firstAttestationType (ATTESTATION_ATTCA :| _) = M.VerifiableAttestationTypeAttCA
+firstAttestationType (_ :| rest) = maybe M.VerifiableAttestationTypeUncertain firstAttestationType (NE.nonEmpty rest)
 
 getNames :: X509.Certificate -> (Maybe String, [String])
 getNames cert = (commonName >>= asn1CharacterToString, altNames)
   where
     commonName = X509.getDnElement X509.DnCommonName $ X509.certSubjectDN cert
     altNames = maybe [] toAltName $ X509.extensionGet $ X509.certExtensions cert
-    toAltName (X509.ExtSubjectAltName names) = catMaybes $ map unAltName names
+    toAltName (X509.ExtSubjectAltName names) = mapMaybe unAltName names
       where
         unAltName (X509.AltNameDNS s) = Just s
         unAltName _ = Nothing
