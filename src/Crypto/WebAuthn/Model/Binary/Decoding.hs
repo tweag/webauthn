@@ -45,6 +45,7 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
+import qualified Data.UUID as UUID
 import GHC.Generics (Generic)
 
 -- | Decoding errors that can only occur when decoding a
@@ -178,8 +179,10 @@ decodeAuthenticatorData strictBytes = do
     decodeAttestedCredentialData bytes = do
       -- https://www.w3.org/TR/webauthn-2/#aaguid
       (bytes, acdAaguid) <-
-        second M.AAGUID
-          <$> runBinary (Binary.getByteString 16) bytes
+        -- Note: fromJust is safe because UUID.fromByteString only returns
+        -- nothing if there's not exactly 16 bytes
+        second (M.AAGUID . fromJust . UUID.fromByteString)
+          <$> runBinary (Binary.getLazyByteString 16) bytes
 
       -- https://www.w3.org/TR/webauthn-2/#credentialidlength
       (bytes, credentialLength) <-

@@ -9,17 +9,20 @@
 
 module Spec.Types () where
 
-import Control.Monad.Cont (replicateM)
 import Crypto.Hash (hash)
+import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import Data.Maybe (fromJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
+import Data.UUID (UUID)
+import qualified Data.UUID as UUID
 import qualified PublicKeySpec ()
-import Test.QuickCheck (Arbitrary (arbitrary), Gen, arbitraryBoundedEnum, elements, liftArbitrary, resize, shuffle, sublistOf)
+import Test.QuickCheck (Arbitrary (arbitrary), Gen, arbitraryBoundedEnum, elements, frequency, liftArbitrary, resize, shuffle, sublistOf)
 import Test.QuickCheck.Instances.Text ()
 
 instance Arbitrary M.PublicKeyCredentialType where
@@ -108,10 +111,18 @@ instance SingI t => Arbitrary (M.AttestedCredentialData t 'False) where
     SGet -> pure M.NoAttestedCredentialData
 
 instance Arbitrary M.AAGUID where
-  arbitrary = M.AAGUID <$> bytes 16
-
-bytes :: Int -> Gen BS.ByteString
-bytes n = BS.pack <$> replicateM n arbitrary
+  arbitrary =
+    M.AAGUID
+      <$> frequency
+        [ (1, pure UUID.nil),
+          (10, randomUUID <$> arbitrary)
+        ]
+    where
+      randomUUID :: Integer -> UUID
+      randomUUID seed = fromJust $ UUID.fromByteString $ LBS.fromStrict bytes
+        where
+          rng = Random.drgNewSeed $ Random.seedFromInteger seed
+          (bytes, _) = Random.withDRG rng $ Random.getRandomBytes 16
 
 instance Arbitrary M.CredentialId where
   arbitrary = M.CredentialId <$> arbitrary

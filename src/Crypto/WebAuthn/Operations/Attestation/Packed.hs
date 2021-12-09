@@ -27,6 +27,7 @@ import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (fromStrict)
+import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (HashMap, (!?))
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
@@ -34,6 +35,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.UUID as UUID
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 
@@ -191,7 +193,7 @@ instance M.AttestationStatementFormat Format where
         decodeAAGUID bs = do
           asn1 <- either (Left . VerificationErrorASN1Error) pure . decodeASN1 DER $ fromStrict bs
           case asn1 of
-            [OctetString s] -> Right $ M.AAGUID s
+            [OctetString (UUID.fromByteString . LBS.fromStrict -> Just s)] -> Right $ M.AAGUID s
             _ -> Left VerificationErrorCredentialAAGUIDMissing
 
 format :: M.SomeAttestationStatementFormat
