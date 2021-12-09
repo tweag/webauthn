@@ -7,15 +7,15 @@ module Main
   )
 where
 
-import qualified Crypto.Fido2.Model as M
-import qualified Crypto.Fido2.Model.JavaScript as JS
-import qualified Crypto.Fido2.Model.JavaScript.Decoding as JS
-import qualified Crypto.Fido2.Operations.Assertion as Fido2
-import Crypto.Fido2.Operations.Attestation (AttestationError)
-import qualified Crypto.Fido2.Operations.Attestation as Fido2
-import qualified Crypto.Fido2.Operations.Common as Common
-import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.JavaScript as JS
+import qualified Crypto.WebAuthn.Model.JavaScript.Decoding as JS
+import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
+import Crypto.WebAuthn.Operations.Attestation (AttestationError)
+import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
+import qualified Crypto.WebAuthn.Operations.Common as Common
+import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as ByteString
@@ -83,13 +83,13 @@ main = Hspec.hspec $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/01-none.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
             registerResult =
               toEither $
-                Fido2.verifyAttestationResponse
+                WebAuthn.verifyAttestationResponse
                   (M.Origin "http://localhost:8080")
                   (rpIdHash "localhost")
                   options
@@ -104,7 +104,7 @@ main = Hspec.hspec $ do
         let M.PublicKeyCredential {M.pkcResponse = pkcResponse} = loginReq
             signInResult =
               toEither $
-                Fido2.verifyAssertionResponse
+                WebAuthn.verifyAssertionResponse
                   (M.Origin "http://localhost:8080")
                   (rpIdHash "localhost")
                   (Just (M.UserHandle "UserId"))
@@ -120,13 +120,13 @@ main = Hspec.hspec $ do
     it "tests whether the fixed packed register has a valid attestation" $
       do
         pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/02-packed.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
             registerResult =
               toEither $
-                Fido2.verifyAttestationResponse
+                WebAuthn.verifyAttestationResponse
                   (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
                   options
@@ -136,13 +136,13 @@ main = Hspec.hspec $ do
     it "tests whether the fixed android key register has a valid attestation" $
       do
         pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/03-android-key.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
             registerResult =
               toEither $
-                Fido2.verifyAttestationResponse
+                WebAuthn.verifyAttestationResponse
                   (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
                   options
@@ -152,13 +152,13 @@ main = Hspec.hspec $ do
     it "tests whether the fixed fido-u2f register has a valid attestation" $
       do
         pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/04-u2f.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
             registerResult =
               toEither $
-                Fido2.verifyAttestationResponse
+                WebAuthn.verifyAttestationResponse
                   (M.Origin "https://localhost:44329")
                   (rpIdHash "localhost")
                   options
@@ -168,13 +168,13 @@ main = Hspec.hspec $ do
     it "tests whether the fixed apple register has a valid attestation" $
       do
         pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential Fido2.allSupportedFormats
+          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/05-apple.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
             registerResult =
               toEither $
-                Fido2.verifyAttestationResponse
+                WebAuthn.verifyAttestationResponse
                   (M.Origin "https://6cc3c9e7967a.ngrok.io")
                   (rpIdHash "6cc3c9e7967a.ngrok.io")
                   options

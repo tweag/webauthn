@@ -1,10 +1,10 @@
 cradle:
   multi:
-  - path: "./fido"
+  - path: "./src"
     config:
       cradle:
         cabal:
-          component: lib:fido2
+          component: lib:webauthn
   - path: "./server"
     config:
       cradle:

@@ -4,8 +4,8 @@
 module MetadataSpec (spec) where
 
 import Control.Monad.Except (runExceptT)
-import Crypto.Fido2.Metadata.Service.IDL (MetadataBLOBPayload)
-import Crypto.Fido2.Metadata.Service.Processing (RootCertificate (RootCertificate), getPayload)
+import Crypto.WebAuthn.Metadata.Service.IDL (MetadataBLOBPayload)
+import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), getPayload)
 import Data.Aeson (Result (Success), ToJSON (toJSON), decodeFileStrict, fromJSON)
 import Data.Aeson.Types (Result (Error))
 import qualified Data.ByteString as BS

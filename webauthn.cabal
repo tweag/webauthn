@@ -1,0 +1,165 @@
+cabal-version: 3.0
+name: webauthn
+version: 0.1.0.0
+maintainer: silvan.mosberger@tweag.io
+build-type: Simple
+license-file: LICENSE
+copyright:
+  2020 - 2021: Arian van Putten
+  2021 -     : Tweag I/O
+
+common sanity
+  default-language: Haskell2010
+  build-depends: base
+  ghc-options:
+    -Wall
+    -Wmissing-export-lists
+    -Wmissing-import-lists
+    -Wno-name-shadowing
+    -Wcompat
+    -Wincomplete-uni-patterns
+  default-extensions:
+    DerivingStrategies
+    DerivingVia
+    DeriveAnyClass
+    DeriveGeneric
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+    TypeApplications
+
+library
+  import: sanity
+  hs-source-dirs: src
+  build-depends:
+    aeson,
+    asn1-encoding,
+    asn1-parse,
+    asn1-types,
+    base64-bytestring,
+    binary,
+    bytestring,
+    cborg,
+    containers,
+    cryptonite,
+    deriving-aeson,
+    -- https://github.com/frasertweedale/hs-jose/pull/103#issuecomment-923624548
+    jose >= 0.8.5,
+    lens,
+    memory,
+    mtl,
+    random >= 1.2.0,
+    serialise,
+    singletons,
+    text,
+    time,
+    unordered-containers,
+    x509,
+    x509,
+    x509-store,
+    x509-validation,
+    x509-validation,
+    validation
+  exposed-modules:
+    Crypto.WebAuthn.EncodingUtils,
+    Crypto.WebAuthn.Metadata.Service.IDL,
+    Crypto.WebAuthn.Metadata.Service.Processing,
+    Crypto.WebAuthn.Metadata.Statement.IDL,
+    Crypto.WebAuthn.Model,
+    Crypto.WebAuthn.Model.Binary.Decoding,
+    Crypto.WebAuthn.Model.Binary.Encoding,
+    Crypto.WebAuthn.Model.JavaScript,
+    Crypto.WebAuthn.Model.JavaScript.Decoding,
+    Crypto.WebAuthn.Model.JavaScript.Encoding,
+    Crypto.WebAuthn.Model.JavaScript.Types,
+    Crypto.WebAuthn.Model.WebauthnType,
+    Crypto.WebAuthn.Operations.Assertion,
+    Crypto.WebAuthn.Operations.Attestation,
+    Crypto.WebAuthn.Operations.Attestation.AndroidKey,
+    Crypto.WebAuthn.Operations.Attestation.Apple,
+    Crypto.WebAuthn.Operations.Attestation.FidoU2F,
+    Crypto.WebAuthn.Operations.Attestation.None,
+    Crypto.WebAuthn.Operations.Attestation.Packed,
+    Crypto.WebAuthn.Operations.Common,
+    Crypto.WebAuthn.PublicKey,
+    Crypto.WebAuthn.Registry,
+    Crypto.WebAuthn.UAF,
+    Crypto.WebAuthn.WebIDL
+
+executable server
+  import: sanity
+  hs-source-dirs: server/src
+  main-is: Main.hs
+  other-modules:
+    Database,
+    PendingOps
+
+  build-depends:
+    aeson,
+    base64-bytestring,
+    binary,
+    cborg,
+    clock >= 0.6.0,
+    bytestring,
+    containers,
+    cookie,
+    cryptonite,
+    webauthn,
+    http-types,
+    mtl,
+    random,
+    scotty,
+    sqlite-simple,
+    stm,
+    text,
+    transformers,
+    uuid,
+    validation,
+    wai,
+    wai-middleware-static,
+    warp
+
+test-suite tests
+  import: sanity
+  type: exitcode-stdio-1.0
+  hs-source-dirs: tests
+  main-is: Main.hs
+  ghc-options:
+    -Wno-incomplete-uni-patterns
+  other-modules:
+    PublicKeySpec,
+    MetadataSpec,
+    Spec.Types,
+    Spec.Util,
+    Encoding,
+    Emulation,
+    Emulation.Client,
+    Emulation.Client.Arbitrary,
+    Emulation.Client.PrivateKey,
+    Emulation.Authenticator,
+    Emulation.Authenticator.Arbitrary
+  build-depends:
+    QuickCheck,
+    aeson,
+    asn1-encoding,
+    base64-bytestring,
+    binary,
+    bytestring,
+    cborg,
+    cborg-json,
+    containers,
+    cryptonite,
+    directory,
+    filepath,
+    hspec,
+    hspec-expectations-json,
+    memory,
+    mtl,
+    pem,
+    quickcheck-instances,
+    random,
+    serialise,
+    text,
+    validation,
+    webauthn,
+    x509

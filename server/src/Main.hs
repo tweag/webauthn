@@ -10,16 +10,16 @@ where
 import Control.Monad (when)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
-import qualified Crypto.Fido2.Model as M
-import qualified Crypto.Fido2.Model.Binary.Decoding as MD
-import qualified Crypto.Fido2.Model.JavaScript as JS
-import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
-import Crypto.Fido2.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
-import Crypto.Fido2.Operations.Assertion (verifyAssertionResponse)
-import Crypto.Fido2.Operations.Attestation (AttestationError, allSupportedFormats, verifyAttestationResponse)
-import Crypto.Fido2.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
-import Crypto.Fido2.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Crypto.Hash (hash)
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
+import qualified Crypto.WebAuthn.Model.JavaScript as JS
+import Crypto.WebAuthn.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
+import Crypto.WebAuthn.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
+import Crypto.WebAuthn.Operations.Assertion (verifyAssertionResponse)
+import Crypto.WebAuthn.Operations.Attestation (AttestationError, allSupportedFormats, verifyAttestationResponse)
+import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
+import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Data.Aeson (FromJSON, Value (String))
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Builder as Builder

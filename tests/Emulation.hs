@@ -8,13 +8,13 @@ module Emulation
 where
 
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
-import qualified Crypto.Fido2.Model as M
-import qualified Crypto.Fido2.Operations.Assertion as Fido2
-import qualified Crypto.Fido2.Operations.Attestation as Fido2
-import qualified Crypto.Fido2.Operations.Common as Fido2
-import qualified Crypto.Fido2.PublicKey as PublicKey
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
+import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
+import qualified Crypto.WebAuthn.Operations.Common as WebAuthn
+import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
@@ -54,7 +54,7 @@ register ::
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  m (Either (NE.NonEmpty Fido2.AttestationError) Fido2.CredentialEntry, Authenticator, M.PublicKeyCredentialOptions 'M.Create)
+  m (Either (NE.NonEmpty WebAuthn.AttestationError) WebAuthn.CredentialEntry, Authenticator, M.PublicKeyCredentialOptions 'M.Create)
 register ao conformance authenticator = do
   -- Generate new random input
   assertionChallenge <- M.Challenge <$> Random.getRandomBytes 16
@@ -72,7 +72,7 @@ register ao conformance authenticator = do
   -- Verify the result
   let registerResult =
         toEither $
-          Fido2.verifyAttestationResponse
+          WebAuthn.verifyAttestationResponse
             (aoOrigin ao)
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
             options
@@ -84,9 +84,9 @@ login ::
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  Fido2.CredentialEntry ->
-  m (Either (NE.NonEmpty Fido2.AssertionError) Fido2.SignatureCounterResult)
-login ao conformance authenticator ce@Fido2.CredentialEntry {..} = do
+  WebAuthn.CredentialEntry ->
+  m (Either (NE.NonEmpty WebAuthn.AssertionError) WebAuthn.SignatureCounterResult)
+login ao conformance authenticator ce@WebAuthn.CredentialEntry {..} = do
   attestationChallenge <- M.Challenge <$> Random.getRandomBytes 16
   let options = defaultPkcog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
@@ -94,7 +94,7 @@ login ao conformance authenticator ce@Fido2.CredentialEntry {..} = do
   (mPkcGet, _) <- clientAssertion options ao conformance authenticator
   pure
     . toEither
-    $ Fido2.verifyAssertionResponse
+    $ WebAuthn.verifyAssertionResponse
       (aoOrigin ao)
       (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
       (Just ceUserHandle)
@@ -128,58 +128,58 @@ spec =
 -- resulted in if the authenticator exhibits nonconforming behaviour, and
 -- checks if the correct result was given if the authenticator does not exhibit
 -- any nonconforming behaviour.
-validAttestationResult :: Authenticator -> UserAgentConformance -> M.PublicKeyCredentialOptions 'M.Create -> Either (NE.NonEmpty Fido2.AttestationError) Fido2.CredentialEntry -> Bool
+validAttestationResult :: Authenticator -> UserAgentConformance -> M.PublicKeyCredentialOptions 'M.Create -> Either (NE.NonEmpty WebAuthn.AttestationError) WebAuthn.CredentialEntry -> Bool
 -- A valid result can only happen if we exhibited no non-conforming behaviour
 -- The userHandle must be the one specified by the options
-validAttestationResult _ _ M.PublicKeyCredentialCreationOptions {..} (Right Fido2.CredentialEntry {..}) = ceUserHandle == M.pkcueId pkcocUser
+validAttestationResult _ _ M.PublicKeyCredentialCreationOptions {..} (Right WebAuthn.CredentialEntry {..}) = ceUserHandle == M.pkcueId pkcocUser
 -- If we did result in errors, we want every error to be validated by some
 -- configuration issue (NOTE: We cannot currently exhibit non conforming
 -- behaviour during attestation)
 validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = all isValidated errors
   where
-    isValidated :: Fido2.AttestationError -> Bool
-    isValidated (Fido2.AttestationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
-    isValidated (Fido2.AttestationOriginMismatch _ _) = False
-    isValidated (Fido2.AttestationRpIdHashMismatch _ _) = False
+    isValidated :: WebAuthn.AttestationError -> Bool
+    isValidated (WebAuthn.AttestationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
+    isValidated (WebAuthn.AttestationOriginMismatch _ _) = False
+    isValidated (WebAuthn.AttestationRpIdHashMismatch _ _) = False
     -- The User not being present must be a result of the authenticator not checking for a user being present
-    isValidated Fido2.AttestationUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
+    isValidated WebAuthn.AttestationUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
     -- The User not being valided must be a result of the authenticator not validating the user
-    isValidated Fido2.AttestationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
-    isValidated (Fido2.AttestationUndesiredPublicKeyAlgorithm _ _) = False
-    isValidated (Fido2.AttestationFormatError _) = False
+    isValidated WebAuthn.AttestationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
+    isValidated (WebAuthn.AttestationUndesiredPublicKeyAlgorithm _ _) = False
+    isValidated (WebAuthn.AttestationFormatError _) = False
 
 -- | Validates the result of assertion. Ensures that the proper errors are
 -- resulted in if the authenticator exhibits nonconforming behaviour, and
 -- checks if the correct result was given if the authenticator does not exhibit
 -- any nonconforming behaviour.
-validAssertionResult :: Authenticator -> UserAgentConformance -> Either (NE.NonEmpty Fido2.AssertionError) Fido2.SignatureCounterResult -> Bool
+validAssertionResult :: Authenticator -> UserAgentConformance -> Either (NE.NonEmpty WebAuthn.AssertionError) WebAuthn.SignatureCounterResult -> Bool
 -- We can only result in a 0 signature counter if the authenticator doesn't
 -- have a counter and is either conforming or only has a static counter
-validAssertionResult AuthenticatorNone {..} _ (Right Fido2.SignatureCounterZero) =
+validAssertionResult AuthenticatorNone {..} _ (Right WebAuthn.SignatureCounterZero) =
   aSignatureCounter == Unsupported && (Set.null aConformance || aConformance == Set.singleton StaticCounter)
 -- A valid response must only happen if we have no non-confirming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right (Fido2.SignatureCounterUpdated _)) = Set.null aConformance
+validAssertionResult AuthenticatorNone {..} _ (Right (WebAuthn.SignatureCounterUpdated _)) = Set.null aConformance
 -- A potentially cloned counter must imply that we only exhibited the static
 -- counter non-conforming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right Fido2.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
+validAssertionResult AuthenticatorNone {..} _ (Right WebAuthn.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
 -- If we did result in errors, we want every error to be validated by some
 -- non-conforming behaviour or configuration issue
 validAssertionResult AuthenticatorNone {..} uaConformance (Left errors) = all isValidated errors
   where
-    isValidated :: Fido2.AssertionError -> Bool
-    isValidated (Fido2.AssertionDisallowedCredential _ _) = False
-    isValidated (Fido2.AssertionIdentifiedUserHandleMismatch _ _) = False
-    isValidated (Fido2.AssertionCredentialUserHandleMismatch _ _) = False
-    isValidated Fido2.AssertionCannotVerifyUserHandle = False
-    isValidated (Fido2.AssertionChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
-    isValidated (Fido2.AssertionOriginMismatch _ _) = False
-    isValidated (Fido2.AssertionRpIdHashMismatch _ _) = False
+    isValidated :: WebAuthn.AssertionError -> Bool
+    isValidated (WebAuthn.AssertionDisallowedCredential _ _) = False
+    isValidated (WebAuthn.AssertionIdentifiedUserHandleMismatch _ _) = False
+    isValidated (WebAuthn.AssertionCredentialUserHandleMismatch _ _) = False
+    isValidated WebAuthn.AssertionCannotVerifyUserHandle = False
+    isValidated (WebAuthn.AssertionChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
+    isValidated (WebAuthn.AssertionOriginMismatch _ _) = False
+    isValidated (WebAuthn.AssertionRpIdHashMismatch _ _) = False
     -- The User not being present must be a result of the authenticator not checking for a user being present
-    isValidated Fido2.AssertionUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
+    isValidated WebAuthn.AssertionUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
     -- The User not being valided must be a result of the authenticator not validating the user
-    isValidated Fido2.AssertionUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
+    isValidated WebAuthn.AssertionUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
     -- The Signature being invalid can happen when the data was wrong or the wrong private key was used
-    isValidated (Fido2.AssertionInvalidSignature _) = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
+    isValidated (WebAuthn.AssertionInvalidSignature _) = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
 
 -- | Create a default set of options for attestation. These options can be modified before using them in the tests
 defaultPkcoc :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create

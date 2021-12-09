@@ -2,11 +2,21 @@
 
 module Encoding (spec) where
 
-import qualified Crypto.Fido2.Model as M
-import Crypto.Fido2.Model.Binary.Encoding (encodeRawPublicKeyCredential)
-import Crypto.Fido2.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodePublicKeyCredentialCreationOptions, decodePublicKeyCredentialRequestOptions, decodeRequestedPublicKeyCredential)
-import Crypto.Fido2.Model.JavaScript.Encoding (encodeCreatedPublicKeyCredential, encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions, encodeRequestedPublicKeyCredential)
-import Crypto.Fido2.Operations.Attestation (allSupportedFormats)
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.Binary.Encoding (encodeRawPublicKeyCredential)
+import Crypto.WebAuthn.Model.JavaScript.Decoding
+  ( decodeCreatedPublicKeyCredential,
+    decodePublicKeyCredentialCreationOptions,
+    decodePublicKeyCredentialRequestOptions,
+    decodeRequestedPublicKeyCredential,
+  )
+import Crypto.WebAuthn.Model.JavaScript.Encoding
+  ( encodeCreatedPublicKeyCredential,
+    encodePublicKeyCredentialCreationOptions,
+    encodePublicKeyCredentialRequestOptions,
+    encodeRequestedPublicKeyCredential,
+  )
+import Crypto.WebAuthn.Operations.Attestation (allSupportedFormats)
 import Spec.Types ()
 import Test.Hspec (Expectation, SpecWith, describe, expectationFailure, shouldBe)
 import Test.Hspec.QuickCheck (prop)
