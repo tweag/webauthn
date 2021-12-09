@@ -82,6 +82,7 @@ library
     Crypto.WebAuthn.Operations.Common,
     Crypto.WebAuthn.PublicKey,
     Crypto.WebAuthn.Registry,
+    Crypto.WebAuthn.SubjectKeyIdentifier,
     Crypto.WebAuthn.UAF,
     Crypto.WebAuthn.WebIDL
 
