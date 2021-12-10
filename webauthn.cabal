@@ -54,12 +54,11 @@ library
     text,
     time,
     unordered-containers,
-    x509,
+    uuid,
+    validation,
     x509,
     x509-store,
-    x509-validation,
-    x509-validation,
-    validation
+    x509-validation
   exposed-modules:
     Crypto.WebAuthn.EncodingUtils,
     Crypto.WebAuthn.Metadata.Service.IDL,
@@ -160,6 +159,7 @@ test-suite tests
     random,
     serialise,
     text,
+    uuid,
     validation,
     webauthn,
     x509
