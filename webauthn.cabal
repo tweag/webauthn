@@ -43,10 +43,12 @@ library
     containers,
     cryptonite,
     deriving-aeson,
+    hourglass,
     -- https://github.com/frasertweedale/hs-jose/pull/103#issuecomment-923624548
     jose >= 0.8.5,
     lens,
     memory,
+    monad-time,
     mtl,
     random >= 1.2.0,
     serialise,
@@ -60,6 +62,7 @@ library
     x509-store,
     x509-validation
   exposed-modules:
+    Crypto.WebAuthn.DateOrphans,
     Crypto.WebAuthn.EncodingUtils,
     Crypto.WebAuthn.Metadata.Service.IDL,
     Crypto.WebAuthn.Metadata.Service.Processing,
