@@ -5,11 +5,11 @@ module MetadataSpec (spec) where
 
 import Control.Monad.Except (runExceptT)
 import Crypto.WebAuthn.Metadata.Service.IDL (MetadataBLOBPayload)
-import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), getPayload)
+import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), getPayload, jsonToPayload)
 import Data.Aeson (Result (Success), ToJSON (toJSON), decodeFileStrict, fromJSON)
 import Data.Aeson.Types (Result (Error))
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.PEM as PEM
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -34,12 +34,18 @@ golden subdir = describe subdir $ do
 
     result `shouldBeUnorderedJson` expectedPayload
 
-  it "can decode and reencode the payload" $ do
+  it "can decode and reencode the payload to the partially parsed JSON" $ do
     Just payload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"
     case fromJSON payload of
       Error err -> fail err
       Success (value :: MetadataBLOBPayload) ->
         toJSON value `shouldBeUnorderedJson` payload
+
+  it "can decode and reencode the payload to the partially parsed JSON" $ do
+    Just value <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"
+    case jsonToPayload value of
+      Left err -> fail $ show err
+      Right _result -> pure ()
 
 spec :: SpecWith ()
 spec = describe "Golden" $ do

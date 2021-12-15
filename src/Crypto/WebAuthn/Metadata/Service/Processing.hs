@@ -1,21 +1,34 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module Crypto.WebAuthn.Metadata.Service.Processing
-  ( getPayload,
-    RootCertificate (..),
+  ( RootCertificate (..),
+    getPayload,
+    jsonToPayload,
   )
 where
 
 import Control.Lens ((^.), (^?), _Just)
-import Control.Monad.Except (ExceptT, MonadError (throwError), liftIO)
+import Control.Monad.Except (ExceptT, throwError)
+import Control.Monad.IO.Class (liftIO)
 import Crypto.JOSE (fromX509Certificate)
 import Crypto.JOSE.JWK.Store (VerificationKeyStore (getVerificationKeys))
 import Crypto.JWT (Error (JWSInvalidSignature), HasX5c (x5c), JWSHeader, JWTError (JWSError), SignedJWT, decodeCompact, defaultJWTValidationSettings, param, unregisteredClaims, verifyClaims)
+import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
+import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import Data.Aeson (Value (Object))
+import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.List.NonEmpty as NE
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
@@ -71,3 +84,13 @@ getPayload blob rootCert = do
   jwt :: SignedJWT <- decodeCompact blob
   claims <- verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt
   return $ Object (claims ^. unregisteredClaims)
+
+-- | Decodes a FIDO Metadata payload JSON value to a 'Service.MetadataPayload',
+-- returning an error when the JSON is invalid, and ignoring any entries not
+-- relevant for webauthn
+jsonToPayload :: Value -> Either Text Service.MetadataPayload
+jsonToPayload value = case Aeson.fromJSON value of
+  Aeson.Error err -> Left $ Text.pack err
+  Aeson.Success payload -> case decodeMetadataPayload payload of
+    Left err -> Left err
+    Right result -> pure result

@@ -19,6 +19,7 @@ import Crypto.WebAuthn.Metadata.Statement.IDL (AAGUID, MetadataStatement)
 import qualified Crypto.WebAuthn.UAF as UAF
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
+import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-entry-dictionary)
@@ -28,13 +29,13 @@ data MetadataBLOBPayloadEntry = MetadataBLOBPayloadEntry
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-aaguid)
     aaguid :: Maybe AAGUID,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-attestationcertificatekeyidentifiers)
-    attestationCertificateKeyIdentifiers :: Maybe [IDL.DOMString],
+    attestationCertificateKeyIdentifiers :: Maybe (NonEmpty IDL.DOMString),
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-metadatastatement)
     metadataStatement :: Maybe MetadataStatement,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-biometricstatusreports)
-    biometricStatusReports :: Maybe [BiometricStatusReport],
+    biometricStatusReports :: Maybe (NonEmpty BiometricStatusReport),
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-statusreports)
-    statusReports :: [StatusReport],
+    statusReports :: NonEmpty StatusReport,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-timeoflaststatuschange)
     timeOfLastStatusChange :: IDL.DOMString
     -- Unused in the current blob, also annoying to implement

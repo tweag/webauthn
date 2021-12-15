@@ -65,7 +65,9 @@ library
   exposed-modules:
     Crypto.WebAuthn.DateOrphans,
     Crypto.WebAuthn.EncodingUtils,
+    Crypto.WebAuthn.Metadata.Service.Decode,
     Crypto.WebAuthn.Metadata.Service.IDL,
+    Crypto.WebAuthn.Metadata.Service.Types,
     Crypto.WebAuthn.Metadata.Service.Processing,
     Crypto.WebAuthn.Metadata.Statement.Decode,
     Crypto.WebAuthn.Metadata.Statement.IDL,
