@@ -52,9 +52,10 @@ data AssertionError
   | -- | The UserVerified bit was not set in the authData while user
     -- verification was required
     AssertionUserNotVerified
-  | -- | The public key could not be decoded or the public key does verify the
-    -- signature over the authData
-    AssertionInvalidSignature (Either CBOR.DeserialiseFailure (PublicKey, BS.ByteString, M.AssertionSignature))
+  | -- | The public key provided in the 'CredentialEntry' could not be decoded
+    AssertionSignatureDecodingError CBOR.DeserialiseFailure
+  | -- | the public key does verify the signature over the authData
+    AssertionInvalidSignature PublicKey BS.ByteString M.AssertionSignature
   deriving (Show)
 
 data SignatureCounterResult
@@ -240,10 +241,10 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
   let pubKeyBytes = cePublicKeyBytes entry
       message = rawData <> convert (M.unClientDataHash hash)
   case CBOR.deserialiseFromBytes decodePublicKey (LBS.fromStrict (M.unPublicKeyBytes pubKeyBytes)) of
-    Left err -> failure $ AssertionInvalidSignature (Left err)
+    Left err -> failure $ AssertionSignatureDecodingError err
     Right (_, pubKey) ->
       unless (PublicKey.verify pubKey message (M.unAssertionSignature sig)) $
-        failure $ AssertionInvalidSignature $ Right (pubKey, message, sig)
+        failure $ AssertionInvalidSignature pubKey message sig
 
   -- 21. Let storedSignCount be the stored signature counter value associated
   -- with credential.id. If authData.signCount is nonzero or storedSignCount
