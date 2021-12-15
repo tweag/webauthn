@@ -44,6 +44,7 @@ library
     containers,
     cryptonite,
     deriving-aeson,
+    hashable,
     hourglass,
     -- https://github.com/frasertweedale/hs-jose/pull/103#issuecomment-923624548
     jose >= 0.8.5,

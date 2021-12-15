@@ -6,7 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Crypto.WebAuthn.Metadata.Service.Types
-  ( MetadataPayload (..),
+  ( MetadataServiceRegistry (..),
+    MetadataPayload (..),
     MetadataEntry (..),
     SomeMetadataEntry (..),
     StatusReport (..),
@@ -16,12 +17,27 @@ where
 import qualified Crypto.WebAuthn.Metadata.Service.IDL as ServiceIDL
 import Crypto.WebAuthn.Metadata.Statement.Types (MetadataStatement)
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
+import Data.HashMap.Strict (HashMap)
 import Data.Hourglass (Date)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Singletons (SingI)
 import Data.Text (Text)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
+
+-- | A registry of 'MetadataEntry's, allowing fast lookup using 'M.AAGUID's or 'SubjectKeyIdentifier's
+data MetadataServiceRegistry = MetadataServiceRegistry
+  { fido2Entries :: HashMap M.AAGUID (MetadataEntry 'M.Fido2),
+    fidoU2FEntries :: HashMap SubjectKeyIdentifier (MetadataEntry 'M.FidoU2F)
+  }
+
+instance Semigroup MetadataServiceRegistry where
+  MetadataServiceRegistry l2 lu2f <> MetadataServiceRegistry r2 ru2f =
+    MetadataServiceRegistry (l2 <> r2) (lu2f <> ru2f)
+
+instance Monoid MetadataServiceRegistry where
+  mempty = MetadataServiceRegistry mempty mempty
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-dictionary)
 -- Same as 'StatementIDL.MetadataBLOBPayload', but fully decoded. However all

@@ -87,6 +87,7 @@ import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
 import qualified Data.ByteString as BS
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
+import Data.Hashable (Hashable)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.String (IsString)
@@ -385,6 +386,7 @@ deriving instance Eq (AuthenticatorIdentifier p)
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
 newtype AAGUID = AAGUID {unAAGUID :: UUID}
   deriving (Eq, Show)
+  deriving newtype (Hashable)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rp-id)
 -- A [valid domain string](https://url.spec.whatwg.org/#valid-domain-string)

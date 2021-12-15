@@ -9,7 +9,9 @@ import Crypto.Hash (Digest, SHA1, hash)
 import qualified Data.ASN1.BitArray as ASN1
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
+import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
+import Data.Hashable (Hashable (hashWithSalt), hashUsing)
 import qualified Data.X509 as X509
 
 -- | [(spec)](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2)
@@ -20,6 +22,9 @@ import qualified Data.X509 as X509
 -- field of the [Metadata Service](https://fidoalliance.org/metadata/)
 newtype SubjectKeyIdentifier = SubjectKeyIdentifier {unSubjectKeyIdentifier :: Digest SHA1}
   deriving (Eq, Show)
+
+instance Hashable SubjectKeyIdentifier where
+  hashWithSalt = hashUsing @BS.ByteString (convert . unSubjectKeyIdentifier)
 
 -- | [(spec)](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2)
 -- Computes the 'SubjectKeyIdentifier' from a 'X509.Certificate' according to

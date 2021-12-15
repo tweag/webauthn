@@ -10,6 +10,8 @@
 
 module Crypto.WebAuthn.Metadata.Service.Processing
   ( RootCertificate (..),
+    createMetadataRegistry,
+    queryMetadata,
     jwtToJson,
     jsonToPayload,
   )
@@ -24,12 +26,17 @@ import Crypto.JWT (Error (JWSInvalidSignature), HasX5c (x5c), JWSHeader, JWTErro
 import Crypto.WebAuthn.DateOrphans ()
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
 import Data.Aeson (Value (Object))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (mapMaybe)
+import Data.Singletons (SingI, sing)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
@@ -98,3 +105,51 @@ jsonToPayload value = case Aeson.fromJSON value of
   Aeson.Success payload -> case decodeMetadataPayload payload of
     Left err -> Left err
     Right result -> pure result
+
+-- | Creates a 'Service.MetadataServiceRegistry' from a list of
+-- 'Service.SomeMetadataEntry', which can either be obtained from a
+-- 'Service.MetadataPayload's 'Service.mpEntries' field, or be constructed
+-- directly
+--
+-- The resulting structure can be queried efficiently for
+-- 'Service.MetadataEntry' using 'metadataByAaguid' and 'metadataBySubjectKeyIdentifier'
+createMetadataRegistry :: [Service.SomeMetadataEntry] -> Service.MetadataServiceRegistry
+createMetadataRegistry entries = Service.MetadataServiceRegistry {..}
+  where
+    fido2Entries = HashMap.fromList $ mapMaybe getFido2Pairs entries
+    fidoU2FEntries = HashMap.fromList $ mapMaybe getFidoU2FPairs entries
+
+    getFido2Pairs (Service.SomeMetadataEntry ident entry) = getFido2Pairs' ident entry
+    getFidoU2FPairs (Service.SomeMetadataEntry ident entry) = getFidoU2FPairs' ident entry
+
+    getFido2Pairs' ::
+      forall p.
+      SingI p =>
+      M.AuthenticatorIdentifier p ->
+      Service.MetadataEntry p ->
+      Maybe (M.AAGUID, Service.MetadataEntry 'M.Fido2)
+    getFido2Pairs' ident entry = case sing @p of
+      M.SFido2 ->
+        Just (M.idAaguid ident, entry)
+      _ -> Nothing
+
+    getFidoU2FPairs' ::
+      forall p.
+      SingI p =>
+      M.AuthenticatorIdentifier p ->
+      Service.MetadataEntry p ->
+      Maybe (SubjectKeyIdentifier, Service.MetadataEntry 'M.FidoU2F)
+    getFidoU2FPairs' ident entry = case sing @p of
+      M.SFidoU2F ->
+        Just (M.idSubjectKeyIdentifier ident, entry)
+      _ -> Nothing
+
+-- | Query a 'Service.MetadataEntry' for an 'M.AuthenticatorIdentifier'
+queryMetadata ::
+  Service.MetadataServiceRegistry ->
+  M.AuthenticatorIdentifier p ->
+  Maybe (Service.MetadataEntry p)
+queryMetadata registry (M.AuthenticatorIdentifierFido2 aaguid) =
+  HashMap.lookup aaguid (Service.fido2Entries registry)
+queryMetadata registry (M.AuthenticatorIdentifierFidoU2F subjectKeyIdentifier) =
+  HashMap.lookup subjectKeyIdentifier (Service.fidoU2FEntries registry)
