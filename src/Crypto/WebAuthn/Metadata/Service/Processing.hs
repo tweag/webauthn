@@ -10,22 +10,25 @@
 
 module Crypto.WebAuthn.Metadata.Service.Processing
   ( RootCertificate (..),
-    getPayload,
+    jwtToJson,
     jsonToPayload,
   )
 where
 
 import Control.Lens ((^.), (^?), _Just)
-import Control.Monad.Except (ExceptT, throwError)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Except (MonadError, runExcept, throwError)
+import Control.Monad.Reader (MonadReader, ask, runReaderT)
 import Crypto.JOSE (fromX509Certificate)
 import Crypto.JOSE.JWK.Store (VerificationKeyStore (getVerificationKeys))
 import Crypto.JWT (Error (JWSInvalidSignature), HasX5c (x5c), JWSHeader, JWTError (JWSError), SignedJWT, decodeCompact, defaultJWTValidationSettings, param, unregisteredClaims, verifyClaims)
+import Crypto.WebAuthn.DateOrphans ()
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import Data.Aeson (Value (Object))
 import qualified Data.Aeson as Aeson
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -33,6 +36,7 @@ import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 
+-- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate
   { -- | The root certificate itself
     rootCertificate :: X509.SignedCertificate,
@@ -40,7 +44,7 @@ data RootCertificate = RootCertificate
     rootCertificateHostName :: X509.HostName
   }
 
-instance VerificationKeyStore (ExceptT JWTError IO) (JWSHeader ()) p RootCertificate where
+instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
   getVerificationKeys header _ (RootCertificate rootCert hostName) = do
     -- TODO: Implement step 4 of the spec, which says to try to get the chain from x5u first before trying x5c
     -- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules
@@ -50,19 +54,17 @@ instance VerificationKeyStore (ExceptT JWTError IO) (JWSHeader ()) p RootCertifi
         throwError $ JWSError JWSInvalidSignature
       Just chain -> return chain
 
-    validationErrors <-
-      liftIO $
-        -- TODO: Check CRLs, see https://github.com/tweag/haskell-fido2/issues/23
-        X509.validate
-          -- TODO: Does the SHA256 choice matter here?
-          -- I think it's probably only for the cache, which we don't use
-          X509.HashSHA256
-          X509.defaultHooks
-          X509.defaultChecks
-          (X509.makeCertificateStore [rootCert])
-          (X509.exceptionValidationCache [])
-          (hostName, "")
-          (X509.CertificateChain (NE.toList chain))
+    now <- ask
+
+    -- TODO: Check CRLs, see https://github.com/tweag/haskell-fido2/issues/23
+    let validationErrors =
+          X509.validatePure
+            now
+            X509.defaultHooks
+            X509.defaultChecks
+            (X509.makeCertificateStore [rootCert])
+            (hostName, "")
+            (X509.CertificateChain (NE.toList chain))
 
     case validationErrors of
       [] -> do
@@ -73,16 +75,18 @@ instance VerificationKeyStore (ExceptT JWTError IO) (JWSHeader ()) p RootCertifi
         -- FIXME: We're currently discarding these errors by necessity, because we're bound by the JOSE libraries error type
         throwError $ JWSError JWSInvalidSignature
 
--- | Decodes and verifies a FIDO Metadata Service blob according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
-getPayload ::
-  -- | The bytes of the blob
-  LBS.ByteString ->
+-- | Extracts a FIDO Metadata payload JSON value from a JWT bytestring according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
+jwtToJson ::
+  -- | The bytes of the JWT blob
+  BS.ByteString ->
   -- | The root certificate the blob is signed with
   RootCertificate ->
-  ExceptT JWTError IO Value
-getPayload blob rootCert = do
-  jwt :: SignedJWT <- decodeCompact blob
-  claims <- verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt
+  -- | The current time for which to validate the JWT blob
+  DateTime ->
+  Either JWTError Value
+jwtToJson blob rootCert now = runExcept $ do
+  jwt :: SignedJWT <- decodeCompact $ LBS.fromStrict blob
+  claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
   return $ Object (claims ^. unregisteredClaims)
 
 -- | Decodes a FIDO Metadata payload JSON value to a 'Service.MetadataPayload',

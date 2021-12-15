@@ -159,6 +159,7 @@ test-suite tests
     cryptonite,
     directory,
     filepath,
+    hourglass,
     hspec,
     hspec-expectations-json,
     memory,
