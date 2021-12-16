@@ -179,7 +179,8 @@ validAssertionResult AuthenticatorNone {..} uaConformance (Left errors) = all is
     -- The User not being valided must be a result of the authenticator not validating the user
     isValidated WebAuthn.AssertionUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
     -- The Signature being invalid can happen when the data was wrong or the wrong private key was used
-    isValidated (WebAuthn.AssertionInvalidSignature _) = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
+    isValidated (WebAuthn.AssertionSignatureDecodingError _) = False
+    isValidated WebAuthn.AssertionInvalidSignature {} = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
 
 -- | Create a default set of options for attestation. These options can be modified before using them in the tests
 defaultPkcoc :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
