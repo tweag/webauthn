@@ -174,11 +174,10 @@ main = Hspec.hspec $ do
         "tests/responses/attestation/u2f-04.json"
         (M.Origin "https://api-duo1.duo.test")
         "duo.test"
-  -- TODO: TEST FAILS
-  -- registerTestFromFile
-  --   "tests/responses/attestation/u2f-05.json"
-  --   (M.Origin "https://api-duo1.duo.test")
-  --   "duo.test"
+      registerTestFromFile
+        "tests/responses/attestation/u2f-05.json"
+        (M.Origin "https://api-duo1.duo.test")
+        "duo.test"
   describe "Apple register" $
     it "tests whether the fixed apple register has a valid attestation" $ do
       registerTestFromFile
