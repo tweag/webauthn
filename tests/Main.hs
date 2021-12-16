@@ -23,6 +23,7 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Either (isRight)
 import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Validation (toEither)
 import qualified Emulation
 import qualified Encoding
@@ -52,6 +53,21 @@ canDecodeAllToJSRepr path inspect = do
 
 ignoreDecodedValue :: a -> IO ()
 ignoreDecodedValue _ = pure ()
+
+registerTestFromFile :: FilePath -> M.Origin -> M.RpId -> IO ()
+registerTestFromFile fp origin rpId = do
+  pkCredential <-
+    either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
+      <$> decodeFile fp
+  let options = defaultPublicKeyCredentialCreationOptions pkCredential
+  let registerResult =
+        toEither $
+          WebAuthn.verifyAttestationResponse
+            origin
+            (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ rpId)
+            options
+            pkCredential
+  registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
 
 main :: IO ()
 main = Hspec.hspec $ do
@@ -91,7 +107,7 @@ main = Hspec.hspec $ do
               toEither $
                 WebAuthn.verifyAttestationResponse
                   (M.Origin "http://localhost:8080")
-                  (rpIdHash "localhost")
+                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   options
                   pkCredential
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
@@ -106,7 +122,7 @@ main = Hspec.hspec $ do
               toEither $
                 WebAuthn.verifyAssertionResponse
                   (M.Origin "http://localhost:8080")
-                  (rpIdHash "localhost")
+                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   (Just (M.UserHandle "UserId"))
                   credentialEntry
                   (defaultPublicKeyCredentialRequestOptions loginReq)
@@ -117,69 +133,62 @@ main = Hspec.hspec $ do
                     }
         signInResult `shouldSatisfy` isRight
   describe "Packed register" $
-    it "tests whether the fixed packed register has a valid attestation" $
-      do
-        pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
-            <$> decodeFile
-              "tests/responses/attestation/02-packed.json"
-        let options = defaultPublicKeyCredentialCreationOptions pkCredential
-            registerResult =
-              toEither $
-                WebAuthn.verifyAttestationResponse
-                  (M.Origin "https://localhost:44329")
-                  (rpIdHash "localhost")
-                  options
-                  pkCredential
-        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
+    it "tests whether the fixed packed register has a valid attestation" $ do
+      registerTestFromFile
+        "tests/responses/attestation/packed-01.json"
+        (M.Origin "https://localhost:44329")
+        "localhost"
+      registerTestFromFile
+        "tests/responses/attestation/packed-02.json"
+        (M.Origin "http://localhost:5000")
+        "localhost"
+      registerTestFromFile
+        "tests/responses/attestation/packed-02.json"
+        (M.Origin "http://localhost:5000")
+        "localhost"
   describe "AndroidKey register" $
-    it "tests whether the fixed android key register has a valid attestation" $
-      do
-        pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
-            <$> decodeFile
-              "tests/responses/attestation/03-android-key.json"
-        let options = defaultPublicKeyCredentialCreationOptions pkCredential
-            registerResult =
-              toEither $
-                WebAuthn.verifyAttestationResponse
-                  (M.Origin "https://localhost:44329")
-                  (rpIdHash "localhost")
-                  options
-                  pkCredential
-        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
+    it "tests whether the fixed android key register has a valid attestation" $ do
+      registerTestFromFile
+        "tests/responses/attestation/android-key-01.json"
+        (M.Origin "https://localhost:44329")
+        "localhost"
+      registerTestFromFile
+        "tests/responses/attestation/android-key-02.json"
+        (M.Origin "https://dev.dontneeda.pw")
+        "dev.dontneeda.pw"
   describe "U2F register" $
-    it "tests whether the fixed fido-u2f register has a valid attestation" $
-      do
-        pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
-            <$> decodeFile
-              "tests/responses/attestation/04-u2f.json"
-        let options = defaultPublicKeyCredentialCreationOptions pkCredential
-            registerResult =
-              toEither $
-                WebAuthn.verifyAttestationResponse
-                  (M.Origin "https://localhost:44329")
-                  (rpIdHash "localhost")
-                  options
-                  pkCredential
-        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
+    it "tests whether the fixed fido-u2f register has a valid attestation" $ do
+      registerTestFromFile
+        "tests/responses/attestation/u2f-01.json"
+        (M.Origin "https://localhost:44329")
+        "localhost"
+      registerTestFromFile
+        "tests/responses/attestation/u2f-02.json"
+        (M.Origin "http://localhost:5000")
+        "localhost"
+      registerTestFromFile
+        "tests/responses/attestation/u2f-03.json"
+        (M.Origin "http://localhost:5000")
+        "localhost"
+      registerTestFromFile
+        "tests/responses/attestation/u2f-04.json"
+        (M.Origin "https://api-duo1.duo.test")
+        "duo.test"
+  -- TODO: TEST FAILS
+  -- registerTestFromFile
+  --   "tests/responses/attestation/u2f-05.json"
+  --   (M.Origin "https://api-duo1.duo.test")
+  --   "duo.test"
   describe "Apple register" $
-    it "tests whether the fixed apple register has a valid attestation" $
-      do
-        pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
-            <$> decodeFile
-              "tests/responses/attestation/05-apple.json"
-        let options = defaultPublicKeyCredentialCreationOptions pkCredential
-            registerResult =
-              toEither $
-                WebAuthn.verifyAttestationResponse
-                  (M.Origin "https://6cc3c9e7967a.ngrok.io")
-                  (rpIdHash "6cc3c9e7967a.ngrok.io")
-                  options
-                  pkCredential
-        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options
+    it "tests whether the fixed apple register has a valid attestation" $ do
+      registerTestFromFile
+        "tests/responses/attestation/apple-01.json"
+        (M.Origin "https://6cc3c9e7967a.ngrok.io")
+        "6cc3c9e7967a.ngrok.io"
+      registerTestFromFile
+        "tests/responses/attestation/apple-02.json"
+        (M.Origin "https://dev2.dontneeda.pw:5000")
+        "dev2.dontneeda.pw"
 
 isExpectedAttestationResponse :: M.PublicKeyCredential 'M.Create 'True -> M.PublicKeyCredentialOptions 'M.Create -> Either (NonEmpty AttestationError) Common.CredentialEntry -> Bool
 isExpectedAttestationResponse _ _ (Left _) = False -- We should never receive errors
@@ -205,7 +214,7 @@ defaultPublicKeyCredentialCreationOptions pkc =
   M.PublicKeyCredentialCreationOptions
     { M.pkcocRp =
         M.PublicKeyCredentialRpEntity
-          { M.pkcreId = Just "localhost",
+          { M.pkcreId = Nothing,
             M.pkcreName = "Tweag I/O Test Server"
           },
       M.pkcocUser =
@@ -238,6 +247,3 @@ defaultPublicKeyCredentialRequestOptions pkc =
       M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
       M.pkcogExtensions = Nothing
     }
-
-rpIdHash :: ByteString.ByteString -> M.RpIdHash
-rpIdHash = M.RpIdHash . hash
