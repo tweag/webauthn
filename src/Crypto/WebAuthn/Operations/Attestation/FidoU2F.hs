@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Crypto.WebAuthn.Operations.Attestation.FidoU2F
@@ -11,25 +12,42 @@ module Crypto.WebAuthn.Operations.Attestation.FidoU2F
 where
 
 import qualified Codec.CBOR.Term as CBOR
+import qualified Codec.Serialise as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
-import Crypto.Number.Serialize (i2osp)
-import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
-import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1), Point (Point))
+import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
 import Crypto.WebAuthn.Model
-  ( AttestationType (AttestationTypeUncertain),
-    AttestedCredentialData (AttestedCredentialData, acdCredentialId, acdCredentialPublicKey),
-    AuthenticatorData (AuthenticatorData, adAttestedCredentialData, adRpIdHash),
+  ( AttestationStatementFormat
+      ( AttStmt,
+        AttStmtDecodingError,
+        AttStmtVerificationError,
+        asfDecode,
+        asfEncode,
+        asfIdentifier,
+        asfVerify
+      ),
+    AttestationType (AttestationTypeUncertain),
+    AttestedCredentialData
+      ( AttestedCredentialData,
+        acdCredentialId,
+        acdCredentialPublicKeyBytes
+      ),
+    AuthenticatorData
+      ( AuthenticatorData,
+        adAttestedCredentialData,
+        adRpIdHash
+      ),
     ClientDataHash (unClientDataHash),
     CredentialId (unCredentialId),
     RpIdHash (unRpIdHash),
   )
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.PublicKey (PublicKey (ES256PublicKey))
 import qualified Data.ByteArray as BA
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.HashMap.Strict as Map
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.HashMap.Strict as HashMap
+import Data.Map ((!?))
+import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
@@ -57,12 +75,14 @@ data VerifyingError
     NoECKeyInAttestedCredentialData
   | -- | After encoding the x or y coordinate of the public key did not have the required 32 byte length
     UnexpectedCoordinateLength
+  | -- | Error extracting coordinates
+    ExtractingCoordinatesError
   | -- | The provided public key cannot validate the signature over the verification data
     InvalidSignature
   deriving (Show, Exception)
 
 data Statement = Statement
-  { sig :: ByteString,
+  { sig :: BS.ByteString,
     attCert :: X509.SignedCertificate
   }
   deriving (Show, Eq)
@@ -74,11 +94,11 @@ instance M.AttestationStatementFormat Format where
   type AttStmtDecodingError Format = DecodingError
 
   asfDecode _ m = do
-    sig <- case Map.lookup "sig" m of
+    sig <- case HashMap.lookup "sig" m of
       Just (CBOR.TBytes sig) -> pure sig
       _ -> Left NoSig
     -- 2. Check that x5c has exactly one element and let attCert be that element.
-    attCert <- case Map.lookup "x5c" m of
+    attCert <- case HashMap.lookup "x5c" m of
       Just (CBOR.TList [CBOR.TBytes certBytes]) ->
         either (Left . DecodingErrorX5C) pure $ X509.decodeSignedCertificate certBytes
       Just (CBOR.TList []) -> Left NoX5C
@@ -94,7 +114,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerifyingError
 
-  asfVerify _ Statement {attCert, sig} AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKey}} clientDataHash = do
+  asfVerify _ Statement {attCert, sig} AuthenticatorData {adRpIdHash, adAttestedCredentialData = AttestedCredentialData {acdCredentialId, acdCredentialPublicKeyBytes}} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above
     -- and perform CBOR decoding on it to extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -128,14 +148,11 @@ instance M.AttestationStatementFormat Format where
     -- If size differs or "-3" key is not found, terminate this algorithm and
     -- return an appropriate error.
     -- NOTE: The decoding already happened in the decoding step
-    (x, y) <- case acdCredentialPublicKey of
-      ES256PublicKey (ECDSA.PublicKey _ (Point x y)) -> pure (x, y)
-      _ -> Left NoECKeyInAttestedCredentialData
+    (xb, yb) <- case extractPublicKey . M.unRaw $ acdCredentialPublicKeyBytes of
+      Just coords -> pure coords
+      Nothing -> Left ExtractingCoordinatesError
 
     -- We decode the x and y values in an earlier stage of the process. In order to construct the publicKeyU2F, we have to reencode the value.
-    -- TODO: This is suboptimal, and we might consider not decoding, or keeping the undecoded values as an additional field.
-    let xb = i2osp x
-        yb = i2osp y
     unless (BS.length xb == 32 && BS.length yb == 32) $ Left UnexpectedCoordinateLength
 
     -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
@@ -169,3 +186,17 @@ instance M.AttestationStatementFormat Format where
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format
+
+-- [(spec)](https://www.iana.org/assignments/cose/cose.xhtml)
+-- This function assumes the provided key is an ECC key, which is a valid
+-- assumption as we have already verified that in step 2.b
+-- Any non ECC key would result in another error here, which is fine.
+extractPublicKey :: BS.ByteString -> Maybe (BS.ByteString, BS.ByteString)
+extractPublicKey keyBS = do
+  map :: Map.Map CBOR.Term CBOR.Term <- either (const Nothing) pure <$> CBOR.deserialiseOrFail $ BSL.fromStrict keyBS
+  let xKey = -2
+  let yKey = -3
+  case (map !? CBOR.TInt xKey, map !? CBOR.TInt yKey) of
+    (Just (CBOR.TBytes x), Just (CBOR.TBytes y)) -> do
+      pure (x, y)
+    _ -> Nothing
