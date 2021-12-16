@@ -54,11 +54,11 @@ decodeSubjectKeyIdentifier subjectKeyIdentifierText = case Base16.decode (encode
 decodeCertificate :: IDL.DOMString -> Either Text X509.SignedCertificate
 decodeCertificate text =
   -- TODO: Remove Text.strip, it's only needed because of a spec violation, see https://github.com/tweag/haskell-fido2/issues/68
-  case Base64.decode (encodeUtf8 $ Text.strip text) of
-    Left err -> Left $ "A certificate failed to parse because it's not a valid base-64 encoding: " <> text <> ", error: " <> Text.pack err
-    Right bytes -> case X509.decodeSignedCertificate bytes of
-      Left err -> Left $ "A certificate failed to parse because it's not a valid encoding: " <> text <> ", error: " <> Text.pack err
-      Right certificate -> Right certificate
+  -- TODO: Don't use decodeLenient, it's only needed because of a spec violation, see TODO
+  let bytes = Base64.decodeLenient (encodeUtf8 $ Text.strip text)
+   in case X509.decodeSignedCertificate bytes of
+        Left err -> Left $ "A certificate failed to parse because it's not a valid encoding: " <> text <> ", error: " <> Text.pack err
+        Right certificate -> Right certificate
 
 -- | Fully decodes a [MetadataStatement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-keys).
 -- The @p@ type parameter is the 'StatementIDL.ProtocolFamily' that this metadata statement is for.
