@@ -70,7 +70,13 @@ open-source [SoloKey][solokey]. Testing with a phone requires setting up a
 certificate for the domain of the relying party as WebAuthn only works via
 https, with an exception being made for `localhost`.
 
-## LICENSE
+## Acknowledgements
+The test files in `tests/responses/` were not created by Tweag, but
+were instead copied from existing WebAuthn libraries. Notably the
+[.NET][dotnet] and [python][python] libraries by the .NET foundation and Duo
+Labs respectively.
+
+## LICENSES
 ```text
 Copyright
   2020 - 2021 Arian van Putten
@@ -90,9 +96,11 @@ specific language governing permissions and limitations under the License.
 
 [cache]: https://input-output-hk.github.io/haskell.nix/tutorials/getting-started.html#setting-up-the-binary-cache
 [cachix]: https://app.cachix.org/cache/tweag-haskell-fido2
+[dotnet]: https://github.com/passwordless-lib/fido2-net-lib
 [hls-editor]: https://haskell-language-server.readthedocs.io/en/latest/configuration.html#configuring-your-editor
 [hls]: https://github.com/haskell/haskell-language-server
 [ormolu]: https://github.com/tweag/ormolu
+[python]: https://github.com/duo-labs/py_webauthn
 [solokey]: https://solokeys.com/
 [spec]: https://www.w3.org/TR/webauthn-2/
 [yubikey]: https://www.yubico.com/
