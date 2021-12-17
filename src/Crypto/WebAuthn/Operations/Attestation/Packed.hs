@@ -48,7 +48,7 @@ instance Show Format where
 data Statement = Statement
   { alg :: COSEAlgorithmIdentifier,
     sig :: BS.ByteString,
-    x5c :: Maybe M.NonEmptyCertificateChain
+    x5c :: Maybe (NE.NonEmpty X509.SignedCertificate)
   }
   deriving (Eq, Show)
 
@@ -140,7 +140,7 @@ instance M.AttestationStatementFormat Format where
           -- authenticatorData and clientDataHash using the credential public key with alg.
           unless (PublicKey.verify key signedData stmtSig) . Left $ VerificationErrorInvalidSignature
 
-          pure M.AttestationTypeSelf
+          pure $ M.SomeAttestationType M.AttestationTypeSelf
 
         -- Basic, AttCA
         Just x5c@(certCred :| _) -> do
@@ -175,10 +175,9 @@ instance M.AttestationStatementFormat Format where
               certAAGUID <- decodeAAGUID (X509.extRawContent ext)
               unless (aaguid == certAAGUID) (Left VerificationErrorCertificateAAGUIDMismatch)
 
-          -- TODO: Inspect x5c and consult externally provided knowledge to
-          -- determine whether attStmt conveys a Basic or AttCA attestation. Blocked
-          -- by https://github.com/tweag/haskell-fido2/pull/11
-          pure $ M.AttestationTypeUncertain x5c
+          pure $
+            M.SomeAttestationType $
+              M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain (M.Fido2Chain x5c)
       where
         hasDnElement :: X509.DnElement -> [(OID.OID, X509.ASN1CharacterString)] -> Bool
         hasDnElement el = isJust . findDnElement el

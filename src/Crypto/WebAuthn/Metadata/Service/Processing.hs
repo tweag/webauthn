@@ -1,25 +1,49 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module Crypto.WebAuthn.Metadata.Service.Processing
-  ( getPayload,
-    RootCertificate (..),
+  ( RootCertificate (..),
+    createMetadataRegistry,
+    queryMetadata,
+    jwtToJson,
+    jsonToPayload,
   )
 where
 
 import Control.Lens ((^.), (^?), _Just)
-import Control.Monad.Except (ExceptT, MonadError (throwError), liftIO)
+import Control.Monad.Except (MonadError, runExcept, throwError)
+import Control.Monad.Reader (MonadReader, ask, runReaderT)
 import Crypto.JOSE (fromX509Certificate)
 import Crypto.JOSE.JWK.Store (VerificationKeyStore (getVerificationKeys))
 import Crypto.JWT (Error (JWSInvalidSignature), HasX5c (x5c), JWSHeader, JWTError (JWSError), SignedJWT, decodeCompact, defaultJWTValidationSettings, param, unregisteredClaims, verifyClaims)
+import Crypto.WebAuthn.DateOrphans ()
+import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
+import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
 import Data.Aeson (Value (Object))
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.HashMap.Strict as HashMap
+import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (mapMaybe)
+import Data.Singletons (SingI, sing)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 
+-- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate
   { -- | The root certificate itself
     rootCertificate :: X509.SignedCertificate,
@@ -27,7 +51,7 @@ data RootCertificate = RootCertificate
     rootCertificateHostName :: X509.HostName
   }
 
-instance VerificationKeyStore (ExceptT JWTError IO) (JWSHeader ()) p RootCertificate where
+instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
   getVerificationKeys header _ (RootCertificate rootCert hostName) = do
     -- TODO: Implement step 4 of the spec, which says to try to get the chain from x5u first before trying x5c
     -- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules
@@ -37,19 +61,17 @@ instance VerificationKeyStore (ExceptT JWTError IO) (JWSHeader ()) p RootCertifi
         throwError $ JWSError JWSInvalidSignature
       Just chain -> return chain
 
-    validationErrors <-
-      liftIO $
-        -- TODO: Check CRLs, see https://github.com/tweag/haskell-fido2/issues/23
-        X509.validate
-          -- TODO: Does the SHA256 choice matter here?
-          -- I think it's probably only for the cache, which we don't use
-          X509.HashSHA256
-          X509.defaultHooks
-          X509.defaultChecks
-          (X509.makeCertificateStore [rootCert])
-          (X509.exceptionValidationCache [])
-          (hostName, "")
-          (X509.CertificateChain (NE.toList chain))
+    now <- ask
+
+    -- TODO: Check CRLs, see https://github.com/tweag/haskell-fido2/issues/23
+    let validationErrors =
+          X509.validatePure
+            now
+            X509.defaultHooks
+            X509.defaultChecks
+            (X509.makeCertificateStore [rootCert])
+            (hostName, "")
+            (X509.CertificateChain (NE.toList chain))
 
     case validationErrors of
       [] -> do
@@ -60,14 +82,74 @@ instance VerificationKeyStore (ExceptT JWTError IO) (JWSHeader ()) p RootCertifi
         -- FIXME: We're currently discarding these errors by necessity, because we're bound by the JOSE libraries error type
         throwError $ JWSError JWSInvalidSignature
 
--- | Decodes and verifies a FIDO Metadata Service blob according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
-getPayload ::
-  -- | The bytes of the blob
-  LBS.ByteString ->
+-- | Extracts a FIDO Metadata payload JSON value from a JWT bytestring according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
+jwtToJson ::
+  -- | The bytes of the JWT blob
+  BS.ByteString ->
   -- | The root certificate the blob is signed with
   RootCertificate ->
-  ExceptT JWTError IO Value
-getPayload blob rootCert = do
-  jwt :: SignedJWT <- decodeCompact blob
-  claims <- verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt
+  -- | The current time for which to validate the JWT blob
+  DateTime ->
+  Either JWTError Value
+jwtToJson blob rootCert now = runExcept $ do
+  jwt :: SignedJWT <- decodeCompact $ LBS.fromStrict blob
+  claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
   return $ Object (claims ^. unregisteredClaims)
+
+-- | Decodes a FIDO Metadata payload JSON value to a 'Service.MetadataPayload',
+-- returning an error when the JSON is invalid, and ignoring any entries not
+-- relevant for webauthn
+jsonToPayload :: Value -> Either Text Service.MetadataPayload
+jsonToPayload value = case Aeson.fromJSON value of
+  Aeson.Error err -> Left $ Text.pack err
+  Aeson.Success payload -> case decodeMetadataPayload payload of
+    Left err -> Left err
+    Right result -> pure result
+
+-- | Creates a 'Service.MetadataServiceRegistry' from a list of
+-- 'Service.SomeMetadataEntry', which can either be obtained from a
+-- 'Service.MetadataPayload's 'Service.mpEntries' field, or be constructed
+-- directly
+--
+-- The resulting structure can be queried efficiently for
+-- 'Service.MetadataEntry' using 'metadataByAaguid' and 'metadataBySubjectKeyIdentifier'
+createMetadataRegistry :: [Service.SomeMetadataEntry] -> Service.MetadataServiceRegistry
+createMetadataRegistry entries = Service.MetadataServiceRegistry {..}
+  where
+    fido2Entries = HashMap.fromList $ mapMaybe getFido2Pairs entries
+    fidoU2FEntries = HashMap.fromList $ mapMaybe getFidoU2FPairs entries
+
+    getFido2Pairs (Service.SomeMetadataEntry ident entry) = getFido2Pairs' ident entry
+    getFidoU2FPairs (Service.SomeMetadataEntry ident entry) = getFidoU2FPairs' ident entry
+
+    getFido2Pairs' ::
+      forall p.
+      SingI p =>
+      M.AuthenticatorIdentifier p ->
+      Service.MetadataEntry p ->
+      Maybe (M.AAGUID, Service.MetadataEntry 'M.Fido2)
+    getFido2Pairs' ident entry = case sing @p of
+      M.SFido2 ->
+        Just (M.idAaguid ident, entry)
+      _ -> Nothing
+
+    getFidoU2FPairs' ::
+      forall p.
+      SingI p =>
+      M.AuthenticatorIdentifier p ->
+      Service.MetadataEntry p ->
+      Maybe (SubjectKeyIdentifier, Service.MetadataEntry 'M.FidoU2F)
+    getFidoU2FPairs' ident entry = case sing @p of
+      M.SFidoU2F ->
+        Just (M.idSubjectKeyIdentifier ident, entry)
+      _ -> Nothing
+
+-- | Query a 'Service.MetadataEntry' for an 'M.AuthenticatorIdentifier'
+queryMetadata ::
+  Service.MetadataServiceRegistry ->
+  M.AuthenticatorIdentifier p ->
+  Maybe (Service.MetadataEntry p)
+queryMetadata registry (M.AuthenticatorIdentifierFido2 aaguid) =
+  HashMap.lookup aaguid (Service.fido2Entries registry)
+queryMetadata registry (M.AuthenticatorIdentifierFidoU2F subjectKeyIdentifier) =
+  HashMap.lookup subjectKeyIdentifier (Service.fidoU2FEntries registry)

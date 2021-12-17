@@ -271,7 +271,9 @@ instance M.AttestationStatementFormat Format where
 
     -- 6. If successful, return implementation-specific values representing attestation type Basic and attestation trust
     -- path x5c.
-    pure (M.AttestationTypeBasic x5c)
+    pure $
+      M.SomeAttestationType $
+        M.AttestationTypeVerifiable M.VerifiableAttestationTypeBasic (M.Fido2Chain x5c)
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

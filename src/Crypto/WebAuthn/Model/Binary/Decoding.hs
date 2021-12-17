@@ -30,7 +30,6 @@ import qualified Crypto.Hash as Hash
 import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
-import Crypto.WebAuthn.Model.WebauthnType (SWebauthnType (SCreate, SGet), SingI (sing))
 import Crypto.WebAuthn.PublicKey (decodePublicKey)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
@@ -43,6 +42,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust, fromMaybe)
+import Data.Singletons (SingI, sing)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import qualified Data.UUID as UUID
@@ -157,13 +157,13 @@ decodeAuthenticatorData strictBytes = do
     -- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature),
     -- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
     -- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
-    (SCreate, True) -> decodeAttestedCredentialData bytes
-    (SCreate, False) -> Left DecodingErrorExpectedAttestedCredentialData
+    (M.SCreate, True) -> decodeAttestedCredentialData bytes
+    (M.SCreate, False) -> Left DecodingErrorExpectedAttestedCredentialData
     -- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature),
     -- the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the
     -- `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
-    (SGet, False) -> pure (bytes, M.NoAttestedCredentialData)
-    (SGet, True) -> Left DecodingErrorUnexpectedAttestedCredentialData
+    (M.SGet, False) -> pure (bytes, M.NoAttestedCredentialData)
+    (M.SGet, True) -> Left DecodingErrorUnexpectedAttestedCredentialData
 
   -- https://www.w3.org/TR/webauthn-2/#authdataextensions
   (bytes, adExtensions) <-
@@ -272,8 +272,8 @@ decodeCollectedClientData bytes = do
   -- The purpose of this member is to prevent certain types of signature confusion
   -- attacks (where an attacker substitutes one legitimate signature for another).
   let expectedType = case sing @t of
-        SCreate -> "webauthn.create"
-        SGet -> "webauthn.get"
+        M.SCreate -> "webauthn.create"
+        M.SGet -> "webauthn.get"
   unless (littype == expectedType) $ Left (DecodingErrorUnexpectedWebauthnType expectedType littype)
   pure
     M.CollectedClientData
@@ -290,8 +290,8 @@ stripRawPublicKeyCredential :: forall t raw. SingI t => M.PublicKeyCredential t 
 stripRawPublicKeyCredential M.PublicKeyCredential {..} =
   M.PublicKeyCredential
     { pkcResponse = case sing @t of
-        SCreate -> stripRawAuthenticatorAttestationResponse pkcResponse
-        SGet -> stripRawAuthenticatorAssertionResponse pkcResponse,
+        M.SCreate -> stripRawAuthenticatorAttestationResponse pkcResponse
+        M.SGet -> stripRawAuthenticatorAssertionResponse pkcResponse,
       ..
     }
   where
@@ -328,8 +328,8 @@ stripRawPublicKeyCredential M.PublicKeyCredential {..} =
 
     stripRawAttestedCredentialData :: forall t raw. SingI t => M.AttestedCredentialData t raw -> M.AttestedCredentialData t 'False
     stripRawAttestedCredentialData = case sing @t of
-      SCreate -> \M.AttestedCredentialData {..} -> M.AttestedCredentialData {acdCredentialPublicKeyBytes = M.NoRaw, ..}
-      SGet -> \M.NoAttestedCredentialData -> M.NoAttestedCredentialData
+      M.SCreate -> \M.AttestedCredentialData {..} -> M.AttestedCredentialData {acdCredentialPublicKeyBytes = M.NoRaw, ..}
+      M.SGet -> \M.NoAttestedCredentialData -> M.NoAttestedCredentialData
 
     stripRawCollectedClientData :: forall t raw. SingI t => M.CollectedClientData t raw -> M.CollectedClientData t 'False
     stripRawCollectedClientData M.CollectedClientData {..} = M.CollectedClientData {ccdRawData = M.NoRaw, ..}
