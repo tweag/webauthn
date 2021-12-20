@@ -62,10 +62,7 @@ instance Encode M.AuthenticationExtensionsClientInputs where
 
 -- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
 instance Encode PublicKey.COSEAlgorithmIdentifier where
-  encode PublicKey.COSEAlgorithmIdentifierES512 = -36
-  encode PublicKey.COSEAlgorithmIdentifierES384 = -35
-  encode PublicKey.COSEAlgorithmIdentifierEdDSA = -8
-  encode PublicKey.COSEAlgorithmIdentifierES256 = -7
+  encode algIdent = PublicKey.fromAlg algIdent
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
 instance Encode M.PublicKeyCredentialType where
