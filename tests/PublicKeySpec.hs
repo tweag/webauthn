@@ -21,6 +21,7 @@ import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
 import qualified Crypto.PubKey.ECC.Generate as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
+import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.Random as Random
 import Crypto.WebAuthn.PublicKey
   ( COSEAlgorithmIdentifier
@@ -32,7 +33,11 @@ import Crypto.WebAuthn.PublicKey
       ( ES256PublicKey,
         ES384PublicKey,
         ES512PublicKey,
-        Ed25519PublicKey
+        Ed25519PublicKey,
+        RS1PublicKey,
+        RS256PublicKey,
+        RS384PublicKey,
+        RS512PublicKey
       ),
     decodeCOSEAlgorithmIdentifier,
     decodePublicKey,
@@ -59,7 +64,11 @@ instance Arbitrary PublicKey where
       [ ES256PublicKey <$> randomECDSAPublicKey ECC.SEC_p256r1,
         ES384PublicKey <$> randomECDSAPublicKey ECC.SEC_p384r1,
         ES512PublicKey <$> randomECDSAPublicKey ECC.SEC_p521r1,
-        Ed25519PublicKey <$> arbitrary
+        Ed25519PublicKey <$> arbitrary,
+        RS1PublicKey <$> randomRSAPublicKey 160,
+        RS256PublicKey <$> randomRSAPublicKey 256,
+        RS384PublicKey <$> randomRSAPublicKey 384,
+        RS512PublicKey <$> randomRSAPublicKey 512
       ]
 
 newtype Ed25519KeyPair = Ed25519KeyPair (Ed25519.PublicKey, Ed25519.SecretKey) deriving (Eq, Show)
@@ -94,6 +103,15 @@ randomECDSAKeyPair curveName = do
   let curve = ECC.getCurveByName curveName
   rng <- Random.drgNewSeed . Random.seedFromInteger <$> arbitrary
   let ((public, private), _) = Random.withDRG rng (ECC.generate curve)
+  pure (public, private)
+
+randomRSAPublicKey :: Int -> Gen RSA.PublicKey
+randomRSAPublicKey publicSize = fst <$> randomRSAKeyPair publicSize
+
+randomRSAKeyPair :: Int -> Gen (RSA.PublicKey, RSA.PrivateKey)
+randomRSAKeyPair publicSize = do
+  rng <- Random.drgNewSeed . Random.seedFromInteger <$> arbitrary
+  let ((public, private), _) = Random.withDRG rng (RSA.generate publicSize 65537)
   pure (public, private)
 
 spec :: SpecWith ()
@@ -138,7 +156,7 @@ spec = do
     it "fails to decode unspported COSEAlgorithmIdentifiers" $ do
       let bs = Write.toLazyByteString (CBOR.encodeInt (-300))
       Read.deserialiseFromBytes decodeCOSEAlgorithmIdentifier bs `shouldSatisfy` \case
-        Left (Read.DeserialiseFailure _ "Unsupported `alg`") -> True
+        Left (Read.DeserialiseFailure _ "Unsupported `alg`: -300") -> True
         _ -> False
   where
     ecdsaAcceptsValid :: HashAlgorithm hash => COSEAlgorithmIdentifier -> hash -> Property

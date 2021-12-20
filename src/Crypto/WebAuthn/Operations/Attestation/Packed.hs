@@ -16,26 +16,20 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
 import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier, fromAlg, toAlg, toCOSEAlgorithmIdentifier)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
-import Data.ASN1.BinaryEncoding (DER (DER))
-import Data.ASN1.Encoding (ASN1Decoding (decodeASN1))
 import Data.ASN1.Error (ASN1Error)
 import qualified Data.ASN1.OID as OID
-import Data.ASN1.Prim (ASN1 (OctetString))
 import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (fromStrict)
-import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (HashMap, (!?))
-import Data.List (find)
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.UUID as UUID
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 
@@ -48,7 +42,8 @@ instance Show Format where
 data Statement = Statement
   { alg :: COSEAlgorithmIdentifier,
     sig :: BS.ByteString,
-    x5c :: Maybe (NE.NonEmpty X509.SignedCertificate)
+    x5c :: Maybe (NE.NonEmpty X509.SignedCertificate),
+    aaguidExt :: Maybe IdFidoGenCeAAGUID
   }
   deriving (Eq, Show)
 
@@ -61,6 +56,12 @@ data DecodingError
   | -- | The x5c field of the attestation statement could not be decoded for
     -- the provided reason
     DecodingErrorCertificate String
+  | -- | The required id-fido-gen-ce-aaguid extension was not found in the
+    -- certificate
+    DecodingErrorCertificateExtensionMissing
+  | -- | The required id-fido-gen-ce-aaguid extension of the certificate could
+    -- not be decoded
+    DecodingErrorCertificateExtension String
   deriving (Show, Exception)
 
 data VerificationError
@@ -107,6 +108,15 @@ instance M.AttestationStatementFormat Format where
               _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
             pure $ Just chain
           _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
+
+        aaguidExt <- case x5c of
+          Nothing -> pure Nothing
+          Just chain -> do
+            let cert = X509.getCertificate $ NE.head chain
+            case X509.extensionGetE (X509.certExtensions cert) of
+              Just (Right ext) -> pure $ Just ext
+              Just (Left err) -> Left $ DecodingErrorCertificateExtension err
+              Nothing -> pure Nothing
         pure $ Statement {..}
       _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
 
@@ -124,7 +134,7 @@ instance M.AttestationStatementFormat Format where
 
   asfVerify
     _
-    Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c}
+    Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c, aaguidExt}
     M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
       let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
@@ -165,15 +175,11 @@ instance M.AttestationStatementFormat Format where
 
           -- If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that
           -- the value of this extension matches the aaguid in authenticatorData.
-          let (X509.Extensions mX509Exts) = X509.certExtensions cert
-              mX509Ext = mX509Exts >>= findProperExtension [1, 3, 6, 1, 4, 1, 45724, 1, 1, 4]
-              aaguid = M.acdAaguid credData
+          let aaguid = M.acdAaguid credData
 
-          case mX509Ext of
+          case aaguidExt of
+            Just (IdFidoGenCeAAGUID credAAGUID) -> unless (aaguid == credAAGUID) $ Left VerificationErrorCertificateAAGUIDMismatch
             Nothing -> pure ()
-            Just ext -> do
-              certAAGUID <- decodeAAGUID (X509.extRawContent ext)
-              unless (aaguid == certAAGUID) (Left VerificationErrorCertificateAAGUIDMismatch)
 
           pure $
             M.SomeAttestationType $
@@ -184,16 +190,6 @@ instance M.AttestationStatementFormat Format where
 
         findDnElement :: X509.DnElement -> [(OID.OID, X509.ASN1CharacterString)] -> Maybe X509.ASN1CharacterString
         findDnElement dnElementName = lookup (OID.getObjectID dnElementName)
-
-        findProperExtension :: OID.OID -> [X509.ExtensionRaw] -> Maybe X509.ExtensionRaw
-        findProperExtension extensionOID = find ((==) extensionOID . X509.extRawOID)
-
-        decodeAAGUID :: BS.ByteString -> Either VerificationError M.AAGUID
-        decodeAAGUID bs = do
-          asn1 <- either (Left . VerificationErrorASN1Error) pure . decodeASN1 DER $ fromStrict bs
-          case asn1 of
-            [OctetString (UUID.fromByteString . LBS.fromStrict -> Just s)] -> Right $ M.AAGUID s
-            _ -> Left VerificationErrorCredentialAAGUIDMissing
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

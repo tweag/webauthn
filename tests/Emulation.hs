@@ -206,6 +206,22 @@ defaultPkcoc userEntity challenge =
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
               M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierEdDSA
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS1
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS256
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS384
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS512
             }
         ],
       M.pkcocTimeout = Nothing,

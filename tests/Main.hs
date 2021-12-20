@@ -136,58 +136,68 @@ main = Hspec.hspec $ do
     it "tests whether the fixed packed register has a valid attestation" $ do
       registerTestFromFile
         "tests/responses/attestation/packed-01.json"
-        (M.Origin "https://localhost:44329")
+        "https://localhost:44329"
         "localhost"
       registerTestFromFile
         "tests/responses/attestation/packed-02.json"
-        (M.Origin "http://localhost:5000")
+        "http://localhost:5000"
         "localhost"
       registerTestFromFile
         "tests/responses/attestation/packed-02.json"
-        (M.Origin "http://localhost:5000")
+        "http://localhost:5000"
         "localhost"
   describe "AndroidKey register" $
     it "tests whether the fixed android key register has a valid attestation" $ do
       registerTestFromFile
         "tests/responses/attestation/android-key-01.json"
-        (M.Origin "https://localhost:44329")
+        "https://localhost:44329"
         "localhost"
       registerTestFromFile
         "tests/responses/attestation/android-key-02.json"
-        (M.Origin "https://dev.dontneeda.pw")
+        "https://dev.dontneeda.pw"
         "dev.dontneeda.pw"
   describe "U2F register" $
     it "tests whether the fixed fido-u2f register has a valid attestation" $ do
       registerTestFromFile
         "tests/responses/attestation/u2f-01.json"
-        (M.Origin "https://localhost:44329")
+        "https://localhost:44329"
         "localhost"
       registerTestFromFile
         "tests/responses/attestation/u2f-02.json"
-        (M.Origin "http://localhost:5000")
+        "http://localhost:5000"
         "localhost"
       registerTestFromFile
         "tests/responses/attestation/u2f-03.json"
-        (M.Origin "http://localhost:5000")
+        "http://localhost:5000"
         "localhost"
       registerTestFromFile
         "tests/responses/attestation/u2f-04.json"
-        (M.Origin "https://api-duo1.duo.test")
+        "https://api-duo1.duo.test"
         "duo.test"
       registerTestFromFile
         "tests/responses/attestation/u2f-05.json"
-        (M.Origin "https://api-duo1.duo.test")
+        "https://api-duo1.duo.test"
         "duo.test"
   describe "Apple register" $
     it "tests whether the fixed apple register has a valid attestation" $ do
       registerTestFromFile
         "tests/responses/attestation/apple-01.json"
-        (M.Origin "https://6cc3c9e7967a.ngrok.io")
+        "https://6cc3c9e7967a.ngrok.io"
         "6cc3c9e7967a.ngrok.io"
       registerTestFromFile
         "tests/responses/attestation/apple-02.json"
-        (M.Origin "https://dev2.dontneeda.pw:5000")
+        "https://dev2.dontneeda.pw:5000"
         "dev2.dontneeda.pw"
+  describe "TPM register" $ do
+    it "tests whether the fixed TPM-SHA1 register has a valid attestation" $ do
+      registerTestFromFile
+        "tests/responses/attestation/tpm-rs1-01.json"
+        "https://webauthntest.azurewebsites.net"
+        "webauthntest.azurewebsites.net"
+      registerTestFromFile
+        "tests/responses/attestation/tpm-es256-01.json"
+        "https://localhost:44329"
+        "localhost"
 
 isExpectedAttestationResponse :: M.PublicKeyCredential 'M.Create 'True -> M.PublicKeyCredentialOptions 'M.Create -> Either (NonEmpty AttestationError) Common.CredentialEntry -> Bool
 isExpectedAttestationResponse _ _ (Left _) = False -- We should never receive errors
@@ -227,6 +237,10 @@ defaultPublicKeyCredentialCreationOptions pkc =
         [ M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
               M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
+            },
+          M.PublicKeyCredentialParameters
+            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
+              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS256
             }
         ],
       M.pkcocTimeout = Nothing,
