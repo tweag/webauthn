@@ -88,6 +88,7 @@ library
     Crypto.WebAuthn.Operations.Attestation.FidoU2F,
     Crypto.WebAuthn.Operations.Attestation.None,
     Crypto.WebAuthn.Operations.Attestation.Packed,
+    Crypto.WebAuthn.Operations.Attestation.TPM,
     Crypto.WebAuthn.Operations.Common,
     Crypto.WebAuthn.PublicKey,
     Crypto.WebAuthn.Registry,

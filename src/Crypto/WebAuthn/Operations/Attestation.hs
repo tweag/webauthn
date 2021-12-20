@@ -18,6 +18,7 @@ import qualified Crypto.WebAuthn.Operations.Attestation.Apple as Apple
 import qualified Crypto.WebAuthn.Operations.Attestation.FidoU2F as FidoU2F
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
 import qualified Crypto.WebAuthn.Operations.Attestation.Packed as Packed
+import qualified Crypto.WebAuthn.Operations.Attestation.TPM as TPM
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.List.NonEmpty (NonEmpty)
@@ -31,7 +32,8 @@ allSupportedFormats =
       Packed.format,
       AndroidKey.format,
       FidoU2F.format,
-      Apple.format
+      Apple.format,
+      TPM.format
     ]
 
 data AttestationError
