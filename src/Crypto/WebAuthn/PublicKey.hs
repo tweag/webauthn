@@ -1,10 +1,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Include
 module Crypto.WebAuthn.PublicKey
@@ -64,6 +62,9 @@ data COSEAlgorithmIdentifier
   | COSEAlgorithmIdentifierRS512
   deriving (Eq, Show, Bounded, Enum, Ord)
 
+-- | Every one of these Public Keys represents a single COSE-identified public
+-- key. Type safety is not guaranteed for this type. I.e. it is possible to
+-- have a ES256PublicKey that contains a ECC key for the SEC_p521r1 curve.
 data PublicKey
   = ES256PublicKey ECDSA.PublicKey
   | ES384PublicKey ECDSA.PublicKey
@@ -79,11 +80,6 @@ data KeyType = OKP | ECC | RSA
 
 data MapKey = Kty | Alg | Crv | X | Y | N | E
   deriving (Show, Eq)
-
--- TODO: We could do without this type by going from Cryptonite's NamedCurve
--- straight to the encoding
-data CurveIdentifier = P256 | P384 | P521
-  deriving (Eq)
 
 decodePublicKey :: CBOR.Decoder s PublicKey
 decodePublicKey = do
@@ -106,7 +102,6 @@ decodePublicKey = do
       x <- CBOR.decodeBytesCanonical
       case crv of
         6 ->
-          -- TODO: left?
           case Ed25519.publicKey x of
             CryptoFailed e -> fail (show e)
             CryptoPassed a -> pure $ Ed25519PublicKey a
@@ -119,7 +114,7 @@ decodePublicKey = do
       decodeMapKey Crv
       curveIdentifier <- decodeCurveIdentifier
       curveIdentifier' <- curveForAlg alg
-      let curve = toCurve curveIdentifier
+      let curve = ECC.getCurveByName curveIdentifier
       when (curveIdentifier /= curveIdentifier') $ fail "Curve must match alg. See <section>"
       decodeMapKey X
       -- Extracting the x and y values of the point is counterproductive for the Fido-U2F attestation
@@ -158,31 +153,26 @@ decodePublicKey = do
         3 -> pure RSA
         x -> fail $ "unexpected kty: " ++ show x
 
-    curveForAlg :: MonadFail f => COSEAlgorithmIdentifier -> f CurveIdentifier
-    curveForAlg COSEAlgorithmIdentifierES256 = pure P256
-    curveForAlg COSEAlgorithmIdentifierES384 = pure P384
-    curveForAlg COSEAlgorithmIdentifierES512 = pure P521
-    curveForAlg _ = fail "No associated curve identifier"
-
-    toCurve :: CurveIdentifier -> ECC.Curve
-    toCurve P256 = ECC.getCurveByName ECC.SEC_p256r1
-    toCurve P384 = ECC.getCurveByName ECC.SEC_p384r1
-    toCurve P521 = ECC.getCurveByName ECC.SEC_p521r1
-
     -- [(spec)](https://www.iana.org/assignments/cose/cose.xhtml)
-    decodeCurveIdentifier :: CBOR.Decoder s CurveIdentifier
+    decodeCurveIdentifier :: CBOR.Decoder s ECC.CurveName
     decodeCurveIdentifier = do
       crv <- CBOR.decodeIntCanonical
       case crv of
-        1 -> pure P256
-        2 -> pure P384
-        3 -> pure P521
+        1 -> pure ECC.SEC_p256r1
+        2 -> pure ECC.SEC_p384r1
+        3 -> pure ECC.SEC_p521r1
         _ -> fail "Unsupported `crv`"
 
     decodeMapKey :: MapKey -> CBOR.Decoder s ()
     decodeMapKey key = do
       key' <- CBOR.decodeIntCanonical
       when (mapKeyToInt key /= key') $ fail $ "Expected " ++ show key
+
+curveForAlg :: MonadFail f => COSEAlgorithmIdentifier -> f ECC.CurveName
+curveForAlg COSEAlgorithmIdentifierES256 = pure ECC.SEC_p256r1
+curveForAlg COSEAlgorithmIdentifierES384 = pure ECC.SEC_p384r1
+curveForAlg COSEAlgorithmIdentifierES512 = pure ECC.SEC_p521r1
+curveForAlg _ = fail "No associated curve identifier"
 
 toCurveName :: COSEAlgorithmIdentifier -> ECC.CurveName
 toCurveName COSEAlgorithmIdentifierES256 = ECC.SEC_p256r1
