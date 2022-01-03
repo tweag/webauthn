@@ -177,4 +177,5 @@ test-suite tests
     uuid,
     validation,
     webauthn,
-    x509
+    x509,
+    x509-store

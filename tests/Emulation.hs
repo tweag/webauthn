@@ -10,11 +10,14 @@ where
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Common as WebAuthn
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
+import Data.Bifunctor (Bifunctor (second))
+import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
@@ -27,6 +30,7 @@ import Emulation.Authenticator
 import Emulation.Authenticator.Arbitrary ()
 import Emulation.Client (AnnotatedOrigin (AnnotatedOrigin, aoOrigin, aoRpId), UserAgentConformance, UserAgentNonConformingBehaviour (RandomChallenge), clientAssertion, clientAttestation)
 import Emulation.Client.Arbitrary ()
+import System.Hourglass (dateCurrent)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 import Test.QuickCheck (property)
 
@@ -54,8 +58,10 @@ register ::
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  m (Either (NE.NonEmpty WebAuthn.AttestationError) WebAuthn.CredentialEntry, Authenticator, M.PublicKeyCredentialOptions 'M.Create)
-register ao conformance authenticator = do
+  Service.MetadataServiceRegistry ->
+  DateTime ->
+  m (Either (NE.NonEmpty WebAuthn.AttestationError) WebAuthn.AttestationResult, Authenticator, M.PublicKeyCredentialOptions 'M.Create)
+register ao conformance authenticator registry now = do
   -- Generate new random input
   assertionChallenge <- M.Challenge <$> Random.getRandomBytes 16
   userId <- M.UserHandle <$> Random.getRandomBytes 16
@@ -75,8 +81,10 @@ register ao conformance authenticator = do
           WebAuthn.verifyAttestationResponse
             (aoOrigin ao)
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
+            registry
             options
             mPkcCreate
+            now
   pure (registerResult, authenticator, options)
 
 login ::
@@ -112,13 +120,19 @@ spec =
                 { aoRpId = M.RpId "localhost",
                   aoOrigin = M.Origin "https://localhost:8080"
                 }
+        -- Since our emulator only supports None attestation the registry can be left empty.
+        let registry = mempty
+        -- The time could also be empty, but since we're in IO anyway, might as well just fetch it.
+        now <- dateCurrent
         -- We are not currently interested in client or authenticator fails, we
         -- only wish to test our relying party implementation and are thus only
         -- interested in its errors.
-        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator)
-        registerResult `shouldSatisfy` validAttestationResult authenticator userAgentConformance options
+        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry now)
+        -- Since we only do None attestation, we only care about the resulting entry
+        let registerResult' = second WebAuthn.rEntry registerResult
+        registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options
         -- Only if attestation succeeded can we continue with assertion
-        case registerResult of
+        case registerResult' of
           Right credentialEntry -> do
             let Right loginResult = runApp (seed + 1) (login annotatedOrigin userAgentConformance authenticator' credentialEntry)
             loginResult `shouldSatisfy` validAssertionResult authenticator userAgentConformance
