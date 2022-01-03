@@ -1,6 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -22,12 +23,14 @@ import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
 import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
+import Data.FileEmbed (embedFile)
 import Data.HashMap.Strict (HashMap, (!?))
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
 
 data Format = Format
 
@@ -153,6 +156,17 @@ instance M.AttestationStatementFormat Format where
       pure $
         M.SomeAttestationType $
           M.AttestationTypeVerifiable M.VerifiableAttestationTypeAnonCA (M.Fido2Chain x5c)
+
+  asfTrustAnchors _ _ = rootCertificateStore
+
+rootCertificateStore :: X509.CertificateStore
+rootCertificateStore = X509.makeCertificateStore [rootCertificate]
+
+-- | The root certificate used for apple attestation formats
+rootCertificate :: X509.SignedCertificate
+rootCertificate = case X509.decodeSignedCertificate $(embedFile "root-certs/apple/Apple_WebAuthn_Root_CA.crt") of
+  Left err -> error $ "Error while decoding Apple root certificate: " <> err
+  Right cert -> cert
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

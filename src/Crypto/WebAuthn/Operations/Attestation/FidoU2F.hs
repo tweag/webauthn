@@ -162,6 +162,8 @@ instance M.AttestationStatementFormat Format where
         M.SomeAttestationType $
           M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain (M.FidoU2FCert attCert)
 
+  asfTrustAnchors _ _ = mempty
+
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format
 

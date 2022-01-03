@@ -191,5 +191,7 @@ instance M.AttestationStatementFormat Format where
         findDnElement :: X509.DnElement -> [(OID.OID, X509.ASN1CharacterString)] -> Maybe X509.ASN1CharacterString
         findDnElement dnElementName = lookup (OID.getObjectID dnElementName)
 
+  asfTrustAnchors _ _ = mempty
+
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

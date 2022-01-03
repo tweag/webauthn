@@ -44,6 +44,7 @@ library
     containers,
     cryptonite,
     deriving-aeson,
+    file-embed,
     hashable,
     hourglass,
     -- https://github.com/frasertweedale/hs-jose/pull/103#issuecomment-923624548
