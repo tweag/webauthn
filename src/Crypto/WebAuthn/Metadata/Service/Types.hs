@@ -2,7 +2,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Crypto.WebAuthn.Metadata.Service.Types

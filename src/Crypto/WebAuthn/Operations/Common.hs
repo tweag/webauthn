@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Crypto.WebAuthn.Operations.Common
   ( CredentialEntry (..),
     failure,

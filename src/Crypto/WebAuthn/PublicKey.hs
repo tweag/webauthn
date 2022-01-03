@@ -1,10 +1,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Include
 module Crypto.WebAuthn.PublicKey

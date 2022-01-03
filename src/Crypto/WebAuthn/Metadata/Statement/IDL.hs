@@ -1,9 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | <https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html>

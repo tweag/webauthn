@@ -1,7 +1,6 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Emulation.Authenticator

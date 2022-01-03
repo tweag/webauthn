@@ -80,7 +80,7 @@ instance X509.Extension AppleNonceExtension where
   extOID = const [1, 2, 840, 113635, 100, 8, 2]
   extHasNestedASN1 = const False
   extEncode = error "extEncode for AppleNonceExtension is unimplemented"
-  extDecode asn1 = ASN1.runParseASN1 decode asn1
+  extDecode = ASN1.runParseASN1 decode
     where
       decode :: ASN1.ParseASN1 AppleNonceExtension
       decode = do
