@@ -32,10 +32,13 @@ module Crypto.WebAuthn.Model
     RpId (..),
     RelyingPartyName (..),
     UserHandle (..),
+    generateUserHandle,
     UserAccountDisplayName (..),
     UserAccountName (..),
     CredentialId (..),
+    generateCredentialId,
     Challenge (..),
+    generateChallenge,
     Timeout (..),
     AssertionSignature (..),
     RpIdHash (..),
@@ -86,6 +89,7 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
+import Crypto.Random (MonadRandom, getRandomBytes)
 import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
     ProtocolKind (Fido2, FidoU2F),
@@ -112,7 +116,6 @@ import Data.Word (Word32)
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import GHC.Generics (Generic)
-import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
 import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 
 -- | A model field parametrized by whether it's empty ('False') or contains raw bytes ('True')
@@ -507,8 +510,8 @@ newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
 -- with a maximum size of 64 bytes, and is not meant to be displayed to the user.
-instance Uniform UserHandle where
-  uniformM g = UserHandle <$> uniformByteStringM 64 g
+generateUserHandle :: MonadRandom m => m UserHandle
+generateUserHandle = UserHandle <$> getRandomBytes 16
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) name for the user account,
@@ -553,19 +556,26 @@ newtype CredentialId = CredentialId {unCredentialId :: BS.ByteString}
   deriving (Eq, Show, Ord)
   deriving newtype (ToJSON)
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#credential-id)
+-- Generates a random 'CredentialId' using 16 random bytes.
+-- This is only useful for authenticators, not for relying parties.
+-- This function is only included for completeness and testing purposes.
+generateCredentialId :: MonadRandom m => m CredentialId
+generateCredentialId = CredentialId <$> getRandomBytes 16
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
 -- This member contains a challenge intended to be used for generating the newly
 -- created credential’s attestation object. See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
 -- security consideration.
 newtype Challenge = Challenge {unChallenge :: BS.ByteString}
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
   deriving newtype (ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
 -- In order to prevent replay attacks, the challenges MUST contain enough entropy
 -- to make guessing them infeasible. Challenges SHOULD therefore be at least 16 bytes long.
-instance Uniform Challenge where
-  uniformM g = Challenge <$> uniformByteStringM 16 g
+generateChallenge :: MonadRandom m => m Challenge
+generateChallenge = Challenge <$> getRandomBytes 16
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
 -- This member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.

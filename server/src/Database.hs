@@ -18,19 +18,20 @@ module Database
 
     -- * Auth token
     AuthToken (..),
+    generateAuthToken,
     insertAuthToken,
     queryUserByAuthToken,
     deleteAuthToken,
   )
 where
 
+import Crypto.Random (MonadRandom, getRandomBytes)
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import Data.Word (Word32)
 import qualified Database.SQLite.Simple as Sqlite
-import System.Random.Stateful (Uniform, uniformByteStringM, uniformM)
 
 type Connection = Sqlite.Connection
 
@@ -180,8 +181,8 @@ toCredentialEntry (credentialId, userHandle, publicKey, signCounter) =
 
 newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
 
-instance Uniform AuthToken where
-  uniformM g = AuthToken <$> uniformByteStringM 16 g
+generateAuthToken :: MonadRandom m => m AuthToken
+generateAuthToken = AuthToken <$> getRandomBytes 16
 
 queryUserByAuthToken :: Transaction -> AuthToken -> IO (Maybe M.UserAccountName)
 queryUserByAuthToken (Transaction conn) (AuthToken token) = do

@@ -213,7 +213,7 @@ authenticatorMakeCredential
       -- credential, as this is allowed (See 7.4).
       -- TODO: Use deterministic random number generator, and ensure that we
       -- use a single random number generator across the entire library.
-      credentialId <- M.CredentialId <$> Random.getRandomBytes 16
+      credentialId <- M.generateCredentialId
 
       -- 7.4.2. Set credentialSource.id to credentialId.
       -- 7.3.  Let credentialSource be a new public key credential source with the fields:
