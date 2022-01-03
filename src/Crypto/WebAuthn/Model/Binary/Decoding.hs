@@ -23,7 +23,6 @@ where
 import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
-import qualified Codec.Serialise as CBOR
 import Control.Exception (Exception, SomeException (SomeException))
 import Control.Monad (forM, unless)
 import qualified Crypto.Hash as Hash
@@ -39,7 +38,6 @@ import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64Url
 import qualified Data.ByteString.Lazy as LBS
-import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Singletons (SingI, sing)
@@ -65,7 +63,7 @@ data CreatedDecodingError
   | -- | The CBOR-encoded attestation object did not contain the required
     -- "authData", "fmt" and "attStmt" fields, or their respective values were
     -- not the correct types
-    CreatedDecodingErrorUnexpectedAttestationObjectValues (HashMap Text CBOR.Term)
+    CreatedDecodingErrorUnexpectedAttestationObject CBOR.Term
   deriving (Show, Exception)
 
 -- | Decoding errors that can occur when doing binary decoding of webauthn client
@@ -203,7 +201,7 @@ decodeAuthenticatorData strictBytes = do
     decodeExtensions :: PartialBinaryDecoder DecodingError M.AuthenticatorExtensionOutputs
     decodeExtensions bytes = do
       -- TODO
-      (bytes, (_, _extensions :: HashMap Text CBOR.Term)) <- runCBOR CBOR.decode bytes
+      (bytes, (_, _extensions :: CBOR.Term)) <- runCBOR CBOR.decodeTerm bytes
       pure (bytes, M.AuthenticatorExtensionOutputs {})
 
 -- | Decodes a 'M.AttestationObject' from a 'BS.ByteString'. This is needed
@@ -218,9 +216,14 @@ decodeAuthenticatorData strictBytes = do
 -- structure
 decodeAttestationObject :: M.SupportedAttestationStatementFormats -> BS.ByteString -> Either CreatedDecodingError (M.AttestationObject 'True)
 decodeAttestationObject supportedFormats bytes = do
+  (rest, (_consumed, result)) <- first CreatedDecodingErrorCommon $ runCBOR CBOR.decodeTerm $ LBS.fromStrict bytes
+  unless (LBS.null rest) $ Left $ CreatedDecodingErrorCommon $ DecodingErrorNotAllInputUsed rest
+  pairs <- case result of
+    CBOR.TMap pairs -> return pairs
+    _ -> Left $ CreatedDecodingErrorUnexpectedAttestationObject result
+
   -- https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object
-  map :: HashMap Text CBOR.Term <- first (CreatedDecodingErrorCommon . DecodingErrorCBOR) $ CBOR.deserialiseOrFail $ LBS.fromStrict bytes
-  case (map !? "authData", map !? "fmt", map !? "attStmt") of
+  case (CBOR.TString "authData" `lookup` pairs, CBOR.TString "fmt" `lookup` pairs, CBOR.TString "attStmt" `lookup` pairs) of
     (Just (CBOR.TBytes authDataBytes), Just (CBOR.TString fmt), Just (CBOR.TMap attStmtPairs)) -> do
       aoAuthData <- first CreatedDecodingErrorCommon $ decodeAuthenticatorData authDataBytes
 
@@ -235,7 +238,7 @@ decodeAttestationObject supportedFormats bytes = do
             first (CreatedDecodingErrorAttestationStatement . SomeException) $
               M.asfDecode aoFmt attStmtMap
           pure M.AttestationObject {..}
-    _ -> Left $ CreatedDecodingErrorUnexpectedAttestationObjectValues map
+    _ -> Left $ CreatedDecodingErrorUnexpectedAttestationObject result
 
 --- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
 --- Intermediate type used to extract the JSON structure stored in the
