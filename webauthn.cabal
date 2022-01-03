@@ -109,6 +109,7 @@ executable server
 
   build-depends:
     aeson,
+    aeson-pretty,
     base64-bytestring,
     binary,
     cborg,

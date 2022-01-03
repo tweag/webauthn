@@ -15,7 +15,7 @@ import Control.Monad (forever)
 import Crypto.JWT (JWTError)
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataEntry)
 import qualified Crypto.WebAuthn.Metadata.Service.IDL as Service
-import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate, createMetadataRegistry, fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
+import Crypto.WebAuthn.Metadata.Service.Processing (createMetadataRegistry, fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import Data.Aeson (eitherDecodeFileStrict)
 import qualified Data.ByteString as BS
