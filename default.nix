@@ -26,6 +26,11 @@ let
     };
     # Specify the GHC version to use.
     compiler-nix-name = "ghc8107";
+    modules = [
+      {
+        packages.webauthn.components.library.extraSrcFiles = [ "root-certs/*" ];
+      }
+    ];
   };
 
   deploy = pkgs.writeShellScriptBin "deploy" ''

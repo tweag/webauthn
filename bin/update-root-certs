@@ -1,0 +1,56 @@
+#!/usr/bin/env nix-shell
+#!nix-shell -i bash -p cabextract curl openssl
+set -euo pipefail
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' exit
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+
+rootCertDir=$(realpath "$SCRIPT_DIR"/../root-certs)
+rm -rf "$rootCertDir"
+mkdir "$rootCertDir"
+
+apple() (
+  mkdir "$rootCertDir"/apple
+  # For the apple attestation format, link from https://www.apple.com/certificateauthority/private/
+  wget --no-verbose https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem -O "$tmp/Apple.pem"
+  openssl x509 -in "$tmp/Apple.pem" -out "$rootCertDir/apple/Apple_WebAuthn_Root_CA.crt" -outform DER 
+)
+
+tpm() (
+  mkdir "$rootCertDir"/tpm
+  # For the TPM attestation format, Microsoft publishes a list of known root certificates from TPM vendors
+  # Link from https://docs.microsoft.com/en-us/windows-server/security/guarded-fabric-shielded-vm/guarded-fabric-install-trusted-tpm-root-certificates
+  wget --no-verbose 'https://go.microsoft.com/fwlink/?linkid=2097925' -O "$tmp/TrustedTpm.cab"
+  cabextract --quiet -d "$tmp/TrustedTpm" "$tmp/TrustedTpm.cab"
+  cd "$tmp/TrustedTpm"
+  for vendor in *; do
+    if [[ ! -d "$vendor" ]]; then
+      continue
+    fi
+
+    mkdir "$rootCertDir/tpm/$vendor"
+    (
+      cd "$vendor/RootCA"
+      for cert in *; do
+        # There's one certificate not in DER format..
+        if openssl x509 -in "$cert" -inform PEM -out "$rootCertDir/tpm/$vendor/$cert" -outform DER 2>/dev/null; then
+          echo "Converted tpm certificate \"$cert\" from Vendor \"$vendor\" from PEM to DER format"
+        else
+          openssl x509 -in "$cert" -inform DER -out "$rootCertDir/tpm/$vendor/$cert" -outform DER
+        fi
+      done
+    )
+  done
+)
+
+metadata() {
+  mkdir "$rootCertDir"/metadata
+  # Link from https://fidoalliance.org/metadata/ (over https://valid.r3.roots.globalsign.com/)
+  wget --no-verbose http://secure.globalsign.com/cacert/root-r3.crt -O "$rootCertDir/metadata/root.crt"
+}
+
+apple
+tpm
+metadata
