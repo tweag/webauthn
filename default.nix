@@ -9,7 +9,7 @@ let
   # haskell.nix provides access to the nixpkgs pins which are used by our CI,
   # hence you will be more likely to get cache hits when using these.
   # But you can also just use your own, e.g. '<nixpkgs>'.
-  nixpkgs = haskellNix.sources.nixpkgs-2105;
+  nixpkgs = haskellNix.sources.nixpkgs-2111;
 
   # Import nixpkgs and pass the haskell.nix provided nixpkgsArgs
   pkgs = import
@@ -45,7 +45,9 @@ let
       cabal = "3.4.0.0";
       hlint = "latest";
       haskell-language-server = "latest";
-      ormolu = "latest";
+      # 0.4.0.0 requires Cabal 3.6, which requires GHC 9.2.1, which haskell.nix
+      # only has cached for nixos-unstable
+      ormolu = "0.3.1.0";
     };
 
     nativeBuildInputs = with pkgs; [

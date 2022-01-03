@@ -32,6 +32,7 @@ import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
 import Data.Aeson (Value (Object))
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.KeyMap as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.FileEmbed (embedFile)
@@ -114,7 +115,7 @@ jwtToJson ::
 jwtToJson blob rootCert now = runExcept $ do
   jwt :: SignedJWT <- decodeCompact $ LBS.fromStrict blob
   claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
-  return $ Object (claims ^. unregisteredClaims)
+  return $ Object $ Aeson.fromMapText (claims ^. unregisteredClaims)
 
 -- | Decodes a FIDO Metadata payload JSON value to a 'Service.MetadataPayload',
 -- returning an error when the JSON is invalid, and ignoring any entries not

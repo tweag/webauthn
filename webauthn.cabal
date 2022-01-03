@@ -32,7 +32,7 @@ library
   import: sanity
   hs-source-dirs: src
   build-depends:
-    aeson,
+    aeson >= 2.0.1.0,
     asn1-encoding,
     asn1-parse,
     asn1-types,
@@ -105,7 +105,7 @@ executable server
     PendingOps
 
   build-depends:
-    aeson,
+    aeson >= 2.0.1.0,
     base64-bytestring,
     binary,
     cborg,
@@ -157,7 +157,7 @@ test-suite tests
     Emulation.Authenticator.Arbitrary
   build-depends:
     QuickCheck,
-    aeson,
+    aeson >= 2.0.1.0,
     asn1-encoding,
     base64-bytestring,
     binary,
