@@ -165,7 +165,6 @@ test-suite tests
     binary,
     bytestring,
     cborg,
-    cborg-json,
     containers,
     cryptonite,
     directory,

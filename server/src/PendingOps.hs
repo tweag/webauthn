@@ -25,8 +25,8 @@ import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Kinds (SWebauthnKind (SCreate, SGet))
 import Data.Binary (Binary (get, put))
 import qualified Data.Binary as Binary
-import Data.Binary.Get as Binary (getInt64le, getRemainingLazyByteString)
-import Data.Binary.Put as Binary (putInt64le, putLazyByteString)
+import qualified Data.Binary.Get as Binary
+import qualified Data.Binary.Put as Binary
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int (Int64)
 import Data.Map (Map)
