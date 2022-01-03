@@ -52,6 +52,7 @@ let
 
     nativeBuildInputs = with pkgs; [
       entr
+      gitMinimal
       niv
       python3
       yarn
