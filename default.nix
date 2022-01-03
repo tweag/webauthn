@@ -50,7 +50,6 @@ let
 
     nativeBuildInputs = with pkgs; [
       entr
-      fd
       niv
       python3
       yarn
