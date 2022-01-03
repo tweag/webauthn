@@ -103,6 +103,7 @@ executable server
   main-is: Main.hs
   other-modules:
     Database,
+    MetadataFetch,
     PendingOps
 
   build-depends:
@@ -116,8 +117,13 @@ executable server
     cookie,
     cryptonite,
     webauthn,
+    hourglass,
+    http-client,
+    http-client-tls,
     http-types,
+    jose,
     mtl,
+    pem,
     random,
     scotty,
     singletons,
@@ -129,7 +135,9 @@ executable server
     validation,
     wai,
     wai-middleware-static,
-    warp
+    warp,
+    x509,
+    x509-validation,
 
 test-suite tests
   import: sanity
