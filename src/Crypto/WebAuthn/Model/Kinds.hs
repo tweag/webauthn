@@ -17,6 +17,7 @@ module Crypto.WebAuthn.Model.Kinds
   )
 where
 
+import Data.Aeson (ToJSON, toJSON)
 import Data.Kind (Type)
 import Data.Singletons (Sing, SingI (sing))
 
@@ -37,6 +38,10 @@ data SWebauthnKind :: WebauthnKind -> Type where
 deriving instance Show (SWebauthnKind t)
 
 deriving instance Eq (SWebauthnKind t)
+
+instance ToJSON (SWebauthnKind k) where
+  toJSON SCreate = "Create"
+  toJSON SGet = "Get"
 
 type instance Sing = SWebauthnKind
 
@@ -63,6 +68,10 @@ data SProtocolKind :: ProtocolKind -> Type where
 deriving instance Show (SProtocolKind p)
 
 deriving instance Eq (SProtocolKind p)
+
+instance ToJSON (SProtocolKind k) where
+  toJSON SFidoU2F = "FidoU2F"
+  toJSON SFido2 = "Fido2"
 
 type instance Sing = SProtocolKind
 

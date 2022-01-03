@@ -10,12 +10,14 @@ where
 import qualified Crypto.WebAuthn.Model as M
 import Data.ASN1.Parse (ParseASN1, getNext, runParseASN1)
 import Data.ASN1.Types (ASN1 (OctetString))
+import Data.Aeson (ToJSON)
 import Data.Bifunctor (Bifunctor (first))
 import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.UUID as UUID
 import Data.Validation (Validation (Failure))
 import Data.X509 (Extension, extDecode, extEncode, extHasNestedASN1, extOID)
+import GHC.Generics (Generic)
 
 -- | This type represents the database row that a Relying Party server needs
 -- to store for each credential that's registered to a user
@@ -25,7 +27,7 @@ data CredentialEntry = CredentialEntry
     cePublicKeyBytes :: M.PublicKeyBytes,
     ceSignCounter :: M.SignatureCounter
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 failure :: e -> Validation (NonEmpty e) a
 failure = Failure . pure

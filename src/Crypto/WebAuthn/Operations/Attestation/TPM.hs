@@ -28,6 +28,7 @@ import Data.ASN1.Error (ASN1Error)
 import Data.ASN1.OID (OID)
 import Data.ASN1.Parse (ParseASN1, getNext, hasNext, runParseASN1)
 import Data.ASN1.Prim (ASN1 (ASN1String, OID))
+import Data.Aeson (ToJSON, Value (String), object, toJSON, (.=))
 import Data.Bifunctor (Bifunctor (first))
 import Data.Binary (Word16, Word32, Word64)
 import qualified Data.Binary.Get as Get
@@ -46,6 +47,7 @@ import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
+import GHC.Generics (Generic)
 
 tpmManufacturers :: Set.Set Text
 tpmManufacturers =
@@ -79,7 +81,7 @@ tpmManufacturers =
 
 -- | [(spec)](https://trustedcomputinggroup.org/wp-content/uploads/TCG-_Algorithm_Registry_r1p32_pub.pdf)
 data TPMAlgId = TPMAlgRSA | TPMAlgSHA1 | TPMAlgSHA256 | TPMAlgECC
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic, ToJSON)
 
 -- | [(spec)](https://trustedcomputinggroup.org/wp-content/uploads/TCG-_Algorithm_Registry_r1p32_pub.pdf)
 toTPMAlgId :: MonadFail m => Word16 -> m TPMAlgId
@@ -110,13 +112,13 @@ data TPMSClockInfo = TPMSClockInfo
     tpmsciRestartCount :: Word32,
     tpmsciSafe :: Bool
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 data TPMSCertifyInfo = TPMSCertifyInfo
   { tpmsciName :: BS.ByteString,
     tpmsciQualifiedName :: BS.ByteString
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 data TPMSAttest = TPMSAttest
   { tpmsaMagic :: Word32,
@@ -127,7 +129,7 @@ data TPMSAttest = TPMSAttest
     tpmsaFirmwareVersion :: Word64,
     tpmsaAttested :: TPMSCertifyInfo
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 -- We don't need the flags set in the Object
 type TPMAObject = Word32
@@ -145,7 +147,7 @@ data TPMUPublicParms
         tpmsepCurveId :: ECC.CurveName,
         tpmsepkdf :: Word16
       }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 data TPMUPublicId
   = TPM2BPublicKeyRSA BS.ByteString
@@ -153,7 +155,7 @@ data TPMUPublicId
       { tpmseX :: Integer,
         tpmseY :: Integer
       }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 data TPMTPublic = TPMTPublic
   { tpmtpType :: TPMAlgId,
@@ -164,7 +166,7 @@ data TPMTPublic = TPMTPublic
     tpmtpParameters :: TPMUPublicParms,
     tpmtpUnique :: TPMUPublicId
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 data Format = Format
 
@@ -195,6 +197,17 @@ data Statement = Statement
     pubAreaKey :: PublicKey.PublicKey
   }
   deriving (Eq, Show)
+
+instance ToJSON Statement where
+  toJSON Statement {..} =
+    object
+      [ "ver" .= String "2.0",
+        "alg" .= alg,
+        "x5c" .= x5c,
+        "sig" .= sig,
+        "certInfo" .= certInfo,
+        "pubArea" .= pubArea
+      ]
 
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field

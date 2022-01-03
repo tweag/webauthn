@@ -94,6 +94,7 @@ library
     Crypto.WebAuthn.PublicKey,
     Crypto.WebAuthn.Registry,
     Crypto.WebAuthn.SubjectKeyIdentifier,
+    Crypto.WebAuthn.ToJSONOrphans,
     Crypto.WebAuthn.UAF,
     Crypto.WebAuthn.WebIDL
 

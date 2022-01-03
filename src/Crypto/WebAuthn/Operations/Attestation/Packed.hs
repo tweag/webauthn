@@ -21,6 +21,7 @@ import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier, fromAlg, toAlg, toCOS
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import qualified Data.ASN1.OID as OID
+import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
@@ -46,6 +47,15 @@ data Statement = Statement
     aaguidExt :: Maybe IdFidoGenCeAAGUID
   }
   deriving (Eq, Show)
+
+instance ToJSON Statement where
+  toJSON Statement {..} =
+    object
+      ( [ "alg" .= alg,
+          "sig" .= sig
+        ]
+          ++ maybe [] (\x5c' -> ["x5c" .= x5c']) x5c
+      )
 
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field
