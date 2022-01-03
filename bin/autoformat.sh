@@ -10,3 +10,5 @@ ormolu \
     --mode inplace \
     --ghc-opt -XTypeApplications \
     $(git ls-files '*.hs')
+
+hlint -g
