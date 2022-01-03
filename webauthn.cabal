@@ -53,7 +53,6 @@ library
     memory,
     monad-time,
     mtl,
-    serialise,
     singletons,
     text,
     time,

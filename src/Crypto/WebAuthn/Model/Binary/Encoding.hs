@@ -18,7 +18,6 @@ where
 
 import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
-import qualified Codec.Serialise as CBOR
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.PublicKey (encodePublicKey)
 import qualified Data.Aeson as Aeson
@@ -30,8 +29,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64.URL as Base64Url
 import Data.ByteString.Builder (Builder, stringUtf8, toLazyByteString)
 import qualified Data.ByteString.Lazy as LBS
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap
 import Data.Singletons (SingI, sing)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
@@ -118,10 +115,7 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
         <> maybe mempty encodeExtensions adExtensions
 
     encodeExtensions :: M.AuthenticatorExtensionOutputs -> Builder
-    encodeExtensions M.AuthenticatorExtensionOutputs {} = CBOR.toBuilder $ CBOR.encode entries
-      where
-        entries :: HashMap Text CBOR.Term
-        entries = HashMap.empty
+    encodeExtensions M.AuthenticatorExtensionOutputs {} = CBOR.toBuilder $ CBOR.encodeTerm (CBOR.TMap [])
 
     -- https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data
     encodeAttestedCredentialData :: M.AttestedCredentialData 'M.Create 'True -> Builder

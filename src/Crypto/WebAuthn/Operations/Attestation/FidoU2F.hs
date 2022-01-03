@@ -11,8 +11,8 @@ module Crypto.WebAuthn.Operations.Attestation.FidoU2F
   )
 where
 
+import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
-import qualified Codec.Serialise as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
@@ -21,8 +21,6 @@ import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HashMap
-import Data.Map ((!?))
-import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
@@ -173,10 +171,14 @@ format = M.SomeAttestationStatementFormat Format
 -- Any non ECC key would result in another error here, which is fine.
 extractPublicKey :: BS.ByteString -> Maybe (BS.ByteString, BS.ByteString)
 extractPublicKey keyBS = do
-  map :: Map.Map CBOR.Term CBOR.Term <- either (const Nothing) pure <$> CBOR.deserialiseOrFail $ BSL.fromStrict keyBS
+  (rest, result) <- either (const Nothing) pure $ CBOR.deserialiseFromBytes CBOR.decodeTerm $ BSL.fromStrict keyBS
+  unless (BSL.null rest) Nothing
+  pairs <- case result of
+    CBOR.TMap pairs -> return pairs
+    _ -> Nothing
   let xKey = -2
   let yKey = -3
-  case (map !? CBOR.TInt xKey, map !? CBOR.TInt yKey) of
+  case (CBOR.TInt xKey `lookup` pairs, CBOR.TInt yKey `lookup` pairs) of
     (Just (CBOR.TBytes x), Just (CBOR.TBytes y)) -> do
       pure (x, y)
     _ -> Nothing
