@@ -63,8 +63,8 @@ register ::
   m (Either (NE.NonEmpty WebAuthn.AttestationError) WebAuthn.AttestationResult, Authenticator, M.PublicKeyCredentialOptions 'M.Create)
 register ao conformance authenticator registry now = do
   -- Generate new random input
-  assertionChallenge <- M.Challenge <$> Random.getRandomBytes 16
-  userId <- M.UserHandle <$> Random.getRandomBytes 16
+  assertionChallenge <- M.generateChallenge
+  userId <- M.generateUserHandle
   -- Create dummy user
   let user =
         M.PublicKeyCredentialUserEntity
@@ -95,7 +95,7 @@ login ::
   WebAuthn.CredentialEntry ->
   m (Either (NE.NonEmpty WebAuthn.AssertionError) WebAuthn.SignatureCounterResult)
 login ao conformance authenticator ce@WebAuthn.CredentialEntry {..} = do
-  attestationChallenge <- M.Challenge <$> Random.getRandomBytes 16
+  attestationChallenge <- M.generateChallenge
   let options = defaultPkcog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
   -- authenticator should now store the created credential

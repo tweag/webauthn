@@ -33,7 +33,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Singletons (SingI, sing)
 import System.Clock (Clock (Realtime), TimeSpec (sec), getTime)
-import System.Random.Stateful (globalStdGen, uniformByteStringM)
 
 -- | Configuration for the pending operation management
 data PendingOpsConfig = PendingOpsConfig
@@ -65,7 +64,7 @@ data ExpiringChallenge = ExpiringChallenge
     -- time, which allows much faster periodic expiration
     expiredAfter :: Int64,
     -- | The random part of the challenge
-    randomness :: LBS.ByteString
+    randomness :: M.Challenge
   }
   deriving (Show, Eq, Ord)
 
@@ -87,11 +86,11 @@ isExpired now challenge = expiredAfter challenge < now
 instance Binary ExpiringChallenge where
   put ExpiringChallenge {expiredAfter, randomness} = do
     Binary.putInt64le expiredAfter
-    Binary.putLazyByteString randomness
+    Binary.putByteString (M.unChallenge randomness)
   get =
     ExpiringChallenge
       <$> Binary.getInt64le
-      <*> Binary.getRemainingLazyByteString
+      <*> (M.Challenge . LBS.toStrict <$> Binary.getRemainingLazyByteString)
 
 type Pendings t = STM.TVar (Map ExpiringChallenge (M.PublicKeyCredentialOptions t))
 
@@ -135,7 +134,7 @@ insertPendingOptions pendingOps = case sing @t of
       -- 1 hour expiration time, no real reason
       let expiredAfter = now + validTime (pendingConfig pendingOps)
 
-      randomness <- LBS.fromStrict <$> uniformByteStringM (challengeBytes (pendingConfig pendingOps)) globalStdGen
+      randomness <- M.generateChallenge
 
       pure $ ExpiringChallenge {..}
 
