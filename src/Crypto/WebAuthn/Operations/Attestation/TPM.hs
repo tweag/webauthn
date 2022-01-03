@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -34,6 +35,7 @@ import qualified Data.Binary.Put as Put
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.FileEmbed (embedDir)
 import Data.HashMap.Strict (HashMap, (!?))
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
@@ -43,6 +45,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
 
 tpmManufacturers :: Set.Set Text
 tpmManufacturers =
@@ -56,7 +59,7 @@ tpmManufacturers =
       "id:464C5953", -- 'FLYS' Flyslice Technologies
       "id:48504500", -- 'HPE'  HPE
       "id:49424d00", -- 'IBM'  IBM
-      "id:49465800", -- 'IFX'  Infinion
+      "id:49465800", -- 'IFX'  Infineon
       "id:494E5443", -- 'INTC' Intel
       "id:4C454E00", -- 'LEN'  Lenovo
       "id:4D534654", -- 'MSFT' Microsoft
@@ -573,6 +576,20 @@ instance M.AttestationStatementFormat Format where
       pure $
         M.SomeAttestationType $
           M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain (M.Fido2Chain x5c)
+
+  asfTrustAnchors _ _ = rootCertificateStore
+
+rootCertificateStore :: X509.CertificateStore
+rootCertificateStore = X509.makeCertificateStore $ map snd rootCertificates
+
+-- | All known TPM root certificates along with their vendors
+rootCertificates :: [(Text, X509.SignedCertificate)]
+rootCertificates = processEntry <$> $(embedDir "root-certs/tpm")
+  where
+    processEntry :: (FilePath, BS.ByteString) -> (Text, X509.SignedCertificate)
+    processEntry (path, bytes) = case X509.decodeSignedCertificate bytes of
+      Right cert -> (Text.takeWhile (/= '/') (Text.pack path), cert)
+      Left err -> error $ "Error while decoding certificate " <> path <> ": " <> err
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

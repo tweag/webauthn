@@ -275,5 +275,7 @@ instance M.AttestationStatementFormat Format where
       M.SomeAttestationType $
         M.AttestationTypeVerifiable M.VerifiableAttestationTypeBasic (M.Fido2Chain x5c)
 
+  asfTrustAnchors _ _ = mempty
+
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

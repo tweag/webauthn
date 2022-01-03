@@ -1,16 +1,29 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.WebAuthn.Operations.Attestation (AttestationError (..), verifyAttestationResponse, allSupportedFormats) where
+module Crypto.WebAuthn.Operations.Attestation
+  ( AttestationError (..),
+    AttestationResult (..),
+    AuthenticatorModel (..),
+    SomeAttestationStatement (..),
+    verifyAttestationResponse,
+    allSupportedFormats,
+  )
+where
 
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
+import Crypto.WebAuthn.Metadata.Service.Processing (queryMetadata)
+import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
+import qualified Crypto.WebAuthn.Metadata.Statement.Types as Meta
 import Crypto.WebAuthn.Model (SupportedAttestationStatementFormats, sasfSingleton)
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operations.Attestation.AndroidKey as AndroidKey
@@ -21,8 +34,14 @@ import qualified Crypto.WebAuthn.Operations.Attestation.Packed as Packed
 import qualified Crypto.WebAuthn.Operations.Attestation.TPM as TPM
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
-import Data.List.NonEmpty (NonEmpty)
-import Data.Validation (Validation, liftError)
+import Crypto.WebAuthn.SubjectKeyIdentifier (certificateSubjectKeyIdentifier)
+import Data.Hourglass (DateTime)
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty as NE
+import Data.Validation (Validation)
+import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
+import qualified Data.X509.Validation as X509
 
 allSupportedFormats :: SupportedAttestationStatementFormats
 allSupportedFormats =
@@ -54,24 +73,147 @@ data AttestationError
     AttestationFormatError SomeException
   deriving (Show)
 
+-- | Information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+-- model that created the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential).
+-- Depending on the constructor, this information can be used to base security
+-- decisions.
+data AuthenticatorModel k where
+  -- | An unknown authenticator, meaning that we received no information about
+  -- what authenticator model was used to generate the public key credential.
+  -- We therefore also cannot assume any security guarantees regarding how the
+  -- key is stored and other properties of the authenticator.
+  -- This is expected to be the case when the ["none"](https://www.w3.org/TR/webauthn-2/#dom-attestationconveyancepreference-none)
+  -- [Attestation Conveyance Preference](https://www.w3.org/TR/webauthn-2/#enum-attestation-convey)
+  -- was selected.
+  UnknownAuthenticator :: AuthenticatorModel 'M.Unverifiable
+  -- | An [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) that
+  -- provided a verifiable [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types),
+  -- see 'M.Verifiable', but the certificate chain in the attestation statement
+  -- failed to be verified. This is an indication that the 'uaIdentifier' and
+  -- 'uaMetadata' fields cannot be trusted currently. This can happen when the
+  -- root certificate of the chain is not trusted or known. Root certificates
+  -- are discovered using both the 'M.AttestationStatementFormat's 'M.asfTrustAnchors'
+  -- method, and the passed 'Meta.MetadataServiceRegistry'. The relying party
+  -- can decide what to do in such a case, for example:
+  --
+  -- 1. Treating it as if it was an 'UnknownAuthenticator', but logging the
+  --   'SomeAttestationStatement' structure, so that the admin can be informed of this
+  --   and perhaps add custom entries to the 'Meta.MetadataServiceRegistry' to
+  --   allow such authenticators to be verified in the future
+  -- 2. Only using the 'uaIdentifier' and 'uaMetadata' for non-security-critical
+  --   decisions. For example in order to show the user which authenticator they
+  --   used to register.
+  UnverifiedAuthenticator ::
+    { -- | The failures that occurred when trying to validate the certificate
+      -- chain
+      uaFailures :: NonEmpty X509.FailedReason,
+      -- | The identifier for the authenticator model
+      uaIdentifier :: M.AuthenticatorIdentifier p,
+      -- | The metadata looked up in the provided 'Meta.MetadataServiceRegistry'
+      -- This field is always equal to 'Meta.queryMetadata registry vaIdentifier',
+      -- and is only provided for convenience and because the implementation
+      -- already has to look it up
+      uaMetadata :: Maybe (Meta.MetadataEntry p)
+    } ->
+    AuthenticatorModel ('M.Verifiable p)
+  -- | An [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) that
+  -- provided a verifiable [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types),
+  -- see 'M.Verifiable' and whose certificate chain in the attestation statement
+  -- could successfully be verified. This is an indication that the 'uaIdentifier'
+  -- and 'uaMetadata' fields can be trusted, meaning that we can be sure that
+  -- the 'M.CredentialEntry' was created from the authenticator model with
+  -- these fields as properties. In this case, the Relying Party can reasonably
+  -- do the following:
+  --
+  -- * Persistently store the 'vaIdentifier' alongside 'CredentialEntry', such
+  --   that even after the registration is complete, the 'vaMetadata' entry
+  --   from the 'Meta.MetadataServiceRegistry' can be accessed. This also
+  --   allows getting more up-to-date metadata (or at all if 'vaMetadata' was
+  --   'Nothing') on an authenticator over time.
+  -- * The 'vaMetadata' may be used to determine whether this authenticator
+  --   model is trustful enough to be allowed for registration. For example,
+  --   'Meta.srStatus' in 'Meta.meStatusReports' may be inspected for the
+  --   authenticator being 'Meta.FIDO_CERTIFIED', aka that it passed the FIDO
+  --   Alliances [Functional Certification](https://fidoalliance.org/certification/functional-certification/)
+  -- * It is encouraged to persistently store the certificate chain from the
+  --   'M.AttestationType' and check CRLs for revocations of any certificates
+  --   in the chain. See [here](https://www.w3.org/TR/webauthn-2/#sctn-ca-compromise)
+  --   for more information
+  VerifiedAuthenticator ::
+    { -- | The identifier for the authenticator model
+      vaIdentifier :: M.AuthenticatorIdentifier p,
+      -- | The metadata looked up in the provided 'Meta.MetadataServiceRegistry'
+      -- This field is always equal to 'Meta.queryMetadata registry vaIdentifier',
+      -- and is only provided for convenience and because the implementation
+      -- already has to look it up
+      vaMetadata :: Maybe (Meta.MetadataEntry p)
+    } ->
+    AuthenticatorModel ('M.Verifiable p)
+
+deriving instance Show (AuthenticatorModel k)
+
+deriving instance Eq (AuthenticatorModel k)
+
+-- | Some attestation statement that represents both the [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
+-- that was returned along with information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+-- model that created it.
+data SomeAttestationStatement = forall k.
+  SomeAttestationStatement
+  { -- | The [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
+    -- of the attestation statement
+    asType :: M.AttestationType k,
+    -- | The [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
+    -- model that produced the attestation statement
+    asModel :: AuthenticatorModel k
+  }
+
+deriving instance Show SomeAttestationStatement
+
+-- | The result returned from 'verifyAttestationResponse'. It indicates that
+-- the operation of [registering a new credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
+-- didn't fail. This result may be inspected to enforce relying party policy,
+-- such as
+--
+-- * Disallowing [Basic](https://www.w3.org/TR/webauthn-2/#basic-attestation)
+--   and [Self](https://www.w3.org/TR/webauthn-2/#self-attestation) attestation
+--   by inspecting 'rAuthenticator's 'asType'
+--
+-- * Disallowing unverified authenticators by checking whether
+--   'rAuthenticator's 'asModel' is an 'UnverifiedAuthenticator'
+--
+-- * Disallowing authenticators that don't meet the required security level by
+--   inspecting the 'rAuthenticator's 'asModel's 'vaMetadata'
+data AttestationResult = AttestationResult
+  { -- | The entry to insert into the database
+    rEntry :: CredentialEntry,
+    -- | Information about the attestation statement
+    rAttestationStatement :: SomeAttestationStatement
+  }
+  deriving (Show)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
--- This function implements step 8 - 21 of the spec, step 1-7 are done
--- either by the server or ensured by the typesystem during decoding.
 verifyAttestationResponse ::
   -- | The origin of the server
   M.Origin ->
   -- | The relying party id
   M.RpIdHash ->
+  -- | The metadata registry, used for verifying the validity of the
+  -- attestation by looking up root certificates
+  Meta.MetadataServiceRegistry ->
   -- | The options passed to the create() method
   M.PublicKeyCredentialOptions 'M.Create ->
   -- | The response from the authenticator
   M.PublicKeyCredential 'M.Create 'True ->
+  -- | The current time, used for verifying the validity of the attestation
+  -- statement certificate chain
+  DateTime ->
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
   -- Or () in case of a result.
-  Validation (NonEmpty AttestationError) CredentialEntry
+  Validation (NonEmpty AttestationError) AttestationResult
 verifyAttestationResponse
   rpOrigin
   rpIdHash
+  registry
   options@M.PublicKeyCredentialCreationOptions {pkcocChallenge, pkcocPubKeyCredParams}
   credential@M.PublicKeyCredential
     { M.pkcResponse =
@@ -83,7 +225,8 @@ verifyAttestationResponse
                   ..
                 }
           }
-    } = do
+    }
+  currentTime = do
     -- 1. Let options be a new PublicKeyCredentialCreationOptions structure
     -- configured to the Relying Party's needs for the ceremony.
     -- NOTE: Implemented by caller
@@ -205,38 +348,132 @@ verifyAttestationResponse
     -- 19. Verify that attStmt is a correct attestation statement, conveying a
     -- valid attestation signature, by using the attestation statement format
     -- fmt’s verification procedure given attStmt, authData and hash.
-    _attType <-
-      liftError (pure . AttestationFormatError . SomeException) $
-        M.asfVerify aoFmt aoAttStmt authData hash
-
-    -- 20. If validation is successful, obtain a list of acceptable trust
-    -- anchors (i.e. attestation root certificates) for that attestation type
-    -- and attestation statement format fmt, from a trusted source or from
-    -- policy. For example, the FIDO Metadata Service [FIDOMetadataService]
-    -- provides one way to obtain such information, using the aaguid in the
-    -- attestedCredentialData in authData.
-    -- TODO: The metadata service is not currently implemented
-
-    -- 21. Assess the attestation trustworthiness using the outputs of the
-    -- verification procedure in step 19, as follows:
-    --
-    -- -> If no attestation was provided, verify that None attestation is
-    --    acceptable under Relying Party policy.
-    -- -> If self attestation was used, verify that self attestation is
-    --    acceptable under Relying Party policy.
-    -- -> Otherwise, use the X.509 certificates returned as the attestation
-    --    trust path from the verification procedure to verify that the
-    --    attestation public key either correctly chains up to an acceptable
-    --    root certificate, or is itself an acceptable certificate (i.e., it
-    --    and the root certificate obtained in Step 20 may be the same).
-    -- TODO: A policy is not currently implement, as is the metadata service.
-
-    -- TODO: This function should result in the trustworthiness of the attestation.
-    -- NOTE: Further steps of the procedure are handled by the server side
+    attStmt <- case M.asfVerify aoFmt aoAttStmt authData hash of
+      Left err -> failure $ AttestationFormatError $ SomeException err
+      Right (M.SomeAttestationType M.AttestationTypeNone) ->
+        pure $ SomeAttestationStatement M.AttestationTypeNone UnknownAuthenticator
+      Right (M.SomeAttestationType M.AttestationTypeSelf) ->
+        pure $ SomeAttestationStatement M.AttestationTypeSelf UnknownAuthenticator
+      Right (M.SomeAttestationType attType@M.AttestationTypeVerifiable {}) ->
+        pure $ validateAttestationChain credential aoFmt attType registry currentTime
     pure $
-      CredentialEntry
-        { ceUserHandle = M.pkcueId $ M.pkcocUser options,
-          ceCredentialId = M.pkcIdentifier credential,
-          cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
-          ceSignCounter = M.adSignCount authData
+      AttestationResult
+        { rEntry =
+            CredentialEntry
+              { ceUserHandle = M.pkcueId $ M.pkcocUser options,
+                ceCredentialId = M.pkcIdentifier credential,
+                cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
+                ceSignCounter = M.adSignCount authData
+              },
+          rAttestationStatement = attStmt
         }
+
+-- | Performs step 20 and 21 of attestation for verifieable attestation types.
+-- Results in the type of attestation and the model.
+validateAttestationChain ::
+  forall raw p a.
+  M.AttestationStatementFormat a =>
+  M.PublicKeyCredential 'M.Create raw ->
+  a ->
+  M.AttestationType ('M.Verifiable p) ->
+  Meta.MetadataServiceRegistry ->
+  DateTime ->
+  SomeAttestationStatement
+validateAttestationChain
+  credential
+  fmt
+  M.AttestationTypeVerifiable {atvType, atvChain}
+  registry
+  currentTime =
+    SomeAttestationStatement attestationType authenticator
+    where
+      attestationType =
+        M.AttestationTypeVerifiable
+          { M.atvType = maybe atvType (fixupVerifiableAttestationType atvType) metadataStatement,
+            M.atvChain = atvChain
+          }
+      authenticator = case NE.nonEmpty chainValidationFailures of
+        Nothing ->
+          VerifiedAuthenticator
+            { vaIdentifier = identifier,
+              vaMetadata = metadataEntry
+            }
+        Just failures ->
+          UnverifiedAuthenticator
+            { uaFailures = failures,
+              uaIdentifier = identifier,
+              uaMetadata = metadataEntry
+            }
+
+      chain :: X509.CertificateChain
+      identifier :: M.AuthenticatorIdentifier p
+      (chain, identifier) = case atvChain of
+        M.Fido2Chain cs ->
+          ( X509.CertificateChain $ NE.toList cs,
+            M.AuthenticatorIdentifierFido2
+              . M.acdAaguid
+              . M.adAttestedCredentialData
+              . M.aoAuthData
+              . M.arcAttestationObject
+              . M.pkcResponse
+              $ credential
+          )
+        M.FidoU2FCert c ->
+          ( X509.CertificateChain [c],
+            M.AuthenticatorIdentifierFidoU2F
+              . certificateSubjectKeyIdentifier
+              . X509.getCertificate
+              $ c
+          )
+      metadataEntry = queryMetadata registry identifier
+      metadataStatement = metadataEntry >>= Meta.meMetadataStatement
+
+      -- 20. If validation is successful, obtain a list of acceptable trust
+      -- anchors (i.e. attestation root certificates) for that attestation type
+      -- and attestation statement format fmt, from a trusted source or from
+      -- policy. For example, the FIDO Metadata Service [FIDOMetadataService]
+      -- provides one way to obtain such information, using the aaguid in the
+      -- attestedCredentialData in authData.
+      formatRootCerts = M.asfTrustAnchors fmt atvType
+      metadataRootCerts = case metadataStatement of
+        Nothing -> mempty
+        Just statement -> X509.makeCertificateStore $ NE.toList $ Meta.msAttestationRootCertificates statement
+
+      -- 21. Assess the attestation trustworthiness using the outputs of the
+      -- verification procedure in step 19, as follows:
+      --
+      -- -> If no attestation was provided, verify that None attestation is
+      --    acceptable under Relying Party policy.
+      --    NOTE: Can be decided from the return type
+      -- -> If self attestation was used, verify that self attestation is
+      --    acceptable under Relying Party policy.
+      --    NOTE: Can be decided from the return type
+      -- -> Otherwise, use the X.509 certificates returned as the attestation
+      --    trust path from the verification procedure to verify that the
+      --    attestation public key either correctly chains up to an acceptable
+      --    root certificate, or is itself an acceptable certificate (i.e., it
+      --    and the root certificate obtained in Step 20 may be the same).
+      --    NOTE: We are only returning the errors, which can be used to either
+      --    fail or still allow it
+      chainValidationFailures =
+        X509.validatePure
+          currentTime
+          X509.defaultHooks
+            { X509.hookValidateName = \_fqhn _cert -> []
+            }
+          X509.defaultChecks
+          (formatRootCerts <> metadataRootCerts)
+          ("", mempty)
+          chain
+
+-- | Metadata statements can convey multiple attestation types.
+-- In such a case we choose to result in the Uncertain type.
+-- Otherwise, we results in the only one available.
+fixupVerifiableAttestationType :: M.VerifiableAttestationType -> Meta.MetadataStatement p -> M.VerifiableAttestationType
+fixupVerifiableAttestationType M.VerifiableAttestationTypeUncertain statement =
+  case Meta.msAttestationTypes statement of
+    -- If there are multiple types we can't know which one it is
+    (_ :| (_ : _)) -> M.VerifiableAttestationTypeUncertain
+    (Meta.WebauthnAttestationBasic :| []) -> M.VerifiableAttestationTypeBasic
+    (Meta.WebauthnAttestationAttCA :| []) -> M.VerifiableAttestationTypeAttCA
+fixupVerifiableAttestationType certain _ = certain

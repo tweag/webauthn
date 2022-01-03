@@ -4,16 +4,18 @@
 module MetadataSpec (spec) where
 
 import Crypto.WebAuthn.Metadata.Service.IDL (MetadataBLOBPayload)
-import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), jsonToPayload, jwtToJson)
+import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
 import Data.Aeson (Result (Success), ToJSON (toJSON), decodeFileStrict, fromJSON)
 import Data.Aeson.Types (Result (Error))
 import qualified Data.ByteString as BS
+import Data.Either (isRight)
 import qualified Data.PEM as PEM
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
 import System.Hourglass (dateCurrent)
-import Test.Hspec (SpecWith, describe, it)
+import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 import Test.Hspec.Expectations.Json (shouldBeUnorderedJson)
 
 golden :: FilePath -> SpecWith ()
@@ -25,10 +27,11 @@ golden subdir = describe subdir $ do
     certBytes <- BS.readFile $ "tests/golden-metadata/" <> subdir <> "/root.crt"
     let Right [PEM.pemContent -> pem] = PEM.pemParseBS certBytes
         Right cert = X509.decodeSignedCertificate pem
+        store = X509.makeCertificateStore [cert]
 
     blobBytes <- BS.readFile $ "tests/golden-metadata/" <> subdir <> "/blob.jwt"
     now <- dateCurrent
-    let Right result = jwtToJson blobBytes (RootCertificate cert origin) now
+    let Right result = jwtToJson blobBytes (RootCertificate store origin) now
 
     Just expectedPayload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"
 
@@ -48,6 +51,12 @@ golden subdir = describe subdir $ do
       Right _result -> pure ()
 
 spec :: SpecWith ()
-spec = describe "Golden" $ do
-  golden "small"
-  golden "big"
+spec = do
+  describe "Golden" $ do
+    golden "small"
+    golden "big"
+  describe "fidoAllianceRootCertificate" $ do
+    it "can validate the payload" $ do
+      blobBytes <- BS.readFile "tests/golden-metadata/big/blob.jwt"
+      now <- dateCurrent
+      jwtToJson blobBytes fidoAllianceRootCertificate now `shouldSatisfy` isRight

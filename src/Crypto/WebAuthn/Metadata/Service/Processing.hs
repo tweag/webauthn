@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 
 module Crypto.WebAuthn.Metadata.Service.Processing
@@ -14,6 +15,7 @@ module Crypto.WebAuthn.Metadata.Service.Processing
     queryMetadata,
     jwtToJson,
     jsonToPayload,
+    fidoAllianceRootCertificate,
   )
 where
 
@@ -32,6 +34,7 @@ import Data.Aeson (Value (Object))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.FileEmbed (embedFile)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
@@ -46,13 +49,30 @@ import qualified Data.X509.Validation as X509
 -- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate
   { -- | The root certificate itself
-    rootCertificate :: X509.SignedCertificate,
+    rootCertificateStore :: X509.CertificateStore,
     -- | The hostname it is for
     rootCertificateHostName :: X509.HostName
   }
 
+-- | The root certificate used for the blob downloaded from <https://mds.fidoalliance.org/>,
+-- which can be found in [here](https://valid.r3.roots.globalsign.com/),
+-- see also <https://fidoalliance.org/metadata/>
+fidoAllianceRootCertificate :: RootCertificate
+fidoAllianceRootCertificate =
+  RootCertificate
+    { rootCertificateStore = X509.makeCertificateStore [rootCert],
+      rootCertificateHostName = "mds.fidoalliance.org"
+    }
+  where
+    bytes :: BS.ByteString
+    bytes = $(embedFile "root-certs/metadata/root.crt")
+    rootCert :: X509.SignedCertificate
+    rootCert = case X509.decodeSignedCertificate bytes of
+      Left err -> error err
+      Right cert -> cert
+
 instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
-  getVerificationKeys header _ (RootCertificate rootCert hostName) = do
+  getVerificationKeys header _ (RootCertificate rootStore hostName) = do
     -- TODO: Implement step 4 of the spec, which says to try to get the chain from x5u first before trying x5c
     -- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules
     chain <- case header ^? x5c . _Just . param of
@@ -69,7 +89,7 @@ instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore
             now
             X509.defaultHooks
             X509.defaultChecks
-            (X509.makeCertificateStore [rootCert])
+            rootStore
             (hostName, "")
             (X509.CertificateChain (NE.toList chain))
 

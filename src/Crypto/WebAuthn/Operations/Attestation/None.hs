@@ -27,5 +27,7 @@ instance M.AttestationStatementFormat Format where
   type AttStmtVerificationError Format = Void
   asfVerify _ _ _ _ = pure $ M.SomeAttestationType M.AttestationTypeNone
 
+  asfTrustAnchors _ _ = mempty
+
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

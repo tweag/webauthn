@@ -7,17 +7,19 @@ module Main
   )
 where
 
+import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO)
 import Control.Monad (when)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import Crypto.Hash (hash)
+import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
 import Crypto.WebAuthn.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
 import Crypto.WebAuthn.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
 import Crypto.WebAuthn.Operations.Assertion (verifyAssertionResponse)
-import Crypto.WebAuthn.Operations.Attestation (AttestationError, allSupportedFormats, verifyAttestationResponse)
+import Crypto.WebAuthn.Operations.Attestation (AttestationError, AttestationResult (rEntry), allSupportedFormats, verifyAttestationResponse)
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
 import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Data.Aeson (FromJSON, Value (String))
@@ -34,10 +36,12 @@ import qualified Data.Text.Lazy.Encoding as LText
 import Data.Validation (Validation (Failure, Success))
 import qualified Database
 import GHC.Generics (Generic)
+import MetadataFetch (continuousFetch, registryFromJsonFile)
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (addBase, staticPolicy)
 import PendingOps (PendingOps, defaultPendingOpsConfig, getPendingOptions, insertPendingOptions, newPendingOps)
 import System.Environment (getArgs)
+import System.Hourglass (dateCurrent)
 import System.Random.Stateful (globalStdGen, uniformM)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
@@ -115,15 +119,21 @@ logout db = do
     "Set-Cookie"
     (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
 
-app :: M.Origin -> M.RpIdHash -> Database.Connection -> PendingOps -> ScottyM ()
-app origin rpIdHash db pending = do
+app ::
+  M.Origin ->
+  M.RpIdHash ->
+  Database.Connection ->
+  PendingOps ->
+  TVar Service.MetadataServiceRegistry ->
+  ScottyM ()
+app origin rpIdHash db pending registryVar = do
   Scotty.middleware (staticPolicy (addBase "dist"))
   Scotty.get "/" $ do
     getAuthenticatedUser db >>= \case
       Nothing -> Scotty.redirect "unauthenticated.html"
       Just _ -> Scotty.redirect "authenticated.html"
   Scotty.post "/register/begin" $ beginRegistration db pending
-  Scotty.post "/register/complete" $ completeRegistration origin rpIdHash db pending
+  Scotty.post "/register/complete" $ completeRegistration origin rpIdHash db pending registryVar
   Scotty.post "/login/begin" $ beginLogin db pending
   Scotty.post "/login/complete" $ completeLogin origin rpIdHash db pending
   Scotty.get "/requires-auth" $ do
@@ -217,8 +227,14 @@ beginRegistration db pending = do
   Scotty.liftAndCatchIO $ putStrLn $ "/register/begin, sending " <> show options
   Scotty.json $ encodePublicKeyCredentialCreationOptions options
 
-completeRegistration :: M.Origin -> M.RpIdHash -> Database.Connection -> PendingOps -> Scotty.ActionM ()
-completeRegistration origin rpIdHash db pending = do
+completeRegistration ::
+  M.Origin ->
+  M.RpIdHash ->
+  Database.Connection ->
+  PendingOps ->
+  TVar Service.MetadataServiceRegistry ->
+  Scotty.ActionM ()
+completeRegistration origin rpIdHash db pending registryVar = do
   credential <- Scotty.jsonData @JS.CreatedPublicKeyCredential
   cred <- case decodeCreatedPublicKeyCredential allSupportedFormats credential of
     Left err -> fail $ show err
@@ -234,9 +250,12 @@ completeRegistration origin rpIdHash db pending = do
   -- step 1 to 17
   -- We abort if we couldn't attest the credential
   -- FIXME
-  entry <- case verifyAttestationResponse origin rpIdHash options cred of
+  registry <- Scotty.liftAndCatchIO $ readTVarIO registryVar
+  now <- Scotty.liftAndCatchIO dateCurrent
+  result <- case verifyAttestationResponse origin rpIdHash registry options cred now of
     Failure (err :| _) -> fail $ show err
     Success result -> pure result
+  Scotty.liftAndCatchIO $ putStrLn $ "Result: " <> show result
   -- if the credential was succesfully attested, we will see if the
   -- credential doesn't exist yet, and if it doesn't, insert it.
   result <- Scotty.liftAndCatchIO $
@@ -244,11 +263,11 @@ completeRegistration origin rpIdHash db pending = do
       -- If a credential with this id existed already, it must belong to the
       -- current user, otherwise it's an error. The spec allows removing the
       -- credential from the old user instead, but we don't do that.
-      mexistingEntry <- Database.queryCredentialEntryByCredential tx (ceCredentialId entry)
+      mexistingEntry <- Database.queryCredentialEntryByCredential tx (ceCredentialId $ rEntry result)
       case mexistingEntry of
         Nothing -> do
           Database.insertUser tx $ M.pkcocUser options
-          Database.insertCredentialEntry tx entry
+          Database.insertCredentialEntry tx $ rEntry result
           pure $ Right ()
         Just existingEntry | userHandle == ceUserHandle existingEntry -> pure $ Right ()
         Just _differentUserId -> pure $ Left AlreadyRegistered
@@ -288,6 +307,12 @@ main = do
   db <- Database.connect
   Database.initialize db
   pending <- newPendingOps defaultPendingOpsConfig
+  -- These solokey entries come from https://github.com/solokeys/solo/tree/master/metadata
+  -- We import these here because we have access to physical solokey tokens and whished to use those during tests.
+  -- As of 3-Jan-2022, solokeys has not added the metadata of their keys to fido mds version 3.
+  registry <- registryFromJsonFile "solokey-entries.json"
+  registryVar <- newTVarIO registry
+  _ <- continuousFetch registryVar
   Text.putStrLn $ "You can view the web-app at: " <> origin
   let rpIdHash = M.RpIdHash $ hash $ Text.encodeUtf8 domain
-  Scotty.scotty port $ app (M.Origin origin) rpIdHash db pending
+  Scotty.scotty port $ app (M.Origin origin) rpIdHash db pending registryVar

@@ -95,6 +95,7 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
+import qualified Data.X509.CertificateStore as X509
 import System.Random.Stateful (Uniform (uniformM), uniformByteStringM)
 import Type.Reflection (Typeable, eqTypeRep, typeOf, type (:~~:) (HRefl))
 
@@ -353,7 +354,14 @@ data AttestationType (k :: AttestationKind) where
   -- typically use this attestation type.
   AttestationTypeSelf :: AttestationType 'Unverifiable
   -- | Grouping of attestations that are verifiable by a certificate chain
-  AttestationTypeVerifiable :: VerifiableAttestationType -> AttestationChain p -> AttestationType ('Verifiable p)
+  AttestationTypeVerifiable ::
+    { -- | The type of verifiable attestation
+      atvType :: VerifiableAttestationType,
+      -- | The certificate chain of this attestation type, can be used to
+      -- validate the authenticator model
+      atvChain :: AttestationChain p
+    } ->
+    AttestationType ('Verifiable p)
 
 deriving instance Eq (AttestationType k)
 
@@ -936,6 +944,23 @@ class
     AuthenticatorData 'Create 'True ->
     ClientDataHash ->
     Either (AttStmtVerificationError a) SomeAttestationType
+
+  -- | The trusted root certificates specifically for this attestation
+  -- statement format. For attestation statement chain validation, these
+  -- certificates are used, in addition to the ones from the metadata registry
+  --
+  -- [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential) step 20
+  -- > If validation is successful, obtain a list of acceptable trust anchors
+  -- > (i.e. attestation root certificates) for that attestation type and
+  -- > attestation statement format fmt, from a trusted source or from policy.
+  --
+  -- While for the attestation statement formats we implement, none of them use
+  -- the 'VerifiableAttestationType', it is implied that it could be used by
+  -- the above sentence from the spec.
+  asfTrustAnchors ::
+    a ->
+    VerifiableAttestationType ->
+    X509.CertificateStore
 
   -- | The type of decoding errors that can occur when decoding this
   -- attestation statement using 'asfDecode'
