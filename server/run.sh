@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-localPort=8080
+localPort=8500
 
 # Kills all background processes on exit
 trap "exit" INT TERM
