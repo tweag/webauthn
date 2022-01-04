@@ -1,0 +1,13 @@
+cabal-version: 3.0
+name: repro
+version: 0.1.0.0
+maintainer: silvan.mosberger@tweag.io
+
+library
+  hs-source-dirs: src
+  build-depends:
+    base,
+    aeson,
+    deriving-aeson,
+  exposed-modules:
+    Module
