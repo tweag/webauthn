@@ -8,6 +8,5 @@ library
   build-depends:
     base,
     aeson,
-    deriving-aeson,
   exposed-modules:
     Module

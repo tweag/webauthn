@@ -1,8 +1,12 @@
-{-# LANGUAGE DerivingVia, DataKinds, DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Module where
 
+import Data.Coerce (coerce)
+import GHC.Generics
 import Data.Aeson
-import Deriving.Aeson
 
 data SomeType
   = SomeValue0
@@ -36,4 +40,15 @@ data SomeType
   | SomeValue28
   | SomeValue29
   deriving Generic
-  deriving ToJSON via CustomJSON '[] SomeType
+  deriving FromJSON via CustomJSON
+
+newtype CustomJSON = CustomJSON SomeType
+
+instance GFromJSON Zero (Rep SomeType) => FromJSON CustomJSON where
+  parseJSON value = CustomJSON <$> genericParseJSON defaultOptions value
+
+-- This is only about 2 times as slow with aeson 2.x than with 1.x, and
+-- doesn't need UndecidableInstances:
+--instance FromJSON CustomJSON where
+--  parseJSON value = CustomJSON <$> genericParseJSON defaultOptions value
+
