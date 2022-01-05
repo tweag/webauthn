@@ -39,12 +39,16 @@ import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import Crypto.WebAuthn.ToJSONOrphans ()
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1
+import Data.Aeson (ToJSON, Value (String), object, toJSON, (.=))
+import Data.ByteArray (convert)
 import qualified Data.ByteArray as BA
 import qualified Data.ByteArray as ByteArray
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.X509 as X509
 import qualified Data.X509.EC as X509
 
@@ -64,6 +68,16 @@ data COSEAlgorithmIdentifier
   | COSEAlgorithmIdentifierRS512
   deriving (Eq, Show, Bounded, Enum, Ord)
 
+instance ToJSON COSEAlgorithmIdentifier where
+  toJSON COSEAlgorithmIdentifierES256 = "COSEAlgorithmIdentifierES256"
+  toJSON COSEAlgorithmIdentifierES384 = "COSEAlgorithmIdentifierES384"
+  toJSON COSEAlgorithmIdentifierES512 = "COSEAlgorithmIdentifierES512"
+  toJSON COSEAlgorithmIdentifierEdDSA = "COSEAlgorithmIdentifierEdDSA"
+  toJSON COSEAlgorithmIdentifierRS1 = "COSEAlgorithmIdentifierRS1"
+  toJSON COSEAlgorithmIdentifierRS256 = "COSEAlgorithmIdentifierRS256"
+  toJSON COSEAlgorithmIdentifierRS384 = "COSEAlgorithmIdentifierRS384"
+  toJSON COSEAlgorithmIdentifierRS512 = "COSEAlgorithmIdentifierRS512"
+
 data PublicKey
   = ES256PublicKey ECDSA.PublicKey
   | ES384PublicKey ECDSA.PublicKey
@@ -74,6 +88,48 @@ data PublicKey
   | RS384PublicKey RSA.PublicKey
   | RS512PublicKey RSA.PublicKey
   deriving (Eq, Show)
+
+instance ToJSON PublicKey where
+  toJSON key =
+    object
+      [ "coseAlgorithmIdentifier" .= toCOSEAlgorithmIdentifier key,
+        "key" .= keyToJSON key
+      ]
+    where
+      keyToJSON :: PublicKey -> Value
+      keyToJSON (ES256PublicKey ecdsa) = ecdsaToJSON ecdsa
+      keyToJSON (ES384PublicKey ecdsa) = ecdsaToJSON ecdsa
+      keyToJSON (ES512PublicKey ecdsa) = ecdsaToJSON ecdsa
+      keyToJSON (Ed25519PublicKey ed25519) = ed25519ToJSON ed25519
+      keyToJSON (RS1PublicKey rsa) = rsaToJSON rsa
+      keyToJSON (RS256PublicKey rsa) = rsaToJSON rsa
+      keyToJSON (RS384PublicKey rsa) = rsaToJSON rsa
+      keyToJSON (RS512PublicKey rsa) = rsaToJSON rsa
+
+      ecdsaToJSON :: ECDSA.PublicKey -> Value
+      ecdsaToJSON key = case ECDSA.public_q key of
+        ECC.Point x y ->
+          object
+            [ "keyType" .= String "ECDSA",
+              "x" .= show x,
+              "y" .= show y
+            ]
+        ECC.PointO -> "<infinity>"
+
+      ed25519ToJSON :: Ed25519.PublicKey -> Value
+      ed25519ToJSON key =
+        object
+          [ "keyType" .= String "Ed25519",
+            "bytes" .= toJSON @BS.ByteString (convert key)
+          ]
+
+      rsaToJSON :: RSA.PublicKey -> Value
+      rsaToJSON key =
+        object
+          [ "keyType" .= String "RSA",
+            "public_n" .= show (RSA.public_n key),
+            "public_n" .= show (RSA.public_e key)
+          ]
 
 data KeyType = OKP | ECC | RSA
 

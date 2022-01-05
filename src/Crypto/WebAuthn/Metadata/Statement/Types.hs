@@ -13,11 +13,13 @@ where
 import qualified Crypto.WebAuthn.Metadata.Statement.IDL as StatementIDL
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Registry as Registry
+import Data.Aeson (ToJSON, toJSON)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
+import GHC.Generics (Generic)
 import GHC.Word (Word16)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-keys)
@@ -74,7 +76,7 @@ data MetadataStatement (p :: M.ProtocolKind) = MetadataStatement
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-authenticatorgetinfo)
     msAuthenticatorGetInfo :: Maybe StatementIDL.AuthenticatorGetInfo
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)
 
 -- | FIDO protocol versions, parametrized by the protocol family
 data ProtocolVersion (p :: M.ProtocolKind) where
@@ -93,8 +95,15 @@ deriving instance Eq (ProtocolVersion p)
 
 deriving instance Show (ProtocolVersion p)
 
+instance ToJSON (ProtocolVersion p) where
+  toJSON U2F1_0 = "U2F 1.0"
+  toJSON U2F1_1 = "U2F 1.1"
+  toJSON U2F1_2 = "U2F 1.2"
+  toJSON CTAP2_0 = "CTAP 2.0"
+  toJSON CTAP2_1 = "CTAP 2.1"
+
 -- | Values of 'Registry.AuthenticatorAttestationType' but limited to the ones possible with Webauthn, see https://www.w3.org/TR/webauthn-2/#sctn-attestation-types
 data WebauthnAttestationType
   = WebauthnAttestationBasic
   | WebauthnAttestationAttCA
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, ToJSON)

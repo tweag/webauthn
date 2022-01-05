@@ -21,6 +21,7 @@ import Crypto.WebAuthn.PublicKey (PublicKey, fromAlg, toAlg, toCOSEAlgorithmIden
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
 import Data.ASN1.Types (ASN1 (IntVal, OctetString), ASN1Class (Context), ASN1ConstructionType (Container, Sequence, Set))
+import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
@@ -141,6 +142,14 @@ data Statement = Statement
     attExt :: ExtAttestation
   }
   deriving (Eq, Show)
+
+instance ToJSON Statement where
+  toJSON Statement {..} =
+    object
+      [ "alg" .= toCOSEAlgorithmIdentifier pubKey,
+        "sig" .= sig,
+        "x5c" .= x5c
+      ]
 
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field

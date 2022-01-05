@@ -15,7 +15,7 @@ import Control.Monad (forever)
 import Crypto.JWT (JWTError)
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataEntry)
 import qualified Crypto.WebAuthn.Metadata.Service.IDL as Service
-import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate, createMetadataRegistry, fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
+import Crypto.WebAuthn.Metadata.Service.Processing (createMetadataRegistry, fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import Data.Aeson (eitherDecodeFileStrict)
 import qualified Data.ByteString as BS
@@ -45,18 +45,20 @@ registryFromJsonFile path = do
 continuousFetch :: TVar Service.MetadataServiceRegistry -> IO ThreadId
 continuousFetch var = do
   manager <- newTlsManager
-  threadId <- forkIO $ forever $ sleepThenUpdate manager fidoAllianceRootCertificate var
+  registry <- fetchRegistry manager
+  atomically $ modifyTVar var (<> registry)
+  threadId <- forkIO $ forever $ sleepThenUpdate manager var
   pure threadId
   where
     -- 1 hour delay for testing purposes. In reality this only needs to happen perhaps once a month, see also the 'Service.mpNextUpdate' field
     delay :: Int
     delay = 60 * 60 * 1000 * 1000
 
-    sleepThenUpdate :: Manager -> RootCertificate -> TVar Service.MetadataServiceRegistry -> IO ()
-    sleepThenUpdate manager rootCert var = do
+    sleepThenUpdate :: Manager -> TVar Service.MetadataServiceRegistry -> IO ()
+    sleepThenUpdate manager var = do
       putStrLn $ "Sleeping for " <> show (delay `div` (1000 * 1000)) <> " seconds"
       threadDelay delay
-      registry <- fetchRegistry rootCert manager
+      registry <- fetchRegistry manager
       atomically $ modifyTVar var (<> registry)
 
 data MetadataFetchError
@@ -70,11 +72,11 @@ fetchBlob manager = do
   response <- httpLbs "https://mds.fidoalliance.org" manager
   pure $ LBS.toStrict $ responseBody response
 
-fetchRegistry :: RootCertificate -> Manager -> IO Service.MetadataServiceRegistry
-fetchRegistry rootCert manager = do
+fetchRegistry :: Manager -> IO Service.MetadataServiceRegistry
+fetchRegistry manager = do
   blobBytes <- fetchBlob manager
   now <- dateCurrent
-  case jwtToJson blobBytes rootCert now of
+  case jwtToJson blobBytes fidoAllianceRootCertificate now of
     Left err -> throwIO $ JWTProcessingFailed err
     Right value -> case jsonToPayload value of
       Left err -> throwIO $ JSONDecodingFailed err

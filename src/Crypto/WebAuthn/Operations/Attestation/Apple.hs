@@ -21,6 +21,7 @@ import Crypto.WebAuthn.PublicKey (certPublicKey)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
+import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
 import Data.FileEmbed (embedFile)
@@ -69,6 +70,12 @@ data Statement = Statement
     subjectPublicKey :: PublicKey.PublicKey
   }
   deriving (Eq, Show)
+
+instance ToJSON Statement where
+  toJSON Statement {..} =
+    object
+      [ "x5c" .= x5c
+      ]
 
 -- | Undocumented, but the Apple Nonce Extension should only contain the nonce
 newtype AppleNonceExtension = AppleNonceExtension

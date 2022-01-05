@@ -35,6 +35,7 @@ import qualified Crypto.WebAuthn.Operations.Attestation.TPM as TPM
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Crypto.WebAuthn.SubjectKeyIdentifier (certificateSubjectKeyIdentifier)
+import Data.Aeson (ToJSON, Value (String), object, toJSON, (.=))
 import Data.Hourglass (DateTime)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
@@ -42,6 +43,7 @@ import Data.Validation (Validation)
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
+import GHC.Generics (Generic)
 
 allSupportedFormats :: SupportedAttestationStatementFormats
 allSupportedFormats =
@@ -154,6 +156,25 @@ deriving instance Show (AuthenticatorModel k)
 
 deriving instance Eq (AuthenticatorModel k)
 
+instance ToJSON (AuthenticatorModel k) where
+  toJSON UnknownAuthenticator =
+    object
+      [ "tag" .= String "unknown"
+      ]
+  toJSON UnverifiedAuthenticator {..} =
+    object
+      [ "tag" .= String "unverified",
+        "uaFailures" .= uaFailures,
+        "uaIdentifier" .= uaIdentifier,
+        "uaMetadata" .= uaMetadata
+      ]
+  toJSON VerifiedAuthenticator {..} =
+    object
+      [ "tag" .= String "verified",
+        "vaIdentifier" .= vaIdentifier,
+        "vaMetadata" .= vaMetadata
+      ]
+
 -- | Some attestation statement that represents both the [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
 -- that was returned along with information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
 -- model that created it.
@@ -168,6 +189,13 @@ data SomeAttestationStatement = forall k.
   }
 
 deriving instance Show SomeAttestationStatement
+
+instance ToJSON SomeAttestationStatement where
+  toJSON SomeAttestationStatement {..} =
+    object
+      [ "asType" .= asType,
+        "asModel" .= asModel
+      ]
 
 -- | The result returned from 'verifyAttestationResponse'. It indicates that
 -- the operation of [registering a new credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
@@ -189,7 +217,7 @@ data AttestationResult = AttestationResult
     -- | Information about the attestation statement
     rAttestationStatement :: SomeAttestationStatement
   }
-  deriving (Show)
+  deriving (Show, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 verifyAttestationResponse ::

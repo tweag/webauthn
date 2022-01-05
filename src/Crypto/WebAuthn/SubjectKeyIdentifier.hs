@@ -6,9 +6,11 @@ where
 
 import Control.Monad (void)
 import Crypto.Hash (Digest, SHA1, hash)
+import Crypto.WebAuthn.ToJSONOrphans ()
 import qualified Data.ASN1.BitArray as ASN1
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
+import Data.Aeson (ToJSON, toJSON)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
 import Data.Hashable (Hashable (hashWithSalt), hashUsing)
@@ -22,6 +24,9 @@ import qualified Data.X509 as X509
 -- field of the [Metadata Service](https://fidoalliance.org/metadata/)
 newtype SubjectKeyIdentifier = SubjectKeyIdentifier {unSubjectKeyIdentifier :: Digest SHA1}
   deriving (Eq, Show)
+
+instance ToJSON SubjectKeyIdentifier where
+  toJSON = toJSON @BS.ByteString . convert . unSubjectKeyIdentifier
 
 instance Hashable SubjectKeyIdentifier where
   hashWithSalt = hashUsing @BS.ByteString (convert . unSubjectKeyIdentifier)

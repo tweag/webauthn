@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -17,6 +18,7 @@ import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
 import qualified Crypto.WebAuthn.Model as M
+import Data.Aeson (ToJSON, object, toJSON, (.=))
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
@@ -61,6 +63,13 @@ data Statement = Statement
     attCert :: X509.SignedCertificate
   }
   deriving (Show, Eq)
+
+instance ToJSON Statement where
+  toJSON Statement {..} =
+    object
+      [ "attestnCert" .= attCert,
+        "sig" .= sig
+      ]
 
 instance M.AttestationStatementFormat Format where
   type AttStmt Format = Statement
