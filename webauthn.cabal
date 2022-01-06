@@ -32,7 +32,9 @@ library
   import: sanity
   hs-source-dirs: src
   build-depends:
-    aeson,
+    -- deriving-aeson has compilation performance problems with aeson >= 2.0,
+    -- see https://github.com/fumieval/deriving-aeson/issues/16
+    aeson < 2.0,
     asn1-encoding,
     asn1-parse,
     asn1-types,
@@ -53,8 +55,6 @@ library
     memory,
     monad-time,
     mtl,
-    random >= 1.2.0,
-    serialise,
     singletons,
     text,
     time,
@@ -108,7 +108,7 @@ executable server
     PendingOps
 
   build-depends:
-    aeson,
+    aeson < 2.0,
     aeson-pretty,
     base64-bytestring,
     binary,
@@ -126,7 +126,6 @@ executable server
     jose,
     mtl,
     pem,
-    random,
     scotty,
     singletons,
     sqlite-simple,
@@ -162,13 +161,12 @@ test-suite tests
     Emulation.Authenticator.Arbitrary
   build-depends:
     QuickCheck,
-    aeson,
+    aeson < 2.0,
     asn1-encoding,
     base64-bytestring,
     binary,
     bytestring,
     cborg,
-    cborg-json,
     containers,
     cryptonite,
     directory,
@@ -180,7 +178,6 @@ test-suite tests
     mtl,
     pem,
     quickcheck-instances,
-    random,
     serialise,
     singletons,
     text,

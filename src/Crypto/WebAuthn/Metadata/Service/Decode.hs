@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TupleSections #-}
 
 module Crypto.WebAuthn.Metadata.Service.Decode
   ( decodeMetadataPayload,

@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | This module contain some useful orphan 'ToJSON' instances for pretty-printing values from third-party libraries

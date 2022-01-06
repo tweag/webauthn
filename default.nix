@@ -1,64 +1,68 @@
-{ isShell ? false }:
+{ isShell ? false, system ? builtins.currentSystem }:
 let
   # Read in the Niv sources
   sources = import ./nix/sources.nix {};
 
-  # Fetch the haskell.nix commit we have pinned with Niv
-  haskellNix = import sources.haskellNix {};
-
-  # haskell.nix provides access to the nixpkgs pins which are used by our CI,
-  # hence you will be more likely to get cache hits when using these.
-  # But you can also just use your own, e.g. '<nixpkgs>'.
-  nixpkgs = haskellNix.sources.nixpkgs-2105;
-
-  # Import nixpkgs and pass the haskell.nix provided nixpkgsArgs
-  pkgs = import
-    nixpkgs
-    # These arguments passed to nixpkgs, include some patches and also
-    # the haskell.nix functionality itself as an overlay.
-    haskellNix.nixpkgsArgs;
-
-  build = pkgs.haskell-nix.project {
-    # 'cleanGit' cleans a source directory based on the files known by git
-    src = pkgs.haskell-nix.haskellLib.cleanGit {
-      name = "webauthn";
-      src = ./.;
-    };
-    # Specify the GHC version to use.
-    compiler-nix-name = "ghc8107";
-    modules = [
-      {
-        packages.webauthn.components.library.extraSrcFiles = [ "root-certs/*" ];
-      }
-    ];
+  pkgs = import sources.nixpkgs {
+    overlays = [];
+    config = {};
+    inherit system;
   };
+
+  inherit (pkgs) lib;
+  inherit (import sources."gitignore.nix" { inherit lib; }) gitignoreSource;
+
+  src = gitignoreSource ./.;
+
+  hpkgs = pkgs.haskellPackages.extend (hself: hsuper: {
+    webauthn = hself.callCabal2nix "webauthn" src {};
+
+    jose = hself.callHackage "jose" "0.8.5" {};
+
+    base64-bytestring = hself.base64-bytestring_1_2_1_0;
+
+    # Note: Keep this synchronized with cabal.project!
+    x509-validation =
+      let
+        src = fetchTarball {
+          url = "https://github.com/vincenthz/hs-certificate/archive/824cca5fba0c7c243c3561727ba16834e33fd32d.tar.gz";
+          sha256 = "1ppvzjv35mqvy8jhyi35awg0y59ixqa42rglvb5jdnb3c6svv0i5";
+        } + "/x509-validation";
+      in hself.callCabal2nix "x509-validation" src {};
+  });
 
   deploy = pkgs.writeShellScriptBin "deploy" ''
     ${pkgs.nixos-rebuild}/bin/nixos-rebuild switch --build-host localhost --target-host webauthn.dev.tweag.io \
       --use-remote-sudo --no-build-nix \
-      -I nixpkgs=${toString nixpkgs} \
+      -I nixpkgs=${toString sources.nixpkgs} \
       -I nixos-config=${toString infra/configuration.nix}
   '';
 
-  shell = build.shellFor {
-    tools = {
-      cabal = "3.4.0.0";
-      hlint = "latest";
-      haskell-language-server = "latest";
-      ormolu = "latest";
-    };
+  shell = hpkgs.shellFor {
+    packages = p: [ p.webauthn ];
+    nativeBuildInputs = [
+      pkgs.haskellPackages.cabal-install
+      pkgs.haskellPackages.haskell-language-server
+      pkgs.haskellPackages.hlint
+      pkgs.haskellPackages.ormolu
 
-    nativeBuildInputs = with pkgs; [
-      entr
-      fd
-      niv
-      python3
-      yarn
-      nodejs
+      pkgs.entr
+      pkgs.gitMinimal
+      pkgs.niv
+      pkgs.python3
+      pkgs.yarn
+      pkgs.nodejs
+      pkgs.jq
+
       deploy
-      jq
     ];
+    shellHook = ''
+      export NIX_PATH=nixpkgs=${toString sources.nixpkgs}
+    '';
   };
 
 in
-if isShell then shell else build
+  if isShell then shell else {
+    inherit (hpkgs) webauthn;
+    inherit pkgs hpkgs;
+  }

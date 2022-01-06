@@ -12,11 +12,7 @@ take a look at `default.nix` for the dependencies and GHC version. All
 instructions below assume the use of Nix.
 
 ### Nix Caches
-We highly recommend using the IOHK Binary Cache to avoid building of several
-copies of GHC. Setting up the IOHK binary cache is easily done following the
-[instructions][cache] provided by IOHK.
-
-Additionally, Tweag provides a Cachix cache for the library itself and all
+Tweag provides a Cachix cache for the library itself and all
 non-Haskell dependencies, setting up the `tweag-haskell-fido2` cache can be
 done using the [instructions][cachix] provided by Cachix.
 

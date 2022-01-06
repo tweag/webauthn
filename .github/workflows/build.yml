@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    continue-on-error: true
     strategy:
       matrix:
         os:
@@ -17,21 +18,25 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: cachix/install-nix-action@v16
-      with:
-        extra_nix_config: |
-          trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-          substituters = https://hydra.iohk.io https://cache.nixos.org/
-
     - uses: cachix/cachix-action@v10
       with:
         name: tweag-haskell-fido2
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - name: "Stylecheck"
-      run: |
-        nix-shell --pure --command ./bin/autoformat.sh
-        git diff --exit-code
 
-    - name: "Build"
-      run: |
-        nix-build -A webauthn.checks
-        nix-build -A webauthn.components.exes
+    - name: "Install Nix bash"
+      run: nix-env -f . -iA pkgs.bash
+
+    - name: "Nix shell"
+      run: nix-shell --run "echo Success"
+
+    - name: "Cabal build"
+      run: nix-shell --run "cabal update && cabal build all"
+
+    - name: "Style check"
+      run: nix-shell --run "bin/autoformat.sh"
+
+    - name: "HLS works"
+      run: nix-shell --run "haskell-language-server"
+
+    - name: "Nix build"
+      run: nix-build -A webauthn

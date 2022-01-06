@@ -45,7 +45,6 @@ import Network.Wai.Middleware.Static (addBase, staticPolicy)
 import PendingOps (PendingOps, defaultPendingOpsConfig, getPendingOptions, insertPendingOptions, newPendingOps)
 import System.Environment (getArgs)
 import System.Hourglass (dateCurrent)
-import System.Random.Stateful (globalStdGen, uniformM)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
@@ -59,7 +58,7 @@ data RegisterBeginReq = RegisterBeginReq
 
 setAuthenticatedAs :: Database.Connection -> M.UserHandle -> Scotty.ActionM ()
 setAuthenticatedAs db userHandle = do
-  token <- Scotty.liftAndCatchIO $ uniformM globalStdGen
+  token <- Scotty.liftAndCatchIO Database.generateAuthToken
   Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx ->
       Database.insertAuthToken tx token userHandle
@@ -243,7 +242,7 @@ beginRegistration db pending = do
     Database.withTransaction db $ \tx -> do
       Database.userExists tx (M.UserAccountName accountName)
   when exists $ Scotty.raiseStatus HTTP.status409 "Account name already taken"
-  userId <- Scotty.liftAndCatchIO $ uniformM globalStdGen
+  userId <- Scotty.liftAndCatchIO M.generateUserHandle
   let user =
         M.PublicKeyCredentialUserEntity
           { M.pkcueId = userId,

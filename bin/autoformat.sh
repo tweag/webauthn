@@ -9,4 +9,6 @@ set -eufo pipefail
 ormolu \
     --mode inplace \
     --ghc-opt -XTypeApplications \
-    $(fd -e 'hs')
+    $(git ls-files '*.hs')
+
+hlint -g
