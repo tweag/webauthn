@@ -217,6 +217,18 @@ main = Hspec.hspec $ do
         False -- Uses a fake certificate in the chain
         registry
         predeterminedDateTime
+  describe "AndroidSafetyNet register" $ do
+    it "tests whether the fixed android safetynet register has a valid attestation" $
+      registerTestFromFile
+        "tests/responses/attestation/android-safetynet-01.json"
+        "https://devicemanagement-duo1.pwl.ngrok.io"
+        "pwl.ngrok.io"
+        True
+        registry
+        HG.DateTime
+          { dtDate = HG.Date {dateYear = 2021, dateMonth = HG.September, dateDay = 3},
+            dtTime = HG.TimeOfDay {todHour = HG.Hours 21, todMin = HG.Minutes 7, todSec = HG.Seconds 21, todNSec = HG.NanoSeconds 0}
+          }
   describe "U2F register" $ do
     it "tests whether the fixed fido-u2f register has a valid attestation" $
       registerTestFromFile

@@ -27,6 +27,7 @@ import qualified Crypto.WebAuthn.Metadata.Statement.Types as Meta
 import Crypto.WebAuthn.Model (SupportedAttestationStatementFormats, sasfSingleton)
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operations.Attestation.AndroidKey as AndroidKey
+import qualified Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet as AndroidSafetyNet
 import qualified Crypto.WebAuthn.Operations.Attestation.Apple as Apple
 import qualified Crypto.WebAuthn.Operations.Attestation.FidoU2F as FidoU2F
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
@@ -52,6 +53,7 @@ allSupportedFormats =
     [ None.format,
       Packed.format,
       AndroidKey.format,
+      AndroidSafetyNet.format,
       FidoU2F.format,
       Apple.format,
       TPM.format
