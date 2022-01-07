@@ -40,6 +40,7 @@ let
 
   shell = hpkgs.shellFor {
     packages = p: [ p.webauthn ];
+    withHoogle = true;
     nativeBuildInputs = [
       pkgs.haskellPackages.cabal-install
       pkgs.haskellPackages.haskell-language-server
