@@ -484,6 +484,7 @@ instance M.AttestationStatementFormat Format where
 
   asfVerify
     _
+    _
     Statement {..}
     M.AuthenticatorData {adRawData = M.WithRaw adRawData, ..}
     clientDataHash = do

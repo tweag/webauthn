@@ -105,6 +105,7 @@ import qualified Data.ByteString as BS
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hashable (Hashable)
+import qualified Data.Hourglass as HG
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Singletons (SingI, sing)
@@ -1073,6 +1074,7 @@ class
   -- The procedure to verify an [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement)
   asfVerify ::
     a ->
+    HG.DateTime ->
     AttStmt a ->
     AuthenticatorData 'Create 'True ->
     ClientDataHash ->

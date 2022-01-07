@@ -144,6 +144,7 @@ instance M.AttestationStatementFormat Format where
 
   asfVerify
     _
+    _
     Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c, aaguidExt}
     M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do

@@ -376,7 +376,7 @@ verifyAttestationResponse
     -- 19. Verify that attStmt is a correct attestation statement, conveying a
     -- valid attestation signature, by using the attestation statement format
     -- fmt’s verification procedure given attStmt, authData and hash.
-    attStmt <- case M.asfVerify aoFmt aoAttStmt authData hash of
+    attStmt <- case M.asfVerify aoFmt currentTime aoAttStmt authData hash of
       Left err -> failure $ AttestationFormatError $ SomeException err
       Right (M.SomeAttestationType M.AttestationTypeNone) ->
         pure $ SomeAttestationStatement M.AttestationTypeNone UnknownAuthenticator

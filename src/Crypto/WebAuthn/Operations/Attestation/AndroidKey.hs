@@ -238,7 +238,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerificationError
 
-  asfVerify _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
+  asfVerify _ _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to
     -- extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
