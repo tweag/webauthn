@@ -25,6 +25,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
+import qualified Data.X509.EC as X509
 import qualified Data.X509.Validation as X509
 
 data Format = Format
@@ -53,7 +54,7 @@ data VerifyingError
   | -- | Error extracting coordinates
     ExtractingCoordinatesError
   | -- | The provided public key cannot validate the signature over the verification data
-    InvalidSignature
+    InvalidSignature X509.SignatureFailure
   deriving (Show, Exception)
 
 data Statement = Statement
@@ -117,8 +118,10 @@ instance M.AttestationStatementFormat Format where
       -- P-256 curve, terminate this algorithm and return an appropriate error.
       let certPubKey = X509.certPubKey $ X509.getCertificate attCert
       case certPubKey of
-        -- TODO: Will we only get named curves?
-        (X509.PubKeyEC X509.PubKeyEC_Named {X509.pubkeyEC_name = SEC_p256r1}) -> pure ()
+        X509.PubKeyEC pk ->
+          case X509.ecPubKeyCurveName pk of
+            Just SEC_p256r1 -> pure ()
+            _ -> Left IncorrectKeyInCertificate
         _ -> Left IncorrectKeyInCertificate
 
       -- 3. Extract the claimed rpIdHash from authenticatorData, and the claimed
@@ -159,7 +162,7 @@ instance M.AttestationStatementFormat Format where
       case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) certPubKey verificationData sig of
         X509.SignaturePass -> pure ()
         -- TODO: Pass along SignatureFailure to error
-        X509.SignatureFailed _ -> Left InvalidSignature
+        X509.SignatureFailed e -> Left $ InvalidSignature e
 
       -- 7. Optionally, inspect x5c and consult externally provided knowledge to
       -- determine whether attStmt conveys a Basic or AttCA attestation.

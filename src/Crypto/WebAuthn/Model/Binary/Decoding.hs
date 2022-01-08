@@ -200,7 +200,8 @@ decodeAuthenticatorData strictBytes = do
 
     decodeExtensions :: PartialBinaryDecoder DecodingError M.AuthenticatorExtensionOutputs
     decodeExtensions bytes = do
-      -- TODO
+      -- TODO: Extensions are not implemented by this library, see the TODO in the
+      -- module documentation of `Crypto.WebAuthn.Model` for more information.
       (bytes, (_, _extensions :: CBOR.Term)) <- runCBOR CBOR.decodeTerm bytes
       pure (bytes, M.AuthenticatorExtensionOutputs {})
 
@@ -248,7 +249,8 @@ data ClientDataJSON = ClientDataJSON
     challenge :: IDL.DOMString,
     origin :: IDL.DOMString,
     crossOrigin :: Maybe IDL.Boolean
-    -- TODO
+    -- TODO: We do not implement TokenBinding, see the documentation of
+    -- `CollectedClientData` for more information.
     -- tokenBinding :: Maybe TokenBinding
   }
   deriving (Generic)

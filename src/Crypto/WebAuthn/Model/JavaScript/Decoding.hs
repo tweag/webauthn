@@ -62,7 +62,8 @@ instance Decode M.AssertionSignature
 instance Decode M.UserHandle
 
 instance Decode M.AuthenticationExtensionsClientOutputs where
-  -- TODO: Implement extension support
+  -- TODO: Extensions are not implemented by this library, see the TODO in the
+  -- module documentation of `Crypto.WebAuthn.Model` for more information.
   decode _ = pure M.AuthenticationExtensionsClientOutputs {}
 
 instance SingI t => Decode (M.CollectedClientData t 'True) where

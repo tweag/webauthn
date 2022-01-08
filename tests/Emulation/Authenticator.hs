@@ -210,8 +210,6 @@ authenticatorMakeCredential
       -- credentialSource.
       -- NOTE: We always choose to construct a clientside discoverable
       -- credential, as this is allowed (See 7.4).
-      -- TODO: Use deterministic random number generator, and ensure that we
-      -- use a single random number generator across the entire library.
       credentialId <- M.generateCredentialId
 
       -- 7.4.2. Set credentialSource.id to credentialId.
@@ -375,7 +373,8 @@ authenticatorGetAssertion
       -- 8. Let processedExtensions be the result of authenticator extension
       -- processing for each supported extension identifier → authenticator
       -- extension input in extensions.
-      -- TODO: We don't suport extensions
+      -- TODO: Extensions are not implemented by this library, see the TODO in the
+      -- module documentation of `Crypto.WebAuthn.Model` for more information.
 
       -- 9. Increment the credential associated signature counter or the global
       -- signature counter value, depending on which approach is implemented by
@@ -447,9 +446,10 @@ authenticatorGetAssertion
             (Just c, m') = Map.updateLookupWithKey (\_ c -> Just $ increment + c) key m
          in (c, PerCredential m')
 
--- TODO: Surely there must be a beter function than lookpMin . filter
 authenticatorLookupCredential :: Authenticator -> M.CredentialId -> Maybe PublicKeyCredentialSource
-authenticatorLookupCredential AuthenticatorNone {..} credentialId = snd <$> Map.lookupMin (Map.filter (\PublicKeyCredentialSource {..} -> pkcsId == credentialId) aCredentials)
+authenticatorLookupCredential AuthenticatorNone {..} credentialId =
+  snd
+    <$> Map.lookupMin (Map.filter (\PublicKeyCredentialSource {..} -> pkcsId == credentialId) aCredentials)
 
 newKeyPair :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m (PublicKey.PublicKey, PrivateKey.PrivateKey)
 newKeyPair PublicKey.COSEAlgorithmIdentifierES256 = newECDSAKeyPair PublicKey.COSEAlgorithmIdentifierES256

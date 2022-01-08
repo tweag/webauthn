@@ -73,8 +73,10 @@ fidoAllianceRootCertificate =
 
 instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
   getVerificationKeys header _ (RootCertificate rootStore hostName) = do
-    -- TODO: Implement step 4 of the spec, which says to try to get the chain from x5u first before trying x5c
-    -- https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules
+    -- TODO: Implement step 4 of the spec, which says to try to get the chain
+    -- from x5u first before trying x5c. See:
+    -- <https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules>
+    -- and <https://github.com/tweag/webauthn/issues/23>
     chain <- case header ^? x5c . _Just . param of
       Nothing ->
         -- FIXME: Return a better error here, but we can't modify the jose libraries error type
@@ -83,7 +85,7 @@ instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore
 
     now <- ask
 
-    -- TODO: Check CRLs, see https://github.com/tweag/haskell-fido2/issues/23
+    -- TODO: Check CRLs, see <https://github.com/tweag/haskell-fido2/issues/23>
     let validationErrors =
           X509.validatePure
             now

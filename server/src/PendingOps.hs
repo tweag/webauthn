@@ -217,5 +217,7 @@ newPendingOps pendingConfig = do
         let (expired, valid) = Map.spanAntitone (isExpired now) ops
         STM.writeTVar pendings valid
         pure expired
-      -- TODO: Do something less invasive than printing the removed options
+      -- TODO: Do something less invasive than printing the removed options,
+      -- this is desirable when this module is included as part of the library,
+      -- and we no longer want to write to stdout.
       unless (Map.null expired) $ putStrLn $ "Removed these expired pending operations: " <> show expired
