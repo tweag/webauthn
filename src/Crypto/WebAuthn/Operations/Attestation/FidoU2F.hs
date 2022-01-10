@@ -98,6 +98,7 @@ instance M.AttestationStatementFormat Format where
 
   asfVerify
     _
+    _
     Statement {attCert, sig}
     M.AuthenticatorData
       { M.adRpIdHash,

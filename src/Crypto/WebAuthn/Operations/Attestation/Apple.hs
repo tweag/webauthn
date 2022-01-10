@@ -134,6 +134,7 @@ instance M.AttestationStatementFormat Format where
   -- https://www.w3.org/TR/webauthn-2/#sctn-apple-anonymous-attestation
   asfVerify
     _
+    _
     Statement {..}
     M.AuthenticatorData {M.adRawData, M.adAttestedCredentialData = credData}
     clientDataHash = do

@@ -27,6 +27,7 @@ import qualified Crypto.WebAuthn.Metadata.Statement.Types as Meta
 import Crypto.WebAuthn.Model (SupportedAttestationStatementFormats, sasfSingleton)
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operations.Attestation.AndroidKey as AndroidKey
+import qualified Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet as AndroidSafetyNet
 import qualified Crypto.WebAuthn.Operations.Attestation.Apple as Apple
 import qualified Crypto.WebAuthn.Operations.Attestation.FidoU2F as FidoU2F
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
@@ -52,6 +53,7 @@ allSupportedFormats =
     [ None.format,
       Packed.format,
       AndroidKey.format,
+      AndroidSafetyNet.format,
       FidoU2F.format,
       Apple.format,
       TPM.format
@@ -376,7 +378,7 @@ verifyAttestationResponse
     -- 19. Verify that attStmt is a correct attestation statement, conveying a
     -- valid attestation signature, by using the attestation statement format
     -- fmt’s verification procedure given attStmt, authData and hash.
-    attStmt <- case M.asfVerify aoFmt aoAttStmt authData hash of
+    attStmt <- case M.asfVerify aoFmt currentTime aoAttStmt authData hash of
       Left err -> failure $ AttestationFormatError $ SomeException err
       Right (M.SomeAttestationType M.AttestationTypeNone) ->
         pure $ SomeAttestationStatement M.AttestationTypeNone UnknownAuthenticator
