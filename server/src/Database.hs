@@ -22,6 +22,7 @@ module Database
     insertAuthToken,
     queryUserByAuthToken,
     deleteAuthToken,
+    updateSignatureCounter,
   )
 where
 
@@ -169,6 +170,15 @@ queryCredentialEntriesByUser (Transaction conn) (M.UserAccountName accountName) 
       \ where account_name = ?;                                             "
       [accountName]
   pure $ map toCredentialEntry entries
+
+updateSignatureCounter :: Transaction -> M.CredentialId -> M.SignatureCounter -> IO ()
+updateSignatureCounter (Transaction conn) (M.CredentialId credentialId) (M.SignatureCounter counter) =
+  Sqlite.execute
+    conn
+    " update credential_entries \
+    \ set sign_counter = ?      \
+    \ where credential_id = ?;  "
+    (counter, credentialId)
 
 toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32) -> CredentialEntry
 toCredentialEntry (credentialId, userHandle, publicKey, signCounter) =

@@ -19,6 +19,7 @@ import qualified Crypto.WebAuthn.Model.JavaScript as JS
 import Crypto.WebAuthn.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
 import Crypto.WebAuthn.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
 import Crypto.WebAuthn.Operations.Assertion (verifyAssertionResponse)
+import qualified Crypto.WebAuthn.Operations.Assertion as M
 import Crypto.WebAuthn.Operations.Attestation (AttestationResult (rEntry), allSupportedFormats, verifyAttestationResponse)
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
 import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
@@ -212,12 +213,23 @@ completeLogin origin rpIdHash db pending = do
       fail "Credential not found"
     Just entry -> pure entry
 
-  _newSigCount <- case verifyAssertionResponse origin rpIdHash (Just (ceUserHandle entry)) entry options cred of
+  newSigCount <- case verifyAssertionResponse origin rpIdHash (Just (ceUserHandle entry)) entry options cred of
     Failure errs@(err :| _) -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete had errors: " <> Text.pack (show errs)
       fail $ show err
     Success result -> pure result
-  -- FIXME: Update signature count in database
+
+  case newSigCount of
+    M.SignatureCounterZero ->
+      Scotty.liftAndCatchIO $
+        TIO.putStrLn "SignatureCounter is Zero"
+    (M.SignatureCounterUpdated counter) ->
+      Scotty.liftAndCatchIO $ do
+        TIO.putStrLn $ "Updating SignatureCounter to: " <> Text.pack (show counter)
+        Database.withTransaction db $
+          \tx -> Database.updateSignatureCounter tx (M.pkcIdentifier cred) counter
+    M.SignatureCounterPotentiallyCloned -> Scotty.raiseStatus HTTP.status401 "Signature Counter Cloned"
+
   setAuthenticatedAs db (ceUserHandle entry)
   let result = String "success"
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete => " <> jsonText result
