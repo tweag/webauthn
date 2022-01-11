@@ -11,6 +11,7 @@
 
 module Crypto.WebAuthn.Metadata.Service.Processing
   ( RootCertificate (..),
+    ProcessingError (..),
     createMetadataRegistry,
     queryMetadata,
     jwtToJson,
@@ -20,11 +21,26 @@ module Crypto.WebAuthn.Metadata.Service.Processing
 where
 
 import Control.Lens ((^.), (^?), _Just)
+import Control.Lens.Combinators (makeClassyPrisms)
 import Control.Monad.Except (MonadError, runExcept, throwError)
 import Control.Monad.Reader (MonadReader, ask, runReaderT)
-import Crypto.JOSE (fromX509Certificate)
+import Crypto.JOSE (AsError (_Error), fromX509Certificate)
 import Crypto.JOSE.JWK.Store (VerificationKeyStore (getVerificationKeys))
-import Crypto.JWT (Error (JWSInvalidSignature), HasX5c (x5c), JWSHeader, JWTError (JWSError), SignedJWT, decodeCompact, defaultJWTValidationSettings, param, unregisteredClaims, verifyClaims)
+import Crypto.JOSE.Types (URI)
+import Crypto.JWT
+  ( AsJWTError (_JWTError),
+    Error,
+    HasX5c (x5c),
+    HasX5u (x5u),
+    JWSHeader,
+    JWTError,
+    SignedJWT,
+    decodeCompact,
+    defaultJWTValidationSettings,
+    param,
+    unregisteredClaims,
+    verifyClaims,
+  )
 import Crypto.WebAuthn.DateOrphans ()
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
@@ -54,6 +70,36 @@ data RootCertificate = RootCertificate
     rootCertificateHostName :: X509.HostName
   }
 
+-- | Errors related to the processing of the metadata
+data ProcessingError
+  = -- | An error wrapping the errors encountered by the X509 Validation
+    ProcessingValidationErrors [X509.FailedReason]
+  | -- | There was no x5c header present in the metadata JWT
+    ProcessingMissingX5CHeader
+  | -- | An error wrapping the general Errors from the JOSE library
+    ProcessingJWSError Error
+  | -- | An error wrapping the JWT specific Errors from the JOSE library
+    ProcessingJWTError JWTError
+  | -- | There was a x5u header present in the metadata JWT but this is unimplemented
+    -- TODO: Implement step 4 of the
+    -- [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules)
+    ProcessingX5UPresent URI
+  deriving (Show, Eq)
+
+-- | Create Prisms for the error type, used in the AsError and AsJWTError
+-- instances below
+makeClassyPrisms ''ProcessingError
+
+-- | Instantiate JOSE's AsError typeclass as a simple cast to our own error
+-- type. This allows using our own error type in JOSE operations.
+instance AsError ProcessingError where
+  _Error = _ProcessingJWSError
+
+-- | Instantiate JOSE's AsJWTError typeclass as a simple cast to our own error
+-- type. This allows using our own error type in JWT operations.
+instance AsJWTError ProcessingError where
+  _JWTError = _ProcessingJWTError
+
 -- | The root certificate used for the blob downloaded from <https://mds.fidoalliance.org/>,
 -- which can be found in [here](https://valid.r3.roots.globalsign.com/),
 -- see also <https://fidoalliance.org/metadata/>
@@ -71,16 +117,23 @@ fidoAllianceRootCertificate =
       Left err -> error err
       Right cert -> cert
 
-instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
+instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
   getVerificationKeys header _ (RootCertificate rootStore hostName) = do
     -- TODO: Implement step 4 of the spec, which says to try to get the chain
     -- from x5u first before trying x5c. See:
     -- <https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-object-processing-rules>
     -- and <https://github.com/tweag/webauthn/issues/23>
+    --
+    -- In order to prevent issues due to the lack of an implementation for x5u,
+    -- we do check if it is empty before continuing. If not empty, we result in
+    -- an error instead.
+    case header ^? x5u . _Just . param of
+      Nothing -> pure ()
+      Just uri -> throwError $ ProcessingX5UPresent uri
+
     chain <- case header ^? x5c . _Just . param of
       Nothing ->
-        -- FIXME: Return a better error here, but we can't modify the jose libraries error type
-        throwError $ JWSError JWSInvalidSignature
+        throwError ProcessingMissingX5CHeader
       Just chain -> return chain
 
     now <- ask
@@ -100,9 +153,8 @@ instance (MonadError JWTError m, MonadReader DateTime m) => VerificationKeyStore
         -- Create a JWK from the leaf certificate, which is used to sign the payload
         jwk <- fromX509Certificate (NE.head chain)
         return [jwk]
-      _errors ->
-        -- FIXME: We're currently discarding these errors by necessity, because we're bound by the JOSE libraries error type
-        throwError $ JWSError JWSInvalidSignature
+      errors ->
+        throwError $ ProcessingValidationErrors errors
 
 -- | Extracts a FIDO Metadata payload JSON value from a JWT bytestring according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
 jwtToJson ::
@@ -112,7 +164,7 @@ jwtToJson ::
   RootCertificate ->
   -- | The current time for which to validate the JWT blob
   DateTime ->
-  Either JWTError Value
+  Either ProcessingError Value
 jwtToJson blob rootCert now = runExcept $ do
   jwt :: SignedJWT <- decodeCompact $ LBS.fromStrict blob
   claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
