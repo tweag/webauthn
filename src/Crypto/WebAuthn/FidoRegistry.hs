@@ -3,7 +3,7 @@
 
 -- | [Fido Registry of Predefined Values](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#authenticator-attestation-types)
 -- FIDO Alliance Proposed Standard 17 December 2019
-module Crypto.WebAuthn.Registry
+module Crypto.WebAuthn.FidoRegistry
   ( UserVerificationMethod (..),
     KeyProtectionType (..),
     MatcherProtectionType (..),
@@ -15,7 +15,7 @@ module Crypto.WebAuthn.Registry
   )
 where
 
-import Crypto.WebAuthn.EncodingUtils (EnumJSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (EnumJSONEncoding)
 import qualified Data.Aeson as Aeson
 import Deriving.Aeson (CustomJSON (CustomJSON))
 import GHC.Generics (Generic)

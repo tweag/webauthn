@@ -19,8 +19,9 @@ import Crypto.Hash (hash)
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Identifier (AAGUID)
 import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
@@ -65,7 +66,7 @@ type Conformance = Set.Set AuthenticatorNonConformingBehaviour
 -- | The datatype holding all information needed for attestation and assertion
 data Authenticator = AuthenticatorNone
   -- https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map
-  { aAAGUID :: M.AAGUID,
+  { aAAGUID :: AAGUID,
     aCredentials :: Map.Map (M.RpId, M.UserHandle) PublicKeyCredentialSource,
     aSignatureCounter :: AuthenticatorSignatureCounter,
     aSupportedAlgorithms :: Set.Set Cose.CoseSignAlg,

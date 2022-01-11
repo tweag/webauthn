@@ -29,9 +29,10 @@ import Control.Monad (forM, unless)
 import Control.Monad.Except (Except, MonadError (throwError), runExcept)
 import Control.Monad.State (MonadState (get, put), StateT (runStateT))
 import qualified Crypto.Hash as Hash
-import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
-import qualified Crypto.WebAuthn.Model as M
-import qualified Crypto.WebAuthn.Model.JavaScript as JS
+import Crypto.WebAuthn.Identifier (AAGUID (AAGUID))
+import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
+import qualified Crypto.WebAuthn.Model.Types as M
+import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first)
@@ -93,7 +94,7 @@ data DecodingError
   | -- | The given error occured during decoding of CBOR-encoded data
     DecodingErrorCBOR CBOR.DeserialiseFailure
   | -- | The decoded algorithm identifier does not match the desired algorithm
-    DecodingErrorUnexpectedAlgorithmIdentifier JS.COSEAlgorithmIdentifier
+    DecodingErrorUnexpectedAlgorithmIdentifier IDL.COSEAlgorithmIdentifier
   deriving (Show, Exception)
 
 -- | Webauthn contains a mixture of binary formats. For one it's CBOR and
@@ -195,7 +196,7 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
       acdAaguid <-
         -- Note: fromJust is safe because UUID.fromByteString only returns
         -- nothing if there's not exactly 16 bytes
-        M.AAGUID . fromJust . UUID.fromByteString
+        AAGUID . fromJust . UUID.fromByteString
           <$> runBinary (Binary.getLazyByteString 16)
 
       -- https://www.w3.org/TR/webauthn-2/#credentialidlength

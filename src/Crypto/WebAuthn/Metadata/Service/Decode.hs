@@ -6,8 +6,8 @@ module Crypto.WebAuthn.Metadata.Service.Decode
   )
 where
 
-import qualified Crypto.WebAuthn.Metadata.Service.IDL as ServiceIDL
 import qualified Crypto.WebAuthn.Metadata.Service.Types as ServiceTypes
+import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import Crypto.WebAuthn.Metadata.Statement.Decode (decodeAAGUID, decodeCertificate, decodeMetadataStatement, decodeSubjectKeyIdentifier)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Bifunctor (first)

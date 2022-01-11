@@ -12,12 +12,12 @@ import Crypto.Hash (hash)
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Processing as Service
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model as M
-import qualified Crypto.WebAuthn.Model.JavaScript as JS
-import qualified Crypto.WebAuthn.Model.JavaScript.Decoding as JS
+import qualified Crypto.WebAuthn.Model.Types as M
+import qualified Crypto.WebAuthn.Model.WebIDL.Decoding as IDL
+import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
-import qualified Crypto.WebAuthn.Operations.Common as Common
+import qualified Crypto.WebAuthn.Operations.CredentialEntry as WebAuthn
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
@@ -87,7 +87,7 @@ registryFromBlobFile = do
 registerTestFromFile :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
 registerTestFromFile fp origin rpId verifiable service now = do
   pkCredential <-
-    either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
+    either (error . show) id . IDL.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
       <$> decodeFile fp
   let options = defaultPublicKeyCredentialCreationOptions pkCredential
   let registerResult =
@@ -108,13 +108,13 @@ main = Hspec.hspec $ do
     -- Check if all attestation responses can be decoded
     describe "attestation responses" $
       canDecodeAllToJSRepr
-        @(JS.PublicKeyCredential JS.AuthenticatorAttestationResponse)
+        @(IDL.PublicKeyCredential IDL.AuthenticatorAttestationResponse)
         "tests/responses/attestation/"
         ignoreDecodedValue
     -- Check if all assertion responses can be decoded
     describe "assertion responses" $
       canDecodeAllToJSRepr
-        @(JS.PublicKeyCredential JS.AuthenticatorAssertionResponse)
+        @(IDL.PublicKeyCredential IDL.AuthenticatorAssertionResponse)
         "tests/responses/assertion/"
         ignoreDecodedValue
   -- Test public key related tests
@@ -133,7 +133,7 @@ main = Hspec.hspec $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
-          either (error . show) id . JS.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
+          either (error . show) id . IDL.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/01-none.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
@@ -149,9 +149,9 @@ main = Hspec.hspec $ do
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
         let Right WebAuthn.AttestationResult {WebAuthn.rEntry = credentialEntry} = registerResult
         loginReq <-
-          either (error . show) id . JS.decodeRequestedPublicKeyCredential
+          either (error . show) id . IDL.decodeRequestedPublicKeyCredential
             <$> decodeFile
-              @(JS.PublicKeyCredential JS.AuthenticatorAssertionResponse)
+              @(IDL.PublicKeyCredential IDL.AuthenticatorAssertionResponse)
               "tests/responses/assertion/01-none.json"
         let M.PublicKeyCredential {M.pkcResponse = pkcResponse} = loginReq
             signInResult =
@@ -163,7 +163,7 @@ main = Hspec.hspec $ do
                   credentialEntry
                   (defaultPublicKeyCredentialRequestOptions loginReq)
                   M.PublicKeyCredential
-                    { M.pkcIdentifier = Common.ceCredentialId credentialEntry,
+                    { M.pkcIdentifier = WebAuthn.ceCredentialId credentialEntry,
                       M.pkcResponse = pkcResponse,
                       M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
                     }
@@ -316,9 +316,9 @@ isExpectedAttestationResponse M.PublicKeyCredential {..} M.PublicKeyCredentialCr
              _ -> False
          )
   where
-    expectedCredentialEntry :: Common.CredentialEntry
+    expectedCredentialEntry :: WebAuthn.CredentialEntry
     expectedCredentialEntry =
-      Common.CredentialEntry
+      WebAuthn.CredentialEntry
         { ceCredentialId = pkcIdentifier,
           ceUserHandle = M.pkcueId pkcocUser,
           cePublicKeyBytes =

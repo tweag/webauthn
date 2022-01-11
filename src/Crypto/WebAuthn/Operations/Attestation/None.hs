@@ -7,7 +7,7 @@ module Crypto.WebAuthn.Operations.Attestation.None
 where
 
 import qualified Codec.CBOR.Term as CBOR
-import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Data.Text as Text
 import Data.Void (Void)
 

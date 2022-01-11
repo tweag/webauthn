@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | This module contain some useful orphan 'ToJSON' instances for pretty-printing values from third-party libraries
-module Crypto.WebAuthn.ToJSONOrphans () where
+module Crypto.WebAuthn.Internal.ToJSONOrphans () where
 
 import Crypto.Hash (Digest)
 import qualified Crypto.PubKey.ECC.Types as ECC

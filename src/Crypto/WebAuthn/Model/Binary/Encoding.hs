@@ -19,7 +19,8 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import Codec.Serialise (Serialise (encode))
-import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Identifier (AAGUID (unAAGUID))
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Data.Aeson as Aeson
 import qualified Data.Binary.Put as Binary
 import Data.Bits ((.|.))
@@ -120,7 +121,7 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
     -- https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data
     encodeAttestedCredentialData :: M.AttestedCredentialData 'M.Create 'True -> Builder
     encodeAttestedCredentialData M.AttestedCredentialData {..} =
-      Binary.execPut (Binary.putLazyByteString $ UUID.toByteString $ M.unAAGUID acdAaguid)
+      Binary.execPut (Binary.putLazyByteString $ UUID.toByteString $ unAAGUID acdAaguid)
         <> Binary.execPut (Binary.putWord16be credentialLength)
         <> Binary.execPut (Binary.putByteString $ M.unCredentialId acdCredentialId)
         <> Binary.execPut (Binary.putByteString $ M.unRaw acdCredentialPublicKeyBytes)

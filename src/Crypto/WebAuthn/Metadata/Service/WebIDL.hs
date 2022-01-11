@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
 -- | <https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html>
-module Crypto.WebAuthn.Metadata.Service.IDL
+module Crypto.WebAuthn.Metadata.Service.WebIDL
   ( MetadataBLOBPayloadEntry (..),
     BiometricStatusReport (..),
     StatusReport (..),
@@ -14,9 +14,9 @@ where
 -- Unless otherwise specified, if a WebIDL dictionary member is DOMString, it MUST NOT be empty.
 -- Unless otherwise specified, if a WebIDL dictionary member is a List, it MUST NOT be an empty list.
 
-import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
-import Crypto.WebAuthn.Metadata.Statement.IDL (AAGUID, MetadataStatement)
-import qualified Crypto.WebAuthn.UAF as UAF
+import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
+import Crypto.WebAuthn.Metadata.Statement.WebIDL (AAGUID, MetadataStatement)
+import qualified Crypto.WebAuthn.Metadata.UAF as UAF
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.List.NonEmpty (NonEmpty)

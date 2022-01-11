@@ -14,7 +14,7 @@
 -- and [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- methods while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
-module Crypto.WebAuthn.Model.JavaScript.Decoding
+module Crypto.WebAuthn.Model.WebIDL.Decoding
   ( -- * Decoding PublicKeyCredential results
     decodeCreatedPublicKeyCredential,
     decodeRequestedPublicKeyCredential,
@@ -24,13 +24,10 @@ module Crypto.WebAuthn.Model.JavaScript.Decoding
 where
 
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.Model
-  ( SupportedAttestationStatementFormats,
-  )
-import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
-import qualified Crypto.WebAuthn.Model.JavaScript as JS
-import Crypto.WebAuthn.Model.JavaScript.Types (Convert (JS))
+import qualified Crypto.WebAuthn.Model.Types as M
+import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (JS))
+import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Bifunctor (first)
 import Data.Coerce (Coercible, coerce)
@@ -49,7 +46,7 @@ class Convert a => Decode a where
 -- on the supported attestation formats. This function also throws a
 -- 'CreatedDecodingError' instead of a 'DecodingError.
 class Convert a => DecodeCreated a where
-  decodeCreated :: SupportedAttestationStatementFormats -> JS a -> Either MD.CreatedDecodingError a
+  decodeCreated :: M.SupportedAttestationStatementFormats -> JS a -> Either MD.CreatedDecodingError a
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -73,7 +70,7 @@ instance Decode (M.AuthenticatorData 'M.Get 'True) where
   decode (IDL.URLEncodedBase64 bytes) = MD.decodeAuthenticatorData bytes
 
 instance Decode (M.AuthenticatorResponse 'M.Get 'True) where
-  decode JS.AuthenticatorAssertionResponse {..} = do
+  decode IDL.AuthenticatorAssertionResponse {..} = do
     argClientData <- decode clientDataJSON
     argAuthenticatorData <- decode authenticatorData
     argSignature <- decode signature
@@ -81,7 +78,7 @@ instance Decode (M.AuthenticatorResponse 'M.Get 'True) where
     pure $ M.AuthenticatorAssertionResponse {..}
 
 instance Decode (M.PublicKeyCredential 'M.Get 'True) where
-  decode JS.PublicKeyCredential {..} = do
+  decode IDL.PublicKeyCredential {..} = do
     pkcIdentifier <- decode rawId
     pkcResponse <- decode response
     pkcClientExtensionResults <- decode clientExtensionResults
@@ -92,7 +89,7 @@ instance Decode M.RpId
 instance Decode M.RelyingPartyName
 
 instance Decode M.PublicKeyCredentialRpEntity where
-  decode JS.PublicKeyCredentialRpEntity {..} = do
+  decode IDL.PublicKeyCredentialRpEntity {..} = do
     pkcreId <- decode id
     pkcreName <- decode name
     pure $ M.PublicKeyCredentialRpEntity {..}
@@ -102,7 +99,7 @@ instance Decode M.UserAccountDisplayName
 instance Decode M.UserAccountName
 
 instance Decode M.PublicKeyCredentialUserEntity where
-  decode JS.PublicKeyCredentialUserEntity {..} = do
+  decode IDL.PublicKeyCredentialUserEntity {..} = do
     pkcueId <- decode id
     pkcueDisplayName <- decode displayName
     pkcueName <- decode name
@@ -138,8 +135,8 @@ instance Decode [M.PublicKeyCredentialDescriptor] where
   decode Nothing = pure []
   decode (Just xs) = catMaybes <$> traverse decodeDescriptor xs
     where
-      decodeDescriptor :: JS.PublicKeyCredentialDescriptor -> Either MD.DecodingError (Maybe M.PublicKeyCredentialDescriptor)
-      decodeDescriptor JS.PublicKeyCredentialDescriptor {littype = "public-key", id, transports} = do
+      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Either MD.DecodingError (Maybe M.PublicKeyCredentialDescriptor)
+      decodeDescriptor IDL.PublicKeyCredentialDescriptor {littype = "public-key", id, transports} = do
         let pkcdTyp = M.PublicKeyCredentialTypePublicKey
         pkcdId <- decode id
         pkcdTransports <- decode transports
@@ -158,7 +155,7 @@ instance Decode M.UserVerificationRequirement where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-authenticatorSelection)
 instance Decode M.AuthenticatorSelectionCriteria where
-  decode JS.AuthenticatorSelectionCriteria {..} = do
+  decode IDL.AuthenticatorSelectionCriteria {..} = do
     let ascAuthenticatorAttachment = decodeAttachment =<< authenticatorAttachment
         ascResidentKey = decodeResidentKey residentKey
     ascUserVerification <- decode userVerification
@@ -201,8 +198,8 @@ instance Decode M.AttestationConveyancePreference where
 instance Decode [M.PublicKeyCredentialParameters] where
   decode xs = catMaybes <$> traverse decodeParam xs
     where
-      decodeParam :: JS.PublicKeyCredentialParameters -> Either MD.DecodingError (Maybe M.PublicKeyCredentialParameters)
-      decodeParam JS.PublicKeyCredentialParameters {littype = "public-key", alg} = do
+      decodeParam :: IDL.PublicKeyCredentialParameters -> Either MD.DecodingError (Maybe M.PublicKeyCredentialParameters)
+      decodeParam IDL.PublicKeyCredentialParameters {littype = "public-key", alg} = do
         let pkcpTyp = M.PublicKeyCredentialTypePublicKey
         pkcpAlg <- decode alg
         pure . Just $ M.PublicKeyCredentialParameters {..}
@@ -210,7 +207,7 @@ instance Decode [M.PublicKeyCredentialParameters] where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 instance Decode (M.PublicKeyCredentialOptions 'M.Create) where
-  decode JS.PublicKeyCredentialCreationOptions {..} = do
+  decode IDL.PublicKeyCredentialCreationOptions {..} = do
     pkcocRp <- decode rp
     pkcocUser <- decode user
     pkcocChallenge <- decode challenge
@@ -224,7 +221,7 @@ instance Decode (M.PublicKeyCredentialOptions 'M.Create) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
 instance Decode (M.PublicKeyCredentialOptions 'M.Get) where
-  decode JS.PublicKeyCredentialRequestOptions {..} = do
+  decode IDL.PublicKeyCredentialRequestOptions {..} = do
     pkcogChallenge <- decode challenge
     pkcogTimeout <- decode timeout
     pkcogRpId <- decode rpId
@@ -239,43 +236,43 @@ instance DecodeCreated (M.AttestationObject 'True) where
     MD.decodeAttestationObject supportedFormats bytes
 
 instance DecodeCreated (M.AuthenticatorResponse 'M.Create 'True) where
-  decodeCreated asfMap JS.AuthenticatorAttestationResponse {..} = do
+  decodeCreated asfMap IDL.AuthenticatorAttestationResponse {..} = do
     arcClientData <- first MD.CreatedDecodingErrorCommon $ decode clientDataJSON
     arcAttestationObject <- decodeCreated asfMap attestationObject
     pure $ M.AuthenticatorAttestationResponse {..}
 
 instance DecodeCreated (M.PublicKeyCredential 'M.Create 'True) where
-  decodeCreated asfMap JS.PublicKeyCredential {..} = do
+  decodeCreated asfMap IDL.PublicKeyCredential {..} = do
     pkcIdentifier <- first MD.CreatedDecodingErrorCommon $ decode rawId
     pkcResponse <- decodeCreated asfMap response
     pkcClientExtensionResults <- first MD.CreatedDecodingErrorCommon $ decode clientExtensionResults
     pure $ M.PublicKeyCredential {..}
 
--- | Decodes a 'JS.CreatedPublicKeyCredential' result, corresponding to the
+-- | Decodes a 'IDL.CreatedPublicKeyCredential' result, corresponding to the
 -- [`PublicKeyCredential` interface](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- as returned by the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- method while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 decodeCreatedPublicKeyCredential ::
-  SupportedAttestationStatementFormats ->
-  JS.CreatedPublicKeyCredential ->
+  M.SupportedAttestationStatementFormats ->
+  IDL.CreatedPublicKeyCredential ->
   Either MD.CreatedDecodingError (M.PublicKeyCredential 'M.Create 'True)
 decodeCreatedPublicKeyCredential = decodeCreated
 
--- | Decodes a 'JS.RequestedPublicKeyCredential' result, corresponding to the
+-- | Decodes a 'IDL.RequestedPublicKeyCredential' result, corresponding to the
 -- [`PublicKeyCredential` interface](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- as returned by the [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- method while [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 decodeRequestedPublicKeyCredential ::
-  JS.RequestedPublicKeyCredential ->
+  IDL.RequestedPublicKeyCredential ->
   Either MD.DecodingError (M.PublicKeyCredential 'M.Get 'True)
 decodeRequestedPublicKeyCredential = decode
 
 decodePublicKeyCredentialCreationOptions ::
-  JS.PublicKeyCredentialCreationOptions ->
+  IDL.PublicKeyCredentialCreationOptions ->
   Either MD.DecodingError (M.PublicKeyCredentialOptions 'M.Create)
 decodePublicKeyCredentialCreationOptions = decode
 
 decodePublicKeyCredentialRequestOptions ::
-  JS.PublicKeyCredentialRequestOptions ->
+  IDL.PublicKeyCredentialRequestOptions ->
   Either MD.DecodingError (M.PublicKeyCredentialOptions 'M.Get)
 decodePublicKeyCredentialRequestOptions = decode

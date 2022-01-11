@@ -17,8 +17,8 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (failure)
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import qualified Data.ByteArray as BA

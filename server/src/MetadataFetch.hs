@@ -13,9 +13,9 @@ import Control.Concurrent.STM (TVar, atomically, modifyTVar)
 import Control.Exception (Exception, throwIO)
 import Control.Monad (forever)
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataEntry)
-import qualified Crypto.WebAuthn.Metadata.Service.IDL as Service
 import Crypto.WebAuthn.Metadata.Service.Processing (ProcessingError, createMetadataRegistry, fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
+import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as Service
 import Data.Aeson (eitherDecodeFileStrict)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS

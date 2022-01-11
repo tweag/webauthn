@@ -50,7 +50,7 @@ import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans ()
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Types as ASN1

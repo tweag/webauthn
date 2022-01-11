@@ -15,8 +15,9 @@ import Codec.Serialise (decode)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
+import Crypto.WebAuthn.Operations.CredentialEntry (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS

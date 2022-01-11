@@ -1,13 +1,13 @@
 {-# LANGUAGE DataKinds #-}
 
-module Crypto.WebAuthn.UAF
+module Crypto.WebAuthn.Metadata.UAF
   ( AAID (..),
     KeyIdentifier (..),
     Version (..),
   )
 where
 
-import Crypto.WebAuthn.EncodingUtils (JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (JSONEncoding)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Text (Text)

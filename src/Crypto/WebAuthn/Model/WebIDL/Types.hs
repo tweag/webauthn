@@ -26,7 +26,7 @@
 -- - @'PublicKeyCredential' response@ and all its subtypes. Responses of the
 --   [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) (in which case @response ~ 'AuthenticatorAttestationResponse'@) and
 --   [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get) (in which case @response ~ 'AuthenticatorAssertionResponse'@ methods.
-module Crypto.WebAuthn.Model.JavaScript
+module Crypto.WebAuthn.Model.WebIDL.Types
   ( -- * Top-level types
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),
@@ -46,7 +46,7 @@ module Crypto.WebAuthn.Model.JavaScript
   )
 where
 
-import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Map (Map)

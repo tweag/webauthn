@@ -20,12 +20,13 @@ import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
+import Crypto.WebAuthn.Identifier (AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F), certificateSubjectKeyIdentifier)
+import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Internal.X509Validation as X509
 import Crypto.WebAuthn.Metadata.Service.Processing (queryMetadata)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as Meta
-import Crypto.WebAuthn.Model (SupportedAttestationStatementFormats, sasfSingleton)
-import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.Operations.Attestation.AndroidKey as AndroidKey
 import qualified Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet as AndroidSafetyNet
 import qualified Crypto.WebAuthn.Operations.Attestation.Apple as Apple
@@ -33,8 +34,15 @@ import qualified Crypto.WebAuthn.Operations.Attestation.FidoU2F as FidoU2F
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
 import qualified Crypto.WebAuthn.Operations.Attestation.Packed as Packed
 import qualified Crypto.WebAuthn.Operations.Attestation.TPM as TPM
-import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
-import Crypto.WebAuthn.SubjectKeyIdentifier (certificateSubjectKeyIdentifier)
+import Crypto.WebAuthn.Operations.CredentialEntry
+  ( CredentialEntry
+      ( CredentialEntry,
+        ceCredentialId,
+        cePublicKeyBytes,
+        ceSignCounter,
+        ceUserHandle
+      ),
+  )
 import Data.Aeson (ToJSON, Value (String), object, toJSON, (.=))
 import Data.Hourglass (DateTime)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -45,10 +53,10 @@ import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import GHC.Generics (Generic)
 
-allSupportedFormats :: SupportedAttestationStatementFormats
+allSupportedFormats :: M.SupportedAttestationStatementFormats
 allSupportedFormats =
   foldMap
-    sasfSingleton
+    M.sasfSingleton
     [ None.format,
       Packed.format,
       AndroidKey.format,
@@ -114,7 +122,7 @@ data AuthenticatorModel k where
       -- chain
       uaFailures :: NonEmpty X509.FailedReason,
       -- | The identifier for the authenticator model
-      uaIdentifier :: M.AuthenticatorIdentifier p,
+      uaIdentifier :: AuthenticatorIdentifier p,
       -- | The metadata looked up in the provided 'Meta.MetadataServiceRegistry'
       -- This field is always equal to 'Meta.queryMetadata registry vaIdentifier',
       -- and is only provided for convenience and because the implementation
@@ -147,7 +155,7 @@ data AuthenticatorModel k where
   --   for more information
   VerifiedAuthenticator ::
     { -- | The identifier for the authenticator model
-      vaIdentifier :: M.AuthenticatorIdentifier p,
+      vaIdentifier :: AuthenticatorIdentifier p,
       -- | The metadata looked up in the provided 'Meta.MetadataServiceRegistry'
       -- This field is always equal to 'Meta.queryMetadata registry vaIdentifier',
       -- and is only provided for convenience and because the implementation
@@ -439,11 +447,11 @@ validateAttestationChain
             }
 
       chain :: X509.CertificateChain
-      identifier :: M.AuthenticatorIdentifier p
+      identifier :: AuthenticatorIdentifier p
       (chain, identifier) = case atvChain of
         M.Fido2Chain cs ->
           ( X509.CertificateChain $ NE.toList cs,
-            M.AuthenticatorIdentifierFido2
+            AuthenticatorIdentifierFido2
               . M.acdAaguid
               . M.adAttestedCredentialData
               . M.aoAuthData
@@ -453,7 +461,7 @@ validateAttestationChain
           )
         M.FidoU2FCert c ->
           ( X509.CertificateChain [c],
-            M.AuthenticatorIdentifierFidoU2F
+            AuthenticatorIdentifierFidoU2F
               . certificateSubjectKeyIdentifier
               . X509.getCertificate
               $ c

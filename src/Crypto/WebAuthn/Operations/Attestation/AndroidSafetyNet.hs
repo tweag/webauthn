@@ -25,9 +25,9 @@ import Control.Monad.Except (MonadError, runExcept, throwError)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.JOSE as JOSE
 import qualified Crypto.JWT as JOSE
-import Crypto.WebAuthn.DateOrphans ()
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (failure)
+import Crypto.WebAuthn.Internal.DateOrphans ()
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Data.ASN1.Types.String as X509
 import Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson

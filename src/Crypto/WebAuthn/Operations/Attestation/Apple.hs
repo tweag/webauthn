@@ -17,8 +17,8 @@ import Control.Exception (Exception)
 import Control.Monad (forM)
 import Control.Monad.Cont (unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (failure)
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
