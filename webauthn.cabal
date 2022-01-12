@@ -55,6 +55,7 @@ library
     memory,
     monad-time,
     mtl,
+    serialise,
     singletons,
     text,
     time,
@@ -65,6 +66,8 @@ library
     x509-store,
     x509-validation
   exposed-modules:
+    Crypto.WebAuthn.Cose.Key,
+    Crypto.WebAuthn.Cose.Registry,
     Crypto.WebAuthn.DateOrphans,
     Crypto.WebAuthn.EncodingUtils,
     Crypto.WebAuthn.Metadata.Service.Decode,
