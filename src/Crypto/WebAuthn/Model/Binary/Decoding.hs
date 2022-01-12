@@ -23,13 +23,13 @@ where
 import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
+import Codec.Serialise (decode)
 import Control.Exception (Exception, SomeException (SomeException))
 import Control.Monad (forM, unless)
 import qualified Crypto.Hash as Hash
 import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
-import Crypto.WebAuthn.PublicKey (decodePublicKey)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first, second)
@@ -193,7 +193,7 @@ decodeAuthenticatorData strictBytes = do
 
       -- https://www.w3.org/TR/webauthn-2/#credentialpublickey
       (bytes, (usedBytes, acdCredentialPublicKey)) <-
-        runCBOR decodePublicKey bytes
+        runCBOR decode bytes
       let acdCredentialPublicKeyBytes = M.WithRaw $ LBS.toStrict usedBytes
 
       pure (bytes, M.AttestedCredentialData {..})

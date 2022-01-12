@@ -21,6 +21,8 @@ where
 import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
+import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import Crypto.WebAuthn.Metadata.Service.Processing (queryMetadata)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as Meta
@@ -34,7 +36,6 @@ import qualified Crypto.WebAuthn.Operations.Attestation.None as None
 import qualified Crypto.WebAuthn.Operations.Attestation.Packed as Packed
 import qualified Crypto.WebAuthn.Operations.Attestation.TPM as TPM
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Crypto.WebAuthn.SubjectKeyIdentifier (certificateSubjectKeyIdentifier)
 import Data.Aeson (ToJSON, Value (String), object, toJSON, (.=))
 import Data.Hourglass (DateTime)
@@ -74,7 +75,7 @@ data AttestationError
     -- we (the relying party) requested from the client.
     -- first: The received algorithm
     -- second: The list of requested algorithm
-    AttestationUndesiredPublicKeyAlgorithm PublicKey.COSEAlgorithmIdentifier [PublicKey.COSEAlgorithmIdentifier]
+    AttestationUndesiredPublicKeyAlgorithm Cose.CoseSignAlg [Cose.CoseSignAlg]
   | -- | There was some exception in the statement format specific section
     AttestationFormatError SomeException
   deriving (Show)
@@ -354,7 +355,7 @@ verifyAttestationResponse
     -- 16. Verify that the "alg" parameter in the credential public key in
     -- authData matches the alg attribute of one of the items in
     -- options.pubKeyCredParams.
-    let acdAlg = PublicKey.toCOSEAlgorithmIdentifier acdCredentialPublicKey
+    let acdAlg = Cose.keySignAlg acdCredentialPublicKey
         desiredAlgs = map M.pkcpAlg pkcocPubKeyCredParams
     unless (acdAlg `elem` desiredAlgs) $
       failure $ AttestationUndesiredPublicKeyAlgorithm acdAlg desiredAlgs

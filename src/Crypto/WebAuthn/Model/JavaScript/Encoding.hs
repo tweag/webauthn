@@ -19,11 +19,11 @@ module Crypto.WebAuthn.Model.JavaScript.Encoding
   )
 where
 
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
 import Crypto.WebAuthn.Model.JavaScript.Types (Convert (JS))
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Map as Map
@@ -62,8 +62,8 @@ instance Encode M.AuthenticationExtensionsClientInputs where
   encode M.AuthenticationExtensionsClientInputs {} = Map.empty
 
 -- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
-instance Encode PublicKey.COSEAlgorithmIdentifier where
-  encode = PublicKey.fromAlg
+instance Encode Cose.CoseSignAlg where
+  encode = Cose.fromCoseSignAlg
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
 instance Encode M.PublicKeyCredentialType where

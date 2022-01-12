@@ -15,9 +15,10 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
+import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
-import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier, fromAlg, toAlg, toCOSEAlgorithmIdentifier)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import qualified Data.ASN1.OID as OID
@@ -41,7 +42,7 @@ instance Show Format where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation)
 data Statement = Statement
-  { alg :: COSEAlgorithmIdentifier,
+  { alg :: Cose.CoseSignAlg,
     sig :: BS.ByteString,
     x5c :: Maybe (NE.NonEmpty X509.SignedCertificate),
     aaguidExt :: Maybe IdFidoGenCeAAGUID
@@ -80,7 +81,7 @@ data VerificationError
     VerificationErrorAlgorithmMismatch
   | -- | The statement key cannot verify the signature over the attested
     -- credential data and client data for self attestation
-    VerificationErrorInvalidSignature
+    VerificationErrorInvalidSignature String
   | -- | The statement certificate cannot verify the signature over the attested
     -- credential data and client data for nonself attestation
     VerificationErrorVerificationFailure X509.SignatureFailure
@@ -108,7 +109,7 @@ instance M.AttestationStatementFormat Format where
   asfDecode _ xs =
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
       (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), x5cValue) -> do
-        alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (toAlg algId)
+        alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (Cose.toCoseSignAlg algId)
         x5c <- case x5cValue of
           Nothing -> pure Nothing
           Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)) -> do
@@ -136,7 +137,7 @@ instance M.AttestationStatementFormat Format where
           Just certChain -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
      in CBOR.TMap
           [ (CBOR.TString "sig", CBOR.TBytes sig),
-            (CBOR.TString "alg", CBOR.TInt $ fromAlg alg),
+            (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
             (CBOR.TString "x5c", CBOR.TList encodedx5c)
           ]
 
@@ -154,12 +155,14 @@ instance M.AttestationStatementFormat Format where
         Nothing -> do
           -- Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
           let key = M.acdCredentialPublicKey credData
-              alg = toCOSEAlgorithmIdentifier key
-          when (stmtAlg /= alg) $ Left VerificationErrorAlgorithmMismatch
+              signAlg = Cose.keySignAlg key
+          when (stmtAlg /= signAlg) $ Left VerificationErrorAlgorithmMismatch
 
           -- Verify that sig is a valid signature over the concatenation of
           -- authenticatorData and clientDataHash using the credential public key with alg.
-          unless (PublicKey.verify key signedData stmtSig) . Left $ VerificationErrorInvalidSignature
+          case PublicKey.verify signAlg (PublicKey.fromCose key) signedData stmtSig of
+            Right () -> pure ()
+            Left err -> Left $ VerificationErrorInvalidSignature err
 
           pure $ M.SomeAttestationType M.AttestationTypeSelf
 

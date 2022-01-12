@@ -17,10 +17,10 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
 import Crypto.Hash (Digest, SHA1, SHA256, hash)
+import qualified Crypto.Hash as Hash
 import Crypto.Number.Serialize (os2ip)
-import qualified Crypto.PubKey.ECC.ECDSA as ECC
-import qualified Crypto.PubKey.ECC.Types as ECC
-import qualified Crypto.PubKey.RSA as RSA
+import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
@@ -92,10 +92,10 @@ toTPMAlgId 0x0023 = pure TPMAlgECC
 toTPMAlgId _ = fail "Unsupported or invalid TPM_ALD_IG"
 
 -- | [(spec)](https://trustedcomputinggroup.org/wp-content/uploads/TCG-_Algorithm_Registry_r1p32_pub.pdf)
-toCurveId :: MonadFail m => Word16 -> m ECC.CurveName
-toCurveId 0x0003 = pure ECC.SEC_p256r1
-toCurveId 0x0004 = pure ECC.SEC_p384r1
-toCurveId 0x0005 = pure ECC.SEC_p521r1
+toCurveId :: MonadFail m => Word16 -> m Cose.CoseCurveECDSA
+toCurveId 0x0003 = pure Cose.CoseCurveP256
+toCurveId 0x0004 = pure Cose.CoseCurveP384
+toCurveId 0x0005 = pure Cose.CoseCurveP521
 toCurveId _ = fail "Unsupported Curve ID"
 
 -- | [(spec)](https://trustedcomputinggroup.org/wp-content/uploads/TCG_TPM2_r1p59_Part2_Structures_pub.pdf)
@@ -144,7 +144,7 @@ data TPMUPublicParms
   | TPMSECCParms
       { tpmsepSymmetric :: Word16,
         tpmsepScheme :: Word16,
-        tpmsepCurveId :: ECC.CurveName,
+        tpmsepCurveId :: Cose.CoseCurveECDSA,
         tpmsepkdf :: Word16
       }
   deriving (Eq, Show, Generic, ToJSON)
@@ -152,8 +152,8 @@ data TPMUPublicParms
 data TPMUPublicId
   = TPM2BPublicKeyRSA BS.ByteString
   | TPMSECCPoint
-      { tpmseX :: Integer,
-        tpmseY :: Integer
+      { tpmseX :: BS.ByteString,
+        tpmseY :: BS.ByteString
       }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -182,7 +182,7 @@ data SubjectAlternativeName = SubjectAlternativeName
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-tpm-attestation)
 data Statement = Statement
-  { alg :: PublicKey.COSEAlgorithmIdentifier,
+  { alg :: Cose.CoseSignAlg,
     x5c :: NE.NonEmpty X509.SignedCertificate,
     aikCert :: X509.SignedCertificate,
     subjectAlternativeName :: SubjectAlternativeName,
@@ -251,7 +251,7 @@ data VerificationError
     VerificationErrorCertificateVersion Int Int
   | -- | The Public key cannot verify the signature over the authenticatorData
     -- and the clientDataHash.
-    VerificationErrorVerificationFailure
+    VerificationErrorVerificationFailure String
   | -- | The subject field was not empty
     VerificationErrorNonEmptySubjectField
   | -- | The vendor was unknown
@@ -339,7 +339,7 @@ instance M.AttestationStatementFormat Format where
               first DecodingErrorCertificate (X509.decodeSignedCertificate certBytes)
             _ ->
               Left (DecodingErrorUnexpectedCBORStructure xs)
-          alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (PublicKey.toAlg algId)
+          alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (Cose.toCoseSignAlg algId)
           -- The get interface requires lazy bytestrings but we typically use
           -- strict bytestrings in the library, so we have to convert between
           -- them
@@ -437,41 +437,40 @@ instance M.AttestationStatementFormat Format where
       getTPMUPublicId TPMAlgSHA1 = fail "SHA1 does not have a public id"
       getTPMUPublicId TPMAlgSHA256 = fail "SHA256 does not have a public id"
       getTPMUPublicId TPMAlgECC = do
-        tpmseX <- os2ip <$> getTPMByteString
-        tpmseY <- os2ip <$> getTPMByteString
+        tpmseX <- getTPMByteString
+        tpmseY <- getTPMByteString
         pure TPMSECCPoint {..}
 
       extractPublicKey :: TPMTPublic -> Maybe PublicKey.PublicKey
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgRSA,
-            tpmtpNameAlg,
             tpmtpParameters = TPMSRSAParms {..},
             tpmtpUnique = TPM2BPublicKeyRSA nb
           } =
-          do
-            public_size <- toPublicSize tpmtpNameAlg
-            let public_n = os2ip nb
-            let public_e = toInteger tpmsrpExponent
-            pure . PublicKey.RS256PublicKey $ RSA.PublicKey {..}
-          where
-            toPublicSize :: TPMAlgId -> Maybe Int
-            toPublicSize TPMAlgSHA1 = Just 160
-            toPublicSize TPMAlgSHA256 = Just 256
-            toPublicSize TPMAlgRSA = Nothing
-            toPublicSize TPMAlgECC = Nothing
+          pure
+            PublicKey.PublicKeyRSA
+              { rsaN = os2ip nb,
+                rsaE = toInteger tpmsrpExponent
+              }
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgECC,
             tpmtpParameters = TPMSECCParms {..},
             tpmtpUnique = TPMSECCPoint {..}
-          } = pure . PublicKey.ES256PublicKey $ ECC.PublicKey (ECC.getCurveByName tpmsepCurveId) (ECC.Point tpmseX tpmseY)
+          } =
+          pure
+            PublicKey.PublicKeyECDSA
+              { ecdsaCurve = tpmsepCurveId,
+                ecdsaX = tpmseX,
+                ecdsaY = tpmseY
+              }
       extractPublicKey _ = Nothing
 
   asfEncode _ Statement {..} =
     CBOR.TMap
       [ (CBOR.TString "ver", CBOR.TString "2.0"),
-        (CBOR.TString "alg", CBOR.TInt $ PublicKey.fromAlg alg),
+        (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
         ( CBOR.TString "x5c",
           CBOR.TList $ map (CBOR.TBytes . X509.encodeSignedObject) $ NE.toList x5c
         ),
@@ -495,7 +494,7 @@ instance M.AttestationStatementFormat Format where
       -- 2. Verify that the public key specified by the parameters and unique
       -- fields of pubArea is identical to the credentialPublicKey in the
       -- attestedCredentialData in authenticatorData.
-      let pubKey = M.acdCredentialPublicKey adAttestedCredentialData
+      let pubKey = PublicKey.fromCose $ M.acdCredentialPublicKey adAttestedCredentialData
       unless (pubKey == pubAreaKey) $ Left VerificationErrorCredentialKeyMismatch
 
       -- 3. Concatenate authenticatorData and clientDataHash to form attToBeSigned.
@@ -512,7 +511,7 @@ instance M.AttestationStatementFormat Format where
 
       -- 4.3 Verify that extraData is set to the hash of attToBeSigned using
       -- the hash algorithm employed in "alg".
-      attHash <- maybe (Left VerificationErrorUnknownHashFunction) Right $ PublicKey.hashWithCorrectAlgorithm alg attToBeSigned
+      attHash <- maybe (Left VerificationErrorUnknownHashFunction) Right $ hashWithCorrectAlgorithm alg attToBeSigned
       let extraData = tpmsaExtraData certInfo
       unless (attHash == extraData) . Left $ VerificationErrorHashMismatch attHash extraData
 
@@ -546,8 +545,10 @@ instance M.AttestationStatementFormat Format where
       -- 4.8 Verify the sig is a valid signature over certInfo using the
       -- attestation public key in aikCert with the algorithm specified in alg.
       let unsignedAikCert = X509.getCertificate aikCert
-      certPubKey <- maybe (Left VerificationErrorInvalidPublicKey) Right $ PublicKey.toPublicKey alg . X509.certPubKey $ unsignedAikCert
-      unless (PublicKey.verify certPubKey certInfoRaw sig) $ Left VerificationErrorVerificationFailure
+      certPubKey <- maybe (Left VerificationErrorInvalidPublicKey) Right $ PublicKey.fromX509 $ X509.certPubKey unsignedAikCert
+      case PublicKey.verify alg certPubKey certInfoRaw sig of
+        Right () -> pure ()
+        Left err -> Left $ VerificationErrorVerificationFailure err
 
       -- 4.9 Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation
       -- Statement Certificate Requirements.
@@ -591,6 +592,24 @@ instance M.AttestationStatementFormat Format where
       pure $
         M.SomeAttestationType $
           M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain (M.Fido2Chain x5c)
+      where
+        hashWithCorrectAlgorithm :: (MonadFail f, BA.ByteArrayAccess ba, BA.ByteArray bout) => Cose.CoseSignAlg -> ba -> f bout
+        hashWithCorrectAlgorithm Cose.CoseSignAlgEdDSA _ =
+          fail "No associated hash algorithm for EdDSA"
+        hashWithCorrectAlgorithm (Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256) bytes =
+          pure $ BA.convert (Hash.hashWith Hash.SHA256 bytes)
+        hashWithCorrectAlgorithm (Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA384) bytes =
+          pure $ BA.convert (Hash.hashWith Hash.SHA384 bytes)
+        hashWithCorrectAlgorithm (Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA512) bytes =
+          pure $ BA.convert (Hash.hashWith Hash.SHA512 bytes)
+        hashWithCorrectAlgorithm (Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA1) bytes =
+          pure $ BA.convert (Hash.hashWith Hash.SHA1 bytes)
+        hashWithCorrectAlgorithm (Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA256) bytes =
+          pure $ BA.convert (Hash.hashWith Hash.SHA256 bytes)
+        hashWithCorrectAlgorithm (Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA384) bytes =
+          pure $ BA.convert (Hash.hashWith Hash.SHA384 bytes)
+        hashWithCorrectAlgorithm (Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA512) bytes =
+          pure $ BA.convert (Hash.hashWith Hash.SHA512 bytes)
 
   asfTrustAnchors _ _ = rootCertificateStore
 

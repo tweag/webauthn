@@ -99,6 +99,8 @@ import Control.Exception (Exception)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import Crypto.Random (MonadRandom, getRandomBytes)
+import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
     ProtocolKind (Fido2, FidoU2F),
@@ -106,7 +108,6 @@ import Crypto.WebAuthn.Model.Kinds
     SWebauthnKind (SCreate, SGet),
     WebauthnKind (Create, Get),
   )
-import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier, PublicKey)
 import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
 import Crypto.WebAuthn.ToJSONOrphans ()
 import Data.Aeson (ToJSON, Value (Null, String), object, (.=))
@@ -734,7 +735,7 @@ data PublicKeyCredentialParameters = PublicKeyCredentialParameters
     -- This member specifies the cryptographic signature algorithm with which the newly
     -- generated credential will be used, and thus also the type of asymmetric
     -- key pair to be generated, e.g., RSA or Elliptic Curve.
-    pkcpAlg :: COSEAlgorithmIdentifier
+    pkcpAlg :: Cose.CoseSignAlg
   }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -973,7 +974,7 @@ data AttestedCredentialData (t :: WebauthnKind) raw where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialid)
       acdCredentialId :: CredentialId,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
-      acdCredentialPublicKey :: PublicKey,
+      acdCredentialPublicKey :: Cose.CosePublicKey,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
       acdCredentialPublicKeyBytes :: RawField raw
     } ->

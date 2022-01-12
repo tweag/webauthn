@@ -7,9 +7,9 @@ module Crypto.WebAuthn.Model.JavaScript.Types
   )
 where
 
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Kind (Type)
@@ -51,8 +51,8 @@ instance Convert M.Challenge where
 instance Convert M.PublicKeyCredentialType where
   type JS M.PublicKeyCredentialType = IDL.DOMString
 
-instance Convert PublicKey.COSEAlgorithmIdentifier where
-  type JS PublicKey.COSEAlgorithmIdentifier = JS.COSEAlgorithmIdentifier
+instance Convert Cose.CoseSignAlg where
+  type JS Cose.CoseSignAlg = JS.COSEAlgorithmIdentifier
 
 instance Convert [M.PublicKeyCredentialParameters] where
   type JS [M.PublicKeyCredentialParameters] = [JS.PublicKeyCredentialParameters]
