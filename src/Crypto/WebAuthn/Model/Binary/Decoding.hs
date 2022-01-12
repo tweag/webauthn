@@ -26,13 +26,15 @@ import qualified Codec.CBOR.Term as CBOR
 import Codec.Serialise (decode)
 import Control.Exception (Exception, SomeException (SomeException))
 import Control.Monad (forM, unless)
+import Control.Monad.Except (Except, MonadError (throwError), runExcept)
+import Control.Monad.State (MonadState (get, put), StateT (runStateT))
 import qualified Crypto.Hash as Hash
 import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
-import Data.Bifunctor (first, second)
+import Data.Bifunctor (first)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
@@ -103,19 +105,38 @@ data DecodingError
 -- which is just a function that can partially consume a 'LBS.ByteString'.
 -- Using this we can somewhat easily flip between the two libraries while
 -- decoding without too much nastiness.
-type PartialBinaryDecoder e a = LBS.ByteString -> Either e (LBS.ByteString, a)
+type PartialBinaryDecoder e a = StateT LBS.ByteString (Except e) a
+
+-- | Runs a 'PartialBinaryDecoder' using a strict bytestring. Afterwards it
+-- makes sure that no bytes are left, otherwise throws a 'DecodingErrorNotAllInputUsed'
+runPartialBinaryDecoder :: BS.ByteString -> PartialBinaryDecoder DecodingError a -> Either DecodingError a
+runPartialBinaryDecoder bytes decoder = case runExcept . runStateT decoder . LBS.fromStrict $ bytes of
+  Left err -> Left err
+  Right (result, rest)
+    | LBS.null rest -> return result
+    | otherwise -> Left $ DecodingErrorNotAllInputUsed rest
 
 -- | A 'PartialBinaryDecoder DecodingError' for a binary encoding specified using 'Binary.Get'
 runBinary :: Binary.Get a -> PartialBinaryDecoder DecodingError a
-runBinary get bytes = case Binary.runGetOrFail get bytes of
-  Left (_rest, _offset, err) -> Left $ DecodingErrorBinary err
-  Right (rest, _offset, result) -> Right (rest, result)
+runBinary decoder = do
+  bytes <- get
+  case Binary.runGetOrFail decoder bytes of
+    Left (_rest, _offset, err) ->
+      throwError $ DecodingErrorBinary err
+    Right (rest, _offset, result) -> do
+      put rest
+      pure result
 
 -- | A 'PartialBinaryDecoder DecodingError' for a CBOR encoding specified using the given Decoder
 runCBOR :: (forall s. CBOR.Decoder s a) -> PartialBinaryDecoder DecodingError (LBS.ByteString, a)
-runCBOR decoder bytes = case CBOR.deserialiseFromBytesWithSize decoder bytes of
-  Left err -> Left $ DecodingErrorCBOR err
-  Right (rest, consumed, a) -> return (rest, (LBS.take (fromIntegral consumed) bytes, a))
+runCBOR decoder = do
+  bytes <- get
+  case CBOR.deserialiseFromBytesWithSize decoder bytes of
+    Left err ->
+      throwError $ DecodingErrorCBOR err
+    Right (rest, consumed, a) -> do
+      put rest
+      pure (LBS.take (fromIntegral consumed) bytes, a)
 
 -- | Decodes a 'M.AuthenticatorData' from a 'BS.ByteString'.
 -- This is needed to parse a webauthn clients
@@ -127,18 +148,17 @@ decodeAuthenticatorData ::
   SingI t =>
   BS.ByteString ->
   Either DecodingError (M.AuthenticatorData t 'True)
-decodeAuthenticatorData strictBytes = do
+decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
   -- https://www.w3.org/TR/webauthn-2/#authenticator-data
-  let bytes = LBS.fromStrict strictBytes
-      adRawData = M.WithRaw strictBytes
+  let adRawData = M.WithRaw strictBytes
+
   -- https://www.w3.org/TR/webauthn-2/#rpidhash
-  (bytes, adRpIdHash) <-
-    second (M.RpIdHash . fromJust . Hash.digestFromByteString)
-      <$> runBinary (Binary.getByteString 32) bytes
+  adRpIdHash <-
+    M.RpIdHash . fromJust . Hash.digestFromByteString
+      <$> runBinary (Binary.getByteString 32)
 
   -- https://www.w3.org/TR/webauthn-2/#flags
-  (bytes, bitFlags) <-
-    runBinary Binary.getWord8 bytes
+  bitFlags <- runBinary Binary.getWord8
   let adFlags =
         M.AuthenticatorDataFlags
           { M.adfUserPresent = Bits.testBit bitFlags 0,
@@ -146,64 +166,59 @@ decodeAuthenticatorData strictBytes = do
           }
 
   -- https://www.w3.org/TR/webauthn-2/#signcount
-  (bytes, adSignCount) <-
-    second M.SignatureCounter
-      <$> runBinary Binary.getWord32be bytes
+  adSignCount <- M.SignatureCounter <$> runBinary Binary.getWord32be
 
   -- https://www.w3.org/TR/webauthn-2/#attestedcredentialdata
-  (bytes, adAttestedCredentialData) <- case (sing @t, Bits.testBit bitFlags 6) of
+  adAttestedCredentialData <- case (sing @t, Bits.testBit bitFlags 6) of
     -- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature),
     -- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
     -- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
-    (M.SCreate, True) -> decodeAttestedCredentialData bytes
-    (M.SCreate, False) -> Left DecodingErrorExpectedAttestedCredentialData
+    (M.SCreate, True) -> decodeAttestedCredentialData
+    (M.SCreate, False) -> throwError DecodingErrorExpectedAttestedCredentialData
     -- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature),
     -- the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the
     -- `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
-    (M.SGet, False) -> pure (bytes, M.NoAttestedCredentialData)
-    (M.SGet, True) -> Left DecodingErrorUnexpectedAttestedCredentialData
+    (M.SGet, False) -> pure M.NoAttestedCredentialData
+    (M.SGet, True) -> throwError DecodingErrorUnexpectedAttestedCredentialData
 
   -- https://www.w3.org/TR/webauthn-2/#authdataextensions
-  (bytes, adExtensions) <-
+  adExtensions <-
     if Bits.testBit bitFlags 7
-      then fmap Just <$> decodeExtensions bytes
-      else pure (bytes, Nothing)
+      then Just <$> decodeExtensions
+      else pure Nothing
 
-  if LBS.null bytes
-    then pure M.AuthenticatorData {..}
-    else Left $ DecodingErrorNotAllInputUsed bytes
+  pure M.AuthenticatorData {..}
   where
     decodeAttestedCredentialData :: PartialBinaryDecoder DecodingError (M.AttestedCredentialData 'M.Create 'True)
-    decodeAttestedCredentialData bytes = do
+    decodeAttestedCredentialData = do
       -- https://www.w3.org/TR/webauthn-2/#aaguid
-      (bytes, acdAaguid) <-
+      acdAaguid <-
         -- Note: fromJust is safe because UUID.fromByteString only returns
         -- nothing if there's not exactly 16 bytes
-        second (M.AAGUID . fromJust . UUID.fromByteString)
-          <$> runBinary (Binary.getLazyByteString 16) bytes
+        M.AAGUID . fromJust . UUID.fromByteString
+          <$> runBinary (Binary.getLazyByteString 16)
 
       -- https://www.w3.org/TR/webauthn-2/#credentialidlength
-      (bytes, credentialLength) <-
-        runBinary Binary.getWord16be bytes
+      credentialLength <-
+        runBinary Binary.getWord16be
 
       -- https://www.w3.org/TR/webauthn-2/#credentialid
-      (bytes, acdCredentialId) <-
-        second M.CredentialId
-          <$> runBinary (Binary.getByteString (fromIntegral credentialLength)) bytes
+      acdCredentialId <-
+        M.CredentialId
+          <$> runBinary (Binary.getByteString (fromIntegral credentialLength))
 
       -- https://www.w3.org/TR/webauthn-2/#credentialpublickey
-      (bytes, (usedBytes, acdCredentialPublicKey)) <-
-        runCBOR decode bytes
+      (usedBytes, acdCredentialPublicKey) <- runCBOR decode
       let acdCredentialPublicKeyBytes = M.WithRaw $ LBS.toStrict usedBytes
 
-      pure (bytes, M.AttestedCredentialData {..})
+      pure M.AttestedCredentialData {..}
 
     decodeExtensions :: PartialBinaryDecoder DecodingError M.AuthenticatorExtensionOutputs
-    decodeExtensions bytes = do
+    decodeExtensions = do
       -- TODO: Extensions are not implemented by this library, see the TODO in the
       -- module documentation of `Crypto.WebAuthn.Model` for more information.
-      (bytes, (_, _extensions :: CBOR.Term)) <- runCBOR CBOR.decodeTerm bytes
-      pure (bytes, M.AuthenticatorExtensionOutputs {})
+      (_, _extensions :: CBOR.Term) <- runCBOR CBOR.decodeTerm
+      pure M.AuthenticatorExtensionOutputs {}
 
 -- | Decodes a 'M.AttestationObject' from a 'BS.ByteString'. This is needed
 -- to parse a clients webauthn response for attestation only. This function takes
@@ -217,8 +232,7 @@ decodeAuthenticatorData strictBytes = do
 -- structure
 decodeAttestationObject :: M.SupportedAttestationStatementFormats -> BS.ByteString -> Either CreatedDecodingError (M.AttestationObject 'True)
 decodeAttestationObject supportedFormats bytes = do
-  (rest, (_consumed, result)) <- first CreatedDecodingErrorCommon $ runCBOR CBOR.decodeTerm $ LBS.fromStrict bytes
-  unless (LBS.null rest) $ Left $ CreatedDecodingErrorCommon $ DecodingErrorNotAllInputUsed rest
+  (_consumed, result) <- first CreatedDecodingErrorCommon $ runPartialBinaryDecoder bytes (runCBOR CBOR.decodeTerm)
   pairs <- case result of
     CBOR.TMap pairs -> return pairs
     _ -> Left $ CreatedDecodingErrorUnexpectedAttestationObject result
