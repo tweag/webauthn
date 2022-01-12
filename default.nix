@@ -20,15 +20,6 @@ let
     jose = hself.callHackage "jose" "0.8.5" {};
 
     base64-bytestring = hself.base64-bytestring_1_2_1_0;
-
-    # Note: Keep this synchronized with cabal.project!
-    x509-validation =
-      let
-        src = fetchTarball {
-          url = "https://github.com/vincenthz/hs-certificate/archive/824cca5fba0c7c243c3561727ba16834e33fd32d.tar.gz";
-          sha256 = "1ppvzjv35mqvy8jhyi35awg0y59ixqa42rglvb5jdnb3c6svv0i5";
-        } + "/x509-validation";
-      in hself.callCabal2nix "x509-validation" src {};
   });
 
   deploy = pkgs.writeShellScriptBin "deploy" ''
