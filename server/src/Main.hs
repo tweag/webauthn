@@ -12,6 +12,7 @@ import Control.Monad (when)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import Crypto.Hash (hash)
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
@@ -22,7 +23,6 @@ import Crypto.WebAuthn.Operations.Assertion (verifyAssertionResponse)
 import qualified Crypto.WebAuthn.Operations.Assertion as M
 import Crypto.WebAuthn.Operations.Attestation (AttestationResult (rEntry), allSupportedFormats, verifyAttestationResponse)
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
-import Crypto.WebAuthn.PublicKey (COSEAlgorithmIdentifier (COSEAlgorithmIdentifierES256))
 import Data.Aeson (FromJSON, ToJSON, Value (String))
 import qualified Data.Aeson.Encode.Pretty as AP
 import qualified Data.ByteString.Base64.URL as Base64
@@ -332,7 +332,7 @@ defaultPkcco userEntity challenge =
       M.pkcocPubKeyCredParams =
         [ M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = COSEAlgorithmIdentifierES256
+              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256
             }
         ],
       M.pkcocTimeout = Nothing,

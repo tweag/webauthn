@@ -154,13 +154,13 @@ test-suite tests
   other-modules:
     PublicKeySpec,
     MetadataSpec,
+    Spec.Key,
     Spec.Types,
     Spec.Util,
     Encoding,
     Emulation,
     Emulation.Client,
     Emulation.Client.Arbitrary,
-    Emulation.Client.PrivateKey,
     Emulation.Authenticator,
     Emulation.Authenticator.Arbitrary
   build-depends:

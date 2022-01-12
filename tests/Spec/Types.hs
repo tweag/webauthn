@@ -11,9 +11,12 @@ module Spec.Types () where
 
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Kinds (SWebauthnKind (SCreate, SGet))
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
+import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ByteString.Lazy as LBS
 import Data.Maybe (fromJust)
 import Data.Set (Set)
@@ -22,9 +25,41 @@ import Data.Singletons (SingI, sing)
 import Data.Text.Encoding (encodeUtf8)
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
-import qualified PublicKeySpec ()
-import Test.QuickCheck (Arbitrary (arbitrary), Gen, arbitraryBoundedEnum, elements, frequency, liftArbitrary, resize, shuffle, sublistOf)
+import qualified Spec.Key as Key
+import Spec.Util (runSeededMonadRandom)
+import Test.QuickCheck (Arbitrary (arbitrary), Gen, arbitraryBoundedEnum, elements, frequency, liftArbitrary, oneof, resize, shuffle, sublistOf)
 import Test.QuickCheck.Instances.Text ()
+
+instance Arbitrary Key.KeyPair where
+  arbitrary = do
+    seed <- arbitrary
+    runSeededMonadRandom seed . Key.newKeyPair <$> arbitrary
+
+instance Arbitrary Cose.CoseSignAlg where
+  arbitrary =
+    oneof
+      [ pure Cose.CoseSignAlgEdDSA,
+        Cose.CoseSignAlgECDSA <$> arbitrary,
+        Cose.CoseSignAlgRSA <$> arbitrary
+      ]
+
+instance Arbitrary PublicKey.PublicKey where
+  arbitrary = PublicKey.fromCose <$> arbitrary
+
+instance Arbitrary Cose.CosePublicKey where
+  arbitrary = Key.pubKey <$> arbitrary
+
+instance Arbitrary Cose.CoseCurveEdDSA where
+  arbitrary = arbitraryBoundedEnum
+
+instance Arbitrary Cose.CoseCurveECDSA where
+  arbitrary = arbitraryBoundedEnum
+
+instance Arbitrary Cose.CoseHashAlgECDSA where
+  arbitrary = arbitraryBoundedEnum
+
+instance Arbitrary Cose.CoseHashAlgRSA where
+  arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary M.PublicKeyCredentialType where
   arbitrary = arbitraryBoundedEnum
@@ -221,13 +256,31 @@ instance Arbitrary (M.PublicKeyCredential 'M.Get 'False) where
 shuffledSubset :: (Ord a, Bounded a, Enum a) => Gen [a]
 shuffledSubset = subset >>= shuffle . Set.toList
 
+shuffledSubsetWith :: Ord a => Set a -> Gen [a]
+shuffledSubsetWith set = subsetWith set >>= shuffle . Set.toList
+
 subset :: (Ord a, Bounded a, Enum a) => Gen (Set a)
 subset = Set.fromList <$> sublistOf (Set.toList completeSet)
 
+subsetWith :: Ord a => Set a -> Gen (Set a)
+subsetWith set = Set.fromList <$> sublistOf (Set.toList set)
+
 parameters :: Gen [M.PublicKeyCredentialParameters]
 parameters = do
-  algs <- shuffledSubset
+  algs <- shuffledSubsetWith $ Set.fromList allCoseAlgs
   pure $ M.PublicKeyCredentialParameters M.PublicKeyCredentialTypePublicKey <$> algs
 
 completeSet :: (Ord a, Bounded a, Enum a) => Set a
 completeSet = Set.fromList [minBound .. maxBound]
+
+allCoseAlgs :: [Cose.CoseSignAlg]
+allCoseAlgs =
+  [ Cose.CoseSignAlgEdDSA,
+    Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256,
+    Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA384,
+    Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA512,
+    Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA1,
+    Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA256,
+    Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA384,
+    Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA512
+  ]

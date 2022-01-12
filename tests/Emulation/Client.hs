@@ -28,7 +28,6 @@ import Emulation.Authenticator
     authenticatorMakeCredential,
   )
 import Emulation.Authenticator.Arbitrary ()
-import qualified Emulation.Client.PrivateKey as PrivateKey
 
 -- | The annotated Origin is the origin with the derived (or provided) rpID. It
 -- is a workaround for the fact that we do not derive the rpID from the origin.
@@ -143,7 +142,7 @@ clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} co
               M.AuthenticatorAssertionResponse
                 { M.argClientData = clientData,
                   M.argAuthenticatorData = authenticatorData,
-                  M.argSignature = M.AssertionSignature $ PrivateKey.toByteString signature,
+                  M.argSignature = M.AssertionSignature signature,
                   M.argUserHandle = userHandle
                 },
             M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}

@@ -10,12 +10,12 @@ where
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Common as WebAuthn
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Bifunctor (Bifunctor (second))
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
@@ -207,35 +207,35 @@ defaultPkcoc userEntity challenge =
       M.pkcocPubKeyCredParams =
         [ M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
+              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES384
+              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA384
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES512
+              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA512
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierEdDSA
+              M.pkcpAlg = Cose.CoseSignAlgEdDSA
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS1
+              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA1
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS256
+              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA256
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS384
+              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA384
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS512
+              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA512
             }
         ],
       M.pkcocTimeout = Nothing,
