@@ -29,8 +29,8 @@ import Data.Word (Word16, Word32, Word64, Word8)
 -- are commonly interpreted as UTF-16 encoded strings
 -- [RFC2781](https://webidl.spec.whatwg.org/#biblio-rfc2781) although this is not required.
 -- TODO: This implementation doesn't allow invalid UTF-16 codepoints, which
--- probably makes it not work regarding https://www.w3.org/TR/webauthn-2/#sctn-strings
--- Write a test case that doesn't work and find a better representation
+-- probably makes it not work regarding <https://www.w3.org/TR/webauthn-2/#sctn-strings>
+-- Write a test case that doesn't work and find a better representation.
 type DOMString = Text
 
 -- | [(spec)](https://webidl.spec.whatwg.org/#idl-USVString)

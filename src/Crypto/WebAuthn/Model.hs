@@ -12,6 +12,16 @@
 --
 -- Note: The 'ToJSON' instances of these types are for pretty-printing purposes
 -- only.
+--
+-- #extensions#
+-- TODO:
+-- [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-extensions) This library
+-- does not currently implement extensions. In order to fully comply with level
+-- 2 of the webauthn spec extensions are required. At least, we wish the
+-- library to offer a typeclass implementable by relying parties to allow
+-- extensions in a scheme similar to the attestation statement formats.
+-- Ideally, we would implement all 8 extensions tracked by
+-- [IANA](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids).
 module Crypto.WebAuthn.Model
   ( -- * Enumerations
     PublicKeyCredentialType (..),
@@ -46,7 +56,7 @@ module Crypto.WebAuthn.Model
     SignatureCounter (..),
     PublicKeyBytes (..),
 
-    -- * Extensions (unimplemented)
+    -- * Extensions (unimplemented, see module documentation)
     AuthenticationExtensionsClientInputs (..),
     AuthenticationExtensionsClientOutputs (..),
     AuthenticatorExtensionOutputs (..),
@@ -471,8 +481,8 @@ newtype AAGUID = AAGUID {unAAGUID :: UUID}
 -- the caller’s [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s
 -- [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
 --
--- TODO: 'RpId' is used for both https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrpentity-id
--- and https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid, but the former
+-- TODO: 'RpId' is used for both <https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrpentity-id>
+-- and <https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid>, but the former
 -- uses DOMString, while the latter uses USVString. Is this a bug in the spec or is there an actual difference?
 newtype RpId = RpId {unRpId :: Text}
   deriving (Eq, Show, Ord)
@@ -640,7 +650,7 @@ newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Implement a way to specify extensions, or implement them here directly
+-- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
 data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
   {
   }
@@ -652,7 +662,7 @@ instance ToJSON AuthenticationExtensionsClientInputs where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- This is a dictionary containing the [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Implement a way to specify extensions, or implement them here directly
+-- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
 data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
   {
   }
@@ -698,8 +708,9 @@ data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
     -- The 'UserHandle' MUST NOT contain personally identifying information about the user, such as a username
     -- or e-mail address; see [§ 14.6.1 User Handle Contents](https://www.w3.org/TR/webauthn-2/#sctn-user-handle-privacy)
     -- for details. The user handle MUST NOT be empty, though it MAY be null.
-    -- FIXME: We don't allow encoding it as null here, because it doesn't seem
-    -- to be an allowed value in the client, see <https://www.w3.org/TR/webauthn-2/#sctn-createCredential>
+    -- NOTE: We don't allow encoding it as null here, because it isn't an
+    -- allowed value in the client, see <https://www.w3.org/TR/webauthn-2/#sctn-createCredential>
+    -- This was confirmed and a fix was merged: <https://github.com/w3c/webauthn/pull/1600>
     pkcueId :: UserHandle,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
     -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) name for the user account,
@@ -839,6 +850,7 @@ data PublicKeyCredentialOptions (t :: WebauthnKind) where
       -- consult the IANA "WebAuthn Extension Identifiers" registry [IANA-WebAuthn-Registries](https://www.w3.org/TR/webauthn-2/#biblio-iana-webauthn-registries)
       -- established by [RFC8809](https://www.w3.org/TR/webauthn-2/#biblio-rfc8809) for an up-to-date
       -- list of registered [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
+      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
       pkcocExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     PublicKeyCredentialOptions 'Create
@@ -928,7 +940,13 @@ data CollectedClientData (t :: WebauthnKind) raw = CollectedClientData
     ccdCrossOrigin :: Bool,
     -- | Raw data of the client data, for verification purposes
     ccdRawData :: RawField raw
-    -- TODO: Implement this
+    -- TODO: This library does not implement token binding, this is in
+    -- anticipation of version 3 of the webauthn spec that likely removes this
+    -- field in its entirety. Discussion can be found in
+    -- [the relevant PR](https://github.com/w3c/webauthn/pull/1630).
+    -- Chromium and Firefox both don't propagate this field.
+    -- Once v3 of the webauthn has been released, and this library is updated
+    -- to the new spec, this field and related references can be removed.
     -- tokenBinding :: Maybe TokenBinding,
   }
   deriving (Eq, Show)
@@ -1227,7 +1245,8 @@ data AuthenticatorResponse (t :: WebauthnKind) raw where
       -- [§ 6.5.4 Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object),
       -- and [Figure 6](https://www.w3.org/TR/webauthn-2/#fig-attStructs).
       arcAttestationObject :: AttestationObject raw
-      -- TODO: This property is currently not propagated by webauthn-json
+      -- TODO: This property is currently not propagated by webauthn-json. See:
+      -- <https://github.com/github/webauthn-json/pull/44>
       -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports)
       -- This [internal slot](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots)
       -- contains a sequence of zero or more unique `[DOMString](https://heycam.github.io/webidl/#idl-DOMString)`s

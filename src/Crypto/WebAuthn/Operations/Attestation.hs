@@ -70,8 +70,10 @@ data AttestationError
     AttestationUserNotPresent
   | -- | The userverified bit in the authdata was not set
     AttestationUserNotVerified
-  | -- | TODO: Fix this description
-    -- The desired algorithm is not supported by this implementation or by the fido2 specification
+  | -- | The algorithm received from the client was not one of the algorithms
+    -- we (the relying party) requested from the client.
+    -- first: The received algorithm
+    -- second: The list of requested algorithm
     AttestationUndesiredPublicKeyAlgorithm PublicKey.COSEAlgorithmIdentifier [PublicKey.COSEAlgorithmIdentifier]
   | -- | There was some exception in the statement format specific section
     AttestationFormatError SomeException
@@ -280,7 +282,8 @@ verifyAttestationResponse
 
     -- 4. Let clientExtensionResults be the result of calling
     -- credential.getClientExtensionResults().
-    -- TODO: Implement extensions
+    -- TODO: Extensions are not implemented by this library, see the TODO in the
+    -- module documentation of `Crypto.WebAuthn.Model` for more information.
 
     -- 5. Let JSONtext be the result of running UTF-8 decode on the value of
     -- response.clientDataJSON.
@@ -308,7 +311,8 @@ verifyAttestationResponse
     -- obtained. If Token Binding was used on that TLS connection, also verify
     -- that C.tokenBinding.id matches the base64url encoding of the Token
     -- Binding ID for the connection.
-    -- TODO: Token binding is not currently supported.
+    -- TODO: We do not implement TokenBinding, see the documentation of
+    -- `CollectedClientData` for more information.
 
     -- 11. Let hash be the result of computing a hash over
     -- response.clientDataJSON using SHA-256.
@@ -343,9 +347,7 @@ verifyAttestationResponse
       (Just M.UserVerificationRequirementRequired, True) -> pure ()
       (Just M.UserVerificationRequirementRequired, False) -> failure AttestationUserNotVerified
       (Just M.UserVerificationRequirementPreferred, True) -> pure ()
-      -- TODO: Maybe throw warning that user verification was preferred but not provided
       (Just M.UserVerificationRequirementPreferred, False) -> pure ()
-      -- TODO: Maybe throw warning that user verification was discouraged but provided
       (Just M.UserVerificationRequirementDiscouraged, True) -> pure ()
       (Just M.UserVerificationRequirementDiscouraged, False) -> pure ()
 
@@ -365,7 +367,8 @@ verifyAttestationResponse
     -- those that were not specified as part of options.extensions. In the
     -- general case, the meaning of "are as expected" is specific to the
     -- Relying Party and which extensions are in use.
-    -- TODO: Extensions aren't currently implemented
+    -- TODO: Extensions are not implemented by this library, see the TODO in the
+    -- module documentation of `Crypto.WebAuthn.Model` for more information.
 
     -- 18. Determine the attestation statement format by performing a USASCII
     -- case-sensitive match on fmt against the set of supported WebAuthn

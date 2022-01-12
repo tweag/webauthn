@@ -12,10 +12,9 @@ import Control.Concurrent (ThreadId, forkIO, threadDelay)
 import Control.Concurrent.STM (TVar, atomically, modifyTVar)
 import Control.Exception (Exception, throwIO)
 import Control.Monad (forever)
-import Crypto.JWT (JWTError)
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataEntry)
 import qualified Crypto.WebAuthn.Metadata.Service.IDL as Service
-import Crypto.WebAuthn.Metadata.Service.Processing (createMetadataRegistry, fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
+import Crypto.WebAuthn.Metadata.Service.Processing (ProcessingError, createMetadataRegistry, fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import Data.Aeson (eitherDecodeFileStrict)
 import qualified Data.ByteString as BS
@@ -62,7 +61,7 @@ continuousFetch var = do
       atomically $ modifyTVar var (<> registry)
 
 data MetadataFetchError
-  = JWTProcessingFailed JWTError
+  = JWTProcessingFailed ProcessingError
   | JSONDecodingFailed Text
   deriving (Show, Exception)
 

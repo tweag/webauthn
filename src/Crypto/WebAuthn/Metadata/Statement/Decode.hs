@@ -53,8 +53,10 @@ decodeSubjectKeyIdentifier subjectKeyIdentifierText = case Base16.decode (encode
 -- | Decodes a 'X509.SignedCertificate' from an [attestationRootCertificates](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-attestationrootcertificates) field of a metadata statement or the [certificate](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-statusreport-certificate) field of a metadata service status report
 decodeCertificate :: IDL.DOMString -> Either Text X509.SignedCertificate
 decodeCertificate text =
-  -- TODO: Remove Text.strip, it's only needed because of a spec violation, see https://github.com/tweag/haskell-fido2/issues/68
-  -- TODO: Don't use decodeLenient, it's only needed because of a spec violation, see TODO
+  -- TODO: Remove Text.strip, it's only needed because of a spec violation, see
+  -- <https://github.com/tweag/haskell-fido2/issues/68>
+  -- TODO: Don't use decodeLenient, it's only needed because of a spec
+  -- violation, see TODO above
   let bytes = Base64.decodeLenient (encodeUtf8 $ Text.strip text)
    in case X509.decodeSignedCertificate bytes of
         Left err -> Left $ "A certificate failed to parse because it's not a valid encoding: " <> text <> ", error: " <> Text.pack err
@@ -136,5 +138,5 @@ decodeMetadataStatement StatementIDL.MetadataStatement {..} = do
       Nothing -> Left $ "Icon decoding failed because there is no \"data:image/png;base64,\" prefix: " <> dataUrl
       Just suffix ->
         -- TODO: Use non-lenient decoding, it's only needed because of a spec violation,
-        -- see https://github.com/tweag/haskell-fido2/issues/68
+        -- see <https://github.com/tweag/haskell-fido2/issues/68>
         Right $ Base64.decodeLenient (encodeUtf8 suffix)

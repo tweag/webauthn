@@ -5,6 +5,7 @@
 
 module Crypto.WebAuthn.Operations.Attestation.AndroidKey
   ( format,
+    TrustLevel (..),
     Format (..),
     DecodingError (..),
     Statement (..),
@@ -127,7 +128,13 @@ instance Extension ExtAttestation where
             decodeIntSet (Set.insert elem set)
           else pure set
 
-data Format = Format
+data TrustLevel
+  = SoftwareEnforced
+  | TeeEnforced
+
+newtype Format = Format
+  { requiredTrustLevel :: TrustLevel
+  }
 
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
@@ -238,7 +245,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerificationError
 
-  asfVerify _ _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
+  asfVerify Format {..} _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to
     -- extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -269,14 +276,17 @@ instance M.AttestationStatementFormat Format where
     -- 5.b For the following, use only the teeEnforced authorization list if the
     -- RP wants to accept only keys from a trusted execution environment,
     -- otherwise use the union of teeEnforced and softwareEnforced.
-    -- TODO: Allow the users of the library set the required trust level
     -- 5.b.1 The value in the AuthorizationList.origin field is equal to KM_ORIGIN_GENERATED.
-    unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) $ Left VerificationErrorAndroidKeyOriginFieldInvalid
-
     -- 5.b.2 The value in the AuthorizationList.purpose field is equal to KM_PURPOSE_SIGN.
     -- NOTE: This statement is ambiguous as the purpose field is a set. Existing libraries take the same approach, checking if KM_PURPOSE_SIGN is the only member.
     let targetSet = Just $ Set.singleton kmPurposeSign
-    unless (targetSet == purpose software || targetSet == purpose tee) $ Left VerificationErrorAndroidKeyPurposeFieldInvalid
+    case requiredTrustLevel of
+      SoftwareEnforced -> do
+        unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) $ Left VerificationErrorAndroidKeyOriginFieldInvalid
+        unless (targetSet == purpose software || targetSet == purpose tee) $ Left VerificationErrorAndroidKeyPurposeFieldInvalid
+      TeeEnforced -> do
+        unless (origin tee == Just kmOriginGenerated) $ Left VerificationErrorAndroidKeyOriginFieldInvalid
+        unless (targetSet == purpose tee) $ Left VerificationErrorAndroidKeyPurposeFieldInvalid
 
     -- 6. If successful, return implementation-specific values representing attestation type Basic and attestation trust
     -- path x5c.
@@ -287,4 +297,4 @@ instance M.AttestationStatementFormat Format where
   asfTrustAnchors _ _ = mempty
 
 format :: M.SomeAttestationStatementFormat
-format = M.SomeAttestationStatementFormat Format
+format = M.SomeAttestationStatementFormat $ Format TeeEnforced

@@ -75,7 +75,8 @@ data BiometricAccuracyDescriptor = BiometricAccuracyDescriptor
 data PatternAccuracyDescriptor = PatternAccuracyDescriptor
   { -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-patternaccuracydescriptor-mincomplexity)
     -- FIXME: The spec declares this as an unsigned long, but the blob they
-    -- provide has a value in it (34359738368) that doesn't fit into an unsigned long
+    -- provide has a value in it (34359738368) that doesn't fit into an
+    -- unsigned long. See <https://github.com/tweag/webauthn/issues/68>.
     minComplexity :: IDL.UnsignedLongLong,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-patternaccuracydescriptor-maxretries)
     maxRetries :: Maybe IDL.UnsignedShort,
@@ -171,15 +172,23 @@ data ExtensionDescriptor = ExtensionDescriptor
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding ExtensionDescriptor
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#alternativedescriptions-dictionary)
--- TODO: Replace Text with https://hackage.haskell.org/package/aeson-2.0.2.0/docs/Data-Aeson-Key.html#t:Key when updating aeson
+-- TODO: Replace Text with
+-- <https://hackage.haskell.org/package/aeson-2.0.2.0/docs/Data-Aeson-Key.html#t:Key>
+-- when updating aeson. Updating aeson is currently blocked by
+-- <https://github.com/fumieval/deriving-aeson/issues/16>.
 newtype AlternativeDescriptions = AlternativeDescriptions (Map Text IDL.DOMString)
   deriving (Show, Eq)
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#authenticatorgetinfo-dictionary)
 newtype AuthenticatorGetInfo
-  = -- TODO: Replace Text with https://hackage.haskell.org/package/aeson-2.0.2.0/docs/Data-Aeson-Key.html#t:Key when updating aeson
-    -- FIXME: The spec wrongfully declares the values to be DOMString's when they really aren't in the provided blob
+  = -- TODO: Replace Text with
+    -- <https://hackage.haskell.org/package/aeson-2.0.2.0/docs/Data-Aeson-Key.html#t:Key>
+    -- when updating aeson. Updating aeson is currently blocked by
+    -- <https://github.com/fumieval/deriving-aeson/issues/16>.
+    -- FIXME: The spec wrongfully declares the values to be DOMString's when
+    -- they really aren't in the provided blob. See:
+    -- <https://github.com/tweag/webauthn/issues/68>
     AuthenticatorGetInfo (Map Text Aeson.Value)
   deriving (Show, Eq)
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)

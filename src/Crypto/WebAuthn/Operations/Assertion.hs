@@ -96,7 +96,8 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
   -- item SHOULD be set to the value returned by
   -- credential.response.getTransports() when the corresponding credential was
   -- registered.
-  -- TODO
+  -- TODO: The transports property is currently not propagated by webauthn-json.
+  -- see: <https://github.com/github/webauthn-json/pull/44>
 
   -- 2. Call navigator.credentials.get() and pass options as the publicKey
   -- option. Let credential be the result of the successfully resolved promise.
@@ -114,7 +115,8 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
   let response = M.pkcResponse credential
 
   -- 4. Let clientExtensionResults be the result of calling credential.getClientExtensionResults().
-  -- TODO: Implement extensions
+  -- TODO: Extensions are not implemented by this library, see the TODO in the
+  -- module documentation of `Crypto.WebAuthn.Model` for more information.
 
   -- 5. If options.allowCredentials is not empty, verify that credential.id
   -- identifies one of the public key credentials listed in
@@ -191,7 +193,8 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
   -- obtained. If Token Binding was used on that TLS connection, also verify
   -- that C.tokenBinding.id matches the base64url encoding of the Token
   -- Binding ID for the connection.
-  -- TODO
+  -- TODO: We do not implement TokenBinding, see the documentation of
+  -- `CollectedClientData` for more information.
 
   -- 15. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
   -- expected by the Relying Party.
@@ -215,9 +218,7 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
     (M.UserVerificationRequirementRequired, True) -> pure ()
     (M.UserVerificationRequirementRequired, False) -> failure AssertionUserNotVerified
     (M.UserVerificationRequirementPreferred, True) -> pure ()
-    -- TODO: Maybe throw warning that user verification was preferred but not provided
     (M.UserVerificationRequirementPreferred, False) -> pure ()
-    -- TODO: Maybe throw warning that user verification was discouraged but provided
     (M.UserVerificationRequirementDiscouraged, True) -> pure ()
     (M.UserVerificationRequirementDiscouraged, False) -> pure ()
 
@@ -229,7 +230,8 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
   -- were not specified as part of options.extensions. In the general case,
   -- the meaning of "are as expected" is specific to the Relying Party and
   -- which extensions are in use.
-  -- TODO
+  -- TODO: Extensions are not implemented by this library, see the TODO in the
+  -- module documentation of `Crypto.WebAuthn.Model` for more information.
 
   -- 19. Let hash be the result of computing a hash over the cData using SHA-256.
   -- NOTE: Done on raw data from decoding so that we don't need to encode again

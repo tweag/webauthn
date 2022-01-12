@@ -20,7 +20,6 @@ newtype AAID = AAID Text
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)
 
 -- Hex string, this value MUST be calculated according to method 1 for computing the keyIdentifier as defined in [RFC5280] section 4.2.1.2. https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2
--- TODO: Implement a way to reproduce this value
 newtype KeyIdentifier = KeyIdentifier Text
   deriving (Show, Eq)
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)

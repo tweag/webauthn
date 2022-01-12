@@ -20,7 +20,6 @@ import Test.Hspec.Expectations.Json (shouldBeUnorderedJson)
 
 golden :: FilePath -> SpecWith ()
 golden subdir = describe subdir $ do
-  -- TODO: Property tests: Generate random metadata, encode and sign it, decode and verify it, make sure it's the same result
   it "can verify and extract the blob payload" $ do
     origin <- Text.unpack . Text.strip . decodeUtf8 <$> BS.readFile ("tests/golden-metadata/" <> subdir <> "/origin")
 

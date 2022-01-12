@@ -57,7 +57,8 @@ instance Encode M.Timeout
 instance Encode M.CredentialId
 
 instance Encode M.AuthenticationExtensionsClientInputs where
-  -- TODO: Implement extension support
+  -- TODO: Extensions are not implemented by this library, see the TODO in the
+  -- module documentation of `Crypto.WebAuthn.Model` for more information.
   encode M.AuthenticationExtensionsClientInputs {} = Map.empty
 
 -- | <https://www.iana.org/assignments/cose/cose.xhtml#algorithms>
@@ -180,7 +181,8 @@ instance Encode (M.PublicKeyCredential 'M.Create 'True) where
     JS.PublicKeyCredential
       { rawId = encode pkcIdentifier,
         response = encode pkcResponse,
-        -- TODO: Extensions aren't currently supported
+        -- TODO: Extensions are not implemented by this library, see the TODO in the
+        -- module documentation of `Crypto.WebAuthn.Model` for more information.
         clientExtensionResults = Map.empty
       }
 
@@ -202,7 +204,8 @@ instance Encode (M.PublicKeyCredential 'M.Get 'True) where
     JS.PublicKeyCredential
       { rawId = encode pkcIdentifier,
         response = encode pkcResponse,
-        -- TODO: Extensions are not currently supported
+        -- TODO: Extensions are not implemented by this library, see the TODO in the
+        -- module documentation of `Crypto.WebAuthn.Model` for more information.
         clientExtensionResults = Map.empty
       }
 

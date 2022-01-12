@@ -578,7 +578,8 @@ instance M.AttestationStatementFormat Format where
       -- OPTIONAL as the status of many attestation certificates is available
       -- through metadata services. See, for example, the FIDO Metadata Service
       -- [FIDOMetadataService].
-      -- TODO: Left out for now, until proven needed
+      -- NOTE: CRL checking and AIA can be done in a more general way after
+      -- this function. See also <https://github.com/tweag/webauthn/issues/23>
 
       -- If aikCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4
       -- (id-fido-gen-ce-aaguid) verify that the value of this extension
