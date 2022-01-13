@@ -18,8 +18,8 @@ where
 
 import qualified Codec.CBOR.Term as CBOR
 import qualified Codec.CBOR.Write as CBOR
+import Codec.Serialise (Serialise (encode))
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.PublicKey (encodePublicKey)
 import qualified Data.Aeson as Aeson
 import qualified Data.Binary.Put as Binary
 import Data.Bits ((.|.))
@@ -133,7 +133,7 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
       M.SCreate -> \M.AttestedCredentialData {..} ->
         M.AttestedCredentialData
           { acdCredentialPublicKeyBytes =
-              M.WithRaw $ LBS.toStrict $ CBOR.toLazyByteString $ encodePublicKey acdCredentialPublicKey,
+              M.WithRaw $ LBS.toStrict $ CBOR.toLazyByteString $ encode acdCredentialPublicKey,
             ..
           }
       M.SGet -> \M.NoAttestedCredentialData -> M.NoAttestedCredentialData

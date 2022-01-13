@@ -16,33 +16,31 @@ where
 
 import Control.Monad (forM_, when)
 import Crypto.Hash (hash)
-import qualified Crypto.PubKey.ECC.Generate as ECC
-import qualified Crypto.PubKey.ECC.Types as ECC
-import qualified Crypto.PubKey.Ed25519 as Ed25519
-import qualified Crypto.PubKey.RSA as RSA
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ByteArray as BA
+import qualified Data.ByteString as BS
 import Data.List (find)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust, fromMaybe, mapMaybe)
+import Data.Maybe (fromJust, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
-import qualified Emulation.Client.PrivateKey as PrivateKey
+import qualified Spec.Key as Key
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#public-key-credential-source)
 -- A stored credential.
 data PublicKeyCredentialSource = PublicKeyCredentialSource
   { pkcsId :: M.CredentialId,
-    pkcsPrivateKey :: PrivateKey.PrivateKey,
+    pkcsSignAlg :: Cose.CoseSignAlg,
+    pkcsPrivateKey :: Key.PrivateKey,
     pkcsRpId :: M.RpId,
     pkcsUserHandle :: Maybe M.UserHandle
   }
-  deriving (Show)
+  deriving (Eq, Show)
 
 data AuthenticatorSignatureCounter
   = Unsupported
@@ -70,7 +68,7 @@ data Authenticator = AuthenticatorNone
   { aAAGUID :: M.AAGUID,
     aCredentials :: Map.Map (M.RpId, M.UserHandle) PublicKeyCredentialSource,
     aSignatureCounter :: AuthenticatorSignatureCounter,
-    aSupportedAlgorithms :: Set.Set PublicKey.COSEAlgorithmIdentifier,
+    aSupportedAlgorithms :: Set.Set Cose.CoseSignAlg,
     aAuthenticatorDataFlags :: M.AuthenticatorDataFlags,
     aConformance :: Conformance
   }
@@ -197,7 +195,8 @@ authenticatorMakeCredential
       -- using the combination of PublicKeyCredentialType and cryptographic
       -- parameters represented by the first item in credTypesAndPubKeyAlgs that
       -- is supported by this authenticator.
-      (publicKey, privateKey) <- newKeyPair $ M.pkcpAlg param
+      let signAlg = M.pkcpAlg param
+      Key.KeyPair {..} <- Key.newKeyPair signAlg
 
       -- 7.2. Let userHandle be userEntity.id.
       let userHandle = M.pkcueId userEntity
@@ -217,7 +216,8 @@ authenticatorMakeCredential
       let credentialSource =
             PublicKeyCredentialSource
               { pkcsId = credentialId,
-                pkcsPrivateKey = privateKey,
+                pkcsSignAlg = signAlg,
+                pkcsPrivateKey = privKey,
                 pkcsRpId = rpId,
                 pkcsUserHandle = Just userHandle
               }
@@ -252,7 +252,7 @@ authenticatorMakeCredential
             M.AttestedCredentialData
               { M.acdAaguid = aAAGUID,
                 M.acdCredentialId = credentialId,
-                M.acdCredentialPublicKey = publicKey, -- This is selfsigned
+                M.acdCredentialPublicKey = pubKey, -- This is selfsigned
                 M.acdCredentialPublicKeyBytes = M.NoRaw
               }
 
@@ -316,7 +316,7 @@ authenticatorGetAssertion ::
   -- assertion, a Boolean value provided by the client.
   Bool ->
   Maybe M.AuthenticationExtensionsClientInputs ->
-  m ((M.CredentialId, M.AuthenticatorData 'M.Get 'True, PrivateKey.Signature, Maybe M.UserHandle), Authenticator)
+  m ((M.CredentialId, M.AuthenticatorData 'M.Get 'True, BS.ByteString, Maybe M.UserHandle), Authenticator)
 authenticatorGetAssertion _ _ _ _ False _ _ = fail "requireUserPresence set to False"
 authenticatorGetAssertion
   authenticator@AuthenticatorNone {..}
@@ -407,14 +407,15 @@ authenticatorGetAssertion
       privateKey <-
         if Set.member RandomPrivateKey aConformance
           then -- Generate a new private key with the same algorithm as expected
-            snd <$> newKeyPair (PrivateKey.toCOSEAlgorithmIdentifier $ pkcsPrivateKey selectedCredential)
+            Key.privKey <$> Key.newKeyPair (pkcsSignAlg selectedCredential)
           else pure $ pkcsPrivateKey selectedCredential
       msg <-
         if Set.member RandomSignatureData aConformance
           then Random.getRandomBytes 4
           else pure $ M.unRaw (M.adRawData authenticatorData) <> BA.convert (M.unClientDataHash clientDataHash)
       signature <-
-        PrivateKey.sign
+        Key.sign
+          (pkcsSignAlg selectedCredential)
           privateKey
           msg
       -- 12. If any error occurred while generating the assertion signature,
@@ -447,41 +448,4 @@ authenticatorGetAssertion
          in (c, PerCredential m')
 
 authenticatorLookupCredential :: Authenticator -> M.CredentialId -> Maybe PublicKeyCredentialSource
-authenticatorLookupCredential AuthenticatorNone {..} credentialId =
-  snd
-    <$> Map.lookupMin (Map.filter (\PublicKeyCredentialSource {..} -> pkcsId == credentialId) aCredentials)
-
-newKeyPair :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m (PublicKey.PublicKey, PrivateKey.PrivateKey)
-newKeyPair PublicKey.COSEAlgorithmIdentifierES256 = newECDSAKeyPair PublicKey.COSEAlgorithmIdentifierES256
-newKeyPair PublicKey.COSEAlgorithmIdentifierES384 = newECDSAKeyPair PublicKey.COSEAlgorithmIdentifierES384
-newKeyPair PublicKey.COSEAlgorithmIdentifierES512 = newECDSAKeyPair PublicKey.COSEAlgorithmIdentifierES512
-newKeyPair PublicKey.COSEAlgorithmIdentifierEdDSA = do
-  secret <- Ed25519.generateSecretKey
-  let public = Ed25519.toPublic secret
-  pure (PublicKey.Ed25519PublicKey public, PrivateKey.Ed25519PrivateKey secret)
-newKeyPair PublicKey.COSEAlgorithmIdentifierRS1 = newRSAKeyPair PublicKey.COSEAlgorithmIdentifierRS1 160
-newKeyPair PublicKey.COSEAlgorithmIdentifierRS256 = newRSAKeyPair PublicKey.COSEAlgorithmIdentifierRS256 256
-newKeyPair PublicKey.COSEAlgorithmIdentifierRS384 = newRSAKeyPair PublicKey.COSEAlgorithmIdentifierRS384 384
-newKeyPair PublicKey.COSEAlgorithmIdentifierRS512 = newRSAKeyPair PublicKey.COSEAlgorithmIdentifierRS512 512
-
-newECDSAKeyPair :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> m (PublicKey.PublicKey, PrivateKey.PrivateKey)
-newECDSAKeyPair ident = do
-  let curve = ECC.getCurveByName $ PublicKey.toCurveName ident
-  (public, private) <- ECC.generate curve
-  let privateKey = fromMaybe (error "Not an ECDSAKey") $ PrivateKey.toECDSAKey ident private
-      publicKey = fromMaybe (error "Not an ECDSAKey") $ PublicKey.toECDSAKey ident public
-  pure (publicKey, privateKey)
-
-newRSAKeyPair :: MonadRandom m => PublicKey.COSEAlgorithmIdentifier -> Int -> m (PublicKey.PublicKey, PrivateKey.PrivateKey)
-newRSAKeyPair ident publicSize = do
-  -- 65537 is one of the most frequently used exponents for RSA
-  (public, private) <- RSA.generate publicSize 65537
-  let privateKey = fromMaybe (error "Not an RSAKey") $ PrivateKey.toRSAKey ident private
-      publicKey = fromMaybe (error "Not an RSAKey") $ toRSAKey ident public
-  pure (publicKey, privateKey)
-  where
-    toRSAKey PublicKey.COSEAlgorithmIdentifierRS1 pk = pure . PublicKey.RS1PublicKey $ pk
-    toRSAKey PublicKey.COSEAlgorithmIdentifierRS256 pk = pure . PublicKey.RS256PublicKey $ pk
-    toRSAKey PublicKey.COSEAlgorithmIdentifierRS384 pk = pure . PublicKey.RS384PublicKey $ pk
-    toRSAKey PublicKey.COSEAlgorithmIdentifierRS512 pk = pure . PublicKey.RS512PublicKey $ pk
-    toRSAKey _ _ = Nothing
+authenticatorLookupCredential AuthenticatorNone {..} credentialId = snd <$> Map.lookupMin (Map.filter (\PublicKeyCredentialSource {..} -> pkcsId == credentialId) aCredentials)

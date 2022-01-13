@@ -17,8 +17,8 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, void, when)
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.PublicKey (PublicKey, fromAlg, toAlg, toCOSEAlgorithmIdentifier, toPublicKey)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
 import Data.ASN1.Types (ASN1 (IntVal, OctetString), ASN1Class (Context), ASN1ConstructionType (Container, Sequence, Set))
@@ -143,9 +143,10 @@ instance Show Format where
 data Statement = Statement
   { sig :: ByteString,
     x5c :: NonEmpty X509.SignedCertificate,
+    alg :: Cose.CoseSignAlg,
     -- | Holds the parsed attestation extension of the above X509 certificate
     -- Not part of the spec, but prevents parsing in the AndroidKey.verify function
-    pubKey :: PublicKey,
+    pubKey :: PublicKey.PublicKey,
     attExt :: ExtAttestation
   }
   deriving (Eq, Show)
@@ -153,7 +154,7 @@ data Statement = Statement
 instance ToJSON Statement where
   toJSON Statement {..} =
     object
-      [ "alg" .= toCOSEAlgorithmIdentifier pubKey,
+      [ "alg" .= alg,
         "sig" .= sig,
         "x5c" .= x5c
       ]
@@ -192,7 +193,7 @@ data VerificationError
     VerificationErrorAndroidKeyPurposeFieldInvalid
   | -- | The Public key cannot verify the signature over the authenticatorData
     -- and the clientDataHash.
-    VerificationErrorVerificationFailure
+    VerificationErrorVerificationFailure String
   deriving (Show, Exception)
 
 -- | [(spec)](https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h)
@@ -213,7 +214,7 @@ instance M.AttestationStatementFormat Format where
   asfDecode _ xs = do
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
       (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw))) -> do
-        alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (toAlg algId)
+        alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (Cose.toCoseSignAlg algId)
         x5c@(credCert :| _) <- forM x5cRaw $ \case
           CBOR.TBytes certBytes ->
             first DecodingErrorCertificate (X509.decodeSignedCertificate certBytes)
@@ -226,17 +227,17 @@ instance M.AttestationStatementFormat Format where
           Just (Left err) -> Left $ DecodingErrorCertificateExtension err
           Nothing -> Left DecodingErrorCertificateExtensionMissing
 
-        pubKey <- case toPublicKey alg (X509.certPubKey cert) of
+        pubKey <- case PublicKey.fromX509 $ X509.certPubKey cert of
           Nothing -> Left $ DecodingErrorPublicKey (X509.certPubKey cert)
           Just key -> pure key
 
         pure Statement {..}
       _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
 
-  asfEncode _ Statement {sig, x5c, pubKey} =
+  asfEncode _ Statement {sig, x5c, alg} =
     CBOR.TMap
       [ (CBOR.TString "sig", CBOR.TBytes sig),
-        (CBOR.TString "alg", CBOR.TInt $ fromAlg $ toCOSEAlgorithmIdentifier pubKey),
+        (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
         ( CBOR.TString "x5c",
           CBOR.TList $
             map (CBOR.TBytes . X509.encodeSignedObject) $ toList x5c
@@ -245,7 +246,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerificationError
 
-  asfVerify Format {..} _ Statement {sig, x5c, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
+  asfVerify Format {..} _ Statement {sig, x5c, alg, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to
     -- extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -253,11 +254,13 @@ instance M.AttestationStatementFormat Format where
     -- 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the
     -- public key in the first certificate in x5c with the algorithm specified in alg.
     let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
-    unless (PublicKey.verify pubKey signedData sig) $ Left VerificationErrorVerificationFailure
+    case PublicKey.verify alg pubKey signedData sig of
+      Right () -> pure ()
+      Left err -> Left $ VerificationErrorVerificationFailure err
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the
     -- attestedCredentialData in authenticatorData.
-    unless (M.acdCredentialPublicKey adAttestedCredentialData == pubKey) $ Left VerificationErrorCredentialKeyMismatch
+    unless (PublicKey.fromCose (M.acdCredentialPublicKey adAttestedCredentialData) == pubKey) $ Left VerificationErrorCredentialKeyMismatch
 
     -- 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to
     -- clientDataHash.

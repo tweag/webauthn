@@ -17,7 +17,6 @@ import Control.Monad (forM)
 import Control.Monad.Cont (unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.PublicKey (certPublicKey)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
@@ -67,7 +66,7 @@ data VerificationError
 data Statement = Statement
   { x5c :: NE.NonEmpty X509.SignedCertificate,
     sNonce :: Digest SHA256,
-    subjectPublicKey :: PublicKey.PublicKey
+    pubKey :: PublicKey.PublicKey
   }
   deriving (Eq, Show)
 
@@ -114,13 +113,13 @@ instance M.AttestationStatementFormat Format where
 
       let cert = X509.getCertificate credCert
 
-      subjectPublicKey <- case certPublicKey cert of
+      pubKey <- case PublicKey.fromX509 $ X509.certPubKey cert of
         Nothing -> Left $ DecodingErrorPublicKey (X509.certPubKey cert)
         Just key -> pure key
 
       AppleNonceExtension {..} <- maybe (Left DecodingErrorCertificateExtensionMissing) pure $ X509.extensionGet $ X509.certExtensions cert
 
-      pure $ Statement x5c nonce subjectPublicKey
+      pure $ Statement x5c nonce pubKey
     _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
 
   asfEncode _ Statement {x5c} =
@@ -156,8 +155,8 @@ instance M.AttestationStatementFormat Format where
 
       -- 5. Verify that the credential public key equals the Subject Public Key
       -- of credCert.
-      let credentialPublicKey = M.acdCredentialPublicKey credData
-      unless (credentialPublicKey == subjectPublicKey) . Left $ PublickeyMismatch credentialPublicKey subjectPublicKey
+      let credentialPublicKey = PublicKey.fromCose $ M.acdCredentialPublicKey credData
+      unless (credentialPublicKey == pubKey) . Left $ PublickeyMismatch credentialPublicKey pubKey
 
       -- 6. If successful, return implementation-specific values representing
       -- attestation type Anonymization CA and attestation trust path x5c.

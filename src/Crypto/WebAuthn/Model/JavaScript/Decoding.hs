@@ -23,6 +23,7 @@ module Crypto.WebAuthn.Model.JavaScript.Decoding
   )
 where
 
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import Crypto.WebAuthn.Model
   ( SupportedAttestationStatementFormats,
   )
@@ -30,7 +31,6 @@ import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
 import qualified Crypto.WebAuthn.Model.JavaScript as JS
 import Crypto.WebAuthn.Model.JavaScript.Types (Convert (JS))
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Bifunctor (first)
 import Data.Coerce (Coercible, coerce)
@@ -110,12 +110,12 @@ instance Decode M.PublicKeyCredentialUserEntity where
 
 instance Decode M.Challenge
 
-instance Decode PublicKey.COSEAlgorithmIdentifier where
+instance Decode Cose.CoseSignAlg where
   -- The specification does not inspect the algorithm until
   -- assertion/attestation. We implement the check here to go to a Haskell
   -- type. Erring on the side of caution by failing to parse if an unsupported
   -- alg was encountered.
-  decode n = maybe (Left $ MD.DecodingErrorUnexpectedAlgorithmIdentifier n) Right $ PublicKey.toAlg n
+  decode n = maybe (Left $ MD.DecodingErrorUnexpectedAlgorithmIdentifier n) Right $ Cose.toCoseSignAlg n
 
 instance Decode M.Timeout
 

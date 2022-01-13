@@ -9,6 +9,7 @@ module Main
 where
 
 import Crypto.Hash (hash)
+import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Processing as Service
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
@@ -17,7 +18,6 @@ import qualified Crypto.WebAuthn.Model.JavaScript.Decoding as JS
 import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Common as Common
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
@@ -348,11 +348,11 @@ defaultPublicKeyCredentialCreationOptions pkc =
       M.pkcocPubKeyCredParams =
         [ M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierES256
+              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256
             },
           M.PublicKeyCredentialParameters
             { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = PublicKey.COSEAlgorithmIdentifierRS256
+              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA256
             }
         ],
       M.pkcocTimeout = Nothing,

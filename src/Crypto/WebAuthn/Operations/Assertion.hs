@@ -11,11 +11,12 @@ module Crypto.WebAuthn.Operations.Assertion
 where
 
 import qualified Codec.CBOR.Read as CBOR
+import Codec.Serialise (decode)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
+import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Operations.Common (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
-import Crypto.WebAuthn.PublicKey (PublicKey, decodePublicKey)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
@@ -55,7 +56,7 @@ data AssertionError
   | -- | The public key provided in the 'CredentialEntry' could not be decoded
     AssertionSignatureDecodingError CBOR.DeserialiseFailure
   | -- | the public key does verify the signature over the authData
-    AssertionInvalidSignature PublicKey BS.ByteString M.AssertionSignature
+    AssertionInvalidSignature PublicKey.PublicKey BS.ByteString M.AssertionSignature String
   deriving (Show)
 
 data SignatureCounterResult
@@ -240,13 +241,16 @@ verifyAssertionResponse origin rpIdHash midentifiedUser entry options credential
 
   -- 20. Using credentialPublicKey, verify that sig is a valid signature over
   -- the binary concatenation of authData and hash.
-  let pubKeyBytes = cePublicKeyBytes entry
+  let pubKeyBytes = LBS.fromStrict $ M.unPublicKeyBytes $ cePublicKeyBytes entry
       message = rawData <> convert (M.unClientDataHash hash)
-  case CBOR.deserialiseFromBytes decodePublicKey (LBS.fromStrict (M.unPublicKeyBytes pubKeyBytes)) of
+  case CBOR.deserialiseFromBytes decode pubKeyBytes of
     Left err -> failure $ AssertionSignatureDecodingError err
-    Right (_, pubKey) ->
-      unless (PublicKey.verify pubKey message (M.unAssertionSignature sig)) $
-        failure $ AssertionInvalidSignature pubKey message sig
+    Right (_, coseKey) -> do
+      let signAlg = Cose.keySignAlg coseKey
+          publicKey = PublicKey.fromCose coseKey
+      case PublicKey.verify signAlg publicKey message (M.unAssertionSignature sig) of
+        Right () -> pure ()
+        Left err -> failure $ AssertionInvalidSignature publicKey message sig err
 
   -- 21. Let storedSignCount be the stored signature counter value associated
   -- with credential.id. If authData.signCount is nonzero or storedSignCount
