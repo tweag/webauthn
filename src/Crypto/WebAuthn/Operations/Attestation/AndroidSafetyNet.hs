@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -26,6 +27,7 @@ import qualified Crypto.JOSE as JOSE
 import qualified Crypto.JWT as JOSE
 import Crypto.WebAuthn.DateOrphans ()
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Operations.Common (failure)
 import qualified Data.ASN1.Types.String as X509
 import Data.Aeson ((.=))
 import qualified Data.Aeson as Aeson
@@ -218,7 +220,7 @@ instance M.AttestationStatementFormat Format where
     let signedData = rawData <> BA.convert (M.unClientDataHash clientDataHash)
     let hashedData = Hash.hashWith Hash.SHA256 signedData
     let encodedData = decodeUtf8 . Base64.encode $ BA.convert hashedData
-    unless (nonce response == encodedData) . Left $ VerificationErrorInvalidNonce
+    unless (nonce response == encodedData) . failure $ VerificationErrorInvalidNonce
 
     -- 4. Verify that the SafetyNet response actually came from the SafetyNet service by following the steps in the
     -- SafetyNet online documentation.
@@ -239,15 +241,15 @@ instance M.AttestationStatementFormat Format where
     -- NOTE: For WebAuthn, we need not care about the package name or the app's signing certificate. The Nonce as
     -- has already been dealt with.
     let generatedTime = HG.timeConvert $ timestampMs response
-    when ((generatedTime `HG.timeAdd` driftBackwardsTolerance) < now) $ Left $ VerificationErrorResponseTooOld now generatedTime
-    when (generatedTime > (now `HG.timeAdd` driftForwardsTolerance)) $ Left $ VerificationErrorResponseInFuture now generatedTime
+    when ((generatedTime `HG.timeAdd` driftBackwardsTolerance) < now) $ failure $ VerificationErrorResponseTooOld now generatedTime
+    when (generatedTime > (now `HG.timeAdd` driftForwardsTolerance)) $ failure $ VerificationErrorResponseInFuture now generatedTime
 
     let integrity = case (basicIntegrity response, ctsProfileMatch response) of
           (_, True) -> CTSProfileIntegrity
           (True, False) -> BasicIntegrity
           (False, False) -> NoIntegrity
     unless (integrity >= requiredIntegrity) $
-      Left $ VerificationErrorFailedIntegrityCheck integrity
+      failure $ VerificationErrorFailedIntegrityCheck integrity
 
     -- 5. If successful, return implementation-specific values representing attestation type Basic and attestation trust
     -- path x5c.

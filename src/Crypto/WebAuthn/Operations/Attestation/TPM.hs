@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -16,13 +17,13 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
-import Crypto.Hash (Digest, SHA1, SHA256, hash)
+import Crypto.Hash (SHA1 (SHA1), SHA256 (SHA256), hashWith)
 import qualified Crypto.Hash as Hash
 import Crypto.Number.Serialize (os2ip)
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
+import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import Data.ASN1.OID (OID)
@@ -495,7 +496,7 @@ instance M.AttestationStatementFormat Format where
       -- fields of pubArea is identical to the credentialPublicKey in the
       -- attestedCredentialData in authenticatorData.
       let pubKey = PublicKey.fromCose $ M.acdCredentialPublicKey adAttestedCredentialData
-      unless (pubKey == pubAreaKey) $ Left VerificationErrorCredentialKeyMismatch
+      unless (pubKey == pubAreaKey) $ failure VerificationErrorCredentialKeyMismatch
 
       -- 3. Concatenate authenticatorData and clientDataHash to form attToBeSigned.
       let attToBeSigned = adRawData <> BA.convert (M.unClientDataHash clientDataHash)
@@ -503,35 +504,43 @@ instance M.AttestationStatementFormat Format where
       -- 4. Validate that certInfo is valid:
       -- 4.1 Verify that magic is set to TPM_GENERATED_VALUE.
       let magic = tpmsaMagic certInfo
-      unless (magic == tpmGeneratedValue) . Left $ VerificationErrorInvalidMagicNumber magic
+      unless (magic == tpmGeneratedValue) . failure $ VerificationErrorInvalidMagicNumber magic
 
       -- 4.2 Verify that type is set to TPM_ST_ATTEST_CERTIFY.
       let typ = tpmsaType certInfo
-      unless (typ == tpmStAttestCertify) . Left $ VerificationErrorInvalidType typ
+      unless (typ == tpmStAttestCertify) . failure $ VerificationErrorInvalidType typ
 
       -- 4.3 Verify that extraData is set to the hash of attToBeSigned using
       -- the hash algorithm employed in "alg".
-      attHash <- maybe (Left VerificationErrorUnknownHashFunction) Right $ hashWithCorrectAlgorithm alg attToBeSigned
-      let extraData = tpmsaExtraData certInfo
-      unless (attHash == extraData) . Left $ VerificationErrorHashMismatch attHash extraData
+      case hashWithCorrectAlgorithm alg attToBeSigned of
+        Just attHash -> do
+          let extraData = tpmsaExtraData certInfo
+          unless (attHash == extraData) . failure $ VerificationErrorHashMismatch attHash extraData
+          pure ()
+        Nothing -> failure VerificationErrorUnknownHashFunction
 
       -- 4.5 Verify that attested contains a TPMS_CERTIFY_INFO structure as
       -- specified in [TPMv2-Part2] section 10.12.3, whose name field contains
       -- a valid Name for pubArea, as computed using the algorithm in the
       -- nameAlg field of pubArea using the procedure specified in
       -- [TPMv2-Part1] section 16.
-      pubAreaHash <- case tpmtpNameAlg pubArea of
-        TPMAlgSHA1 -> pure (BA.convert (hash pubAreaRaw :: Digest SHA1) :: BS.ByteString)
-        TPMAlgSHA256 -> pure (BA.convert (hash pubAreaRaw :: Digest SHA256) :: BS.ByteString)
-        TPMAlgECC -> Left VerificationErrorInvalidNameAlgorithm
-        TPMAlgRSA -> Left VerificationErrorInvalidNameAlgorithm
-      let pubName = LBS.toStrict $
-            Put.runPut $ do
-              Put.putWord16be (tpmtpNameAlgRaw pubArea)
-              Put.putByteString pubAreaHash
+      let mPubAreaHash = case tpmtpNameAlg pubArea of
+            TPMAlgSHA1 -> Just $ BA.convert $ hashWith SHA1 pubAreaRaw
+            TPMAlgSHA256 -> Just $ BA.convert $ hashWith SHA256 pubAreaRaw
+            TPMAlgECC -> Nothing
+            TPMAlgRSA -> Nothing
 
-      let name = tpmsciName (tpmsaAttested certInfo)
-      unless (name == pubName) . Left $ VerificationErrorInvalidName pubName name
+      case mPubAreaHash of
+        Just pubAreaHash -> do
+          let pubName = LBS.toStrict $
+                Put.runPut $ do
+                  Put.putWord16be (tpmtpNameAlgRaw pubArea)
+                  Put.putByteString pubAreaHash
+
+          let name = tpmsciName (tpmsaAttested certInfo)
+          unless (name == pubName) . failure $ VerificationErrorInvalidName pubName name
+          pure ()
+        Nothing -> failure VerificationErrorInvalidNameAlgorithm
 
       -- 4.6 Verify that x5c is present
       -- NOTE: Done in decoding
@@ -545,10 +554,11 @@ instance M.AttestationStatementFormat Format where
       -- 4.8 Verify the sig is a valid signature over certInfo using the
       -- attestation public key in aikCert with the algorithm specified in alg.
       let unsignedAikCert = X509.getCertificate aikCert
-      certPubKey <- maybe (Left VerificationErrorInvalidPublicKey) Right $ PublicKey.fromX509 $ X509.certPubKey unsignedAikCert
-      case PublicKey.verify alg certPubKey certInfoRaw sig of
-        Right () -> pure ()
-        Left err -> Left $ VerificationErrorVerificationFailure err
+      case PublicKey.fromX509 $ X509.certPubKey unsignedAikCert of
+        Just certPubKey -> case PublicKey.verify alg certPubKey certInfoRaw sig of
+          Right () -> pure ()
+          Left err -> failure $ VerificationErrorVerificationFailure err
+        Nothing -> failure VerificationErrorInvalidPublicKey
 
       -- 4.9 Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation
       -- Statement Certificate Requirements.
@@ -556,23 +566,23 @@ instance M.AttestationStatementFormat Format where
       -- 4.9.1 Version MUST be set to 3.
       -- Version ::= INTEGER { v1(0), v2(1), v3(2) }, see https://datatracker.ietf.org/doc/html/rfc5280.html#section-4.1
       let version = X509.certVersion unsignedAikCert
-      unless (version == 2) . Left $ VerificationErrorCertificateVersion 2 version
+      unless (version == 2) . failure $ VerificationErrorCertificateVersion 2 version
       -- 4.9.2. Subject field MUST be set to empty.
-      unless (null . X509.getDistinguishedElements $ X509.certSubjectDN unsignedAikCert) $ Left VerificationErrorNonEmptySubjectField
+      unless (null . X509.getDistinguishedElements $ X509.certSubjectDN unsignedAikCert) $ failure VerificationErrorNonEmptySubjectField
       -- 4.9.3 The Subject Alternative Name extension MUST be set as defined in
       -- [TPMv2-EK-Profile] section 3.2.9.
       -- 4.9.3.1 The TPM manufacturer identifies the manufacturer of the TPM. This value MUST be the
       -- vendor ID defined in the TCG Vendor ID Registry[3]
-      unless (Set.member (tpmManufacturer subjectAlternativeName) tpmManufacturers) $ Left VerificationErrorUnknownVendor
+      unless (Set.member (tpmManufacturer subjectAlternativeName) tpmManufacturers) $ failure VerificationErrorUnknownVendor
 
       -- 4.9.4 The Extended Key Usage extension MUST contain the OID
       -- 2.23.133.8.3 ("joint-iso-itu-t(2) internationalorganizations(23) 133
       -- tcg-kp(8) tcg-kp-AIKCertificate(3)").
-      unless (X509.KeyUsagePurpose_Unknown [2, 23, 133, 8, 3] `elem` extendedKeyUsage) $ Left VerificationErrorExtKeyOIDMissing
+      unless (X509.KeyUsagePurpose_Unknown [2, 23, 133, 8, 3] `elem` extendedKeyUsage) $ failure VerificationErrorExtKeyOIDMissing
 
       -- 4.9.5 The Basic Constraints extension MUST have the CA component set
       -- to false.
-      when basicConstraintsCA $ Left VerificationErrorBasicConstraintsTrue
+      when basicConstraintsCA $ failure VerificationErrorBasicConstraintsTrue
 
       -- 4.9.6 An Authority Information Access (AIA) extension with entry
       -- id-ad-ocsp and a CRL Distribution Point extension [RFC5280] are both
@@ -586,7 +596,7 @@ instance M.AttestationStatementFormat Format where
       -- (id-fido-gen-ce-aaguid) verify that the value of this extension
       -- matches the aaguid in authenticatorData.
       case aaguidExt of
-        Just (IdFidoGenCeAAGUID aaguid) -> unless (M.acdAaguid adAttestedCredentialData == aaguid) $ Left VerificationErrorCertificateAAGUIDMismatch
+        Just (IdFidoGenCeAAGUID aaguid) -> unless (M.acdAaguid adAttestedCredentialData == aaguid) $ failure VerificationErrorCertificateAAGUIDMismatch
         Nothing -> pure ()
 
       pure $

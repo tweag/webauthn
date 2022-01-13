@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,6 +18,7 @@ import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Operations.Common (failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import qualified Data.ByteArray as BA
@@ -118,8 +120,8 @@ instance M.AttestationStatementFormat Format where
         X509.PubKeyEC pk ->
           case X509.ecPubKeyCurveName pk of
             Just SEC_p256r1 -> pure ()
-            _ -> Left $ InvalidCertificatePublicKey certPubKey
-        _ -> Left $ InvalidCertificatePublicKey certPubKey
+            _ -> failure $ InvalidCertificatePublicKey certPubKey
+        _ -> failure $ InvalidCertificatePublicKey certPubKey
 
       -- 3. Extract the claimed rpIdHash from authenticatorData, and the claimed
       -- credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
@@ -142,7 +144,7 @@ instance M.AttestationStatementFormat Format where
         PublicKey.PublicKeyECDSA {ecdsaX = xb, ecdsaY = yb} -> do
           let xlen = BS.length xb
               ylen = BS.length yb
-          unless (xlen == 32 && ylen == 32) $ Left $ WrongCoordinateSize xlen ylen
+          unless (xlen == 32 && ylen == 32) $ failure $ WrongCoordinateSize xlen ylen
 
           -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
           let publicKeyU2F = BS.singleton 0x04 <> xb <> yb
@@ -157,8 +159,9 @@ instance M.AttestationStatementFormat Format where
           -- section 4.1.4 of [SEC1] with SHA-256 as the hash function used in step two.
           case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) certPubKey verificationData sig of
             X509.SignaturePass -> pure ()
-            X509.SignatureFailed e -> Left $ InvalidSignature e
-        key -> Left $ NonECDSACredentialPublicKey key
+            X509.SignatureFailed e -> failure $ InvalidSignature e
+          pure ()
+        key -> failure $ NonECDSACredentialPublicKey key
 
       -- 7. Optionally, inspect x5c and consult externally provided knowledge to
       -- determine whether attStmt conveys a Basic or AttCA attestation.

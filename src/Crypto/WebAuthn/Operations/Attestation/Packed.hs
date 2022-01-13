@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -18,7 +19,7 @@ import Control.Monad (forM, unless, when)
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
+import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import qualified Data.ASN1.OID as OID
@@ -156,13 +157,13 @@ instance M.AttestationStatementFormat Format where
           -- Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
           let key = M.acdCredentialPublicKey credData
               signAlg = Cose.keySignAlg key
-          when (stmtAlg /= signAlg) $ Left VerificationErrorAlgorithmMismatch
+          when (stmtAlg /= signAlg) $ failure VerificationErrorAlgorithmMismatch
 
           -- Verify that sig is a valid signature over the concatenation of
           -- authenticatorData and clientDataHash using the credential public key with alg.
           case PublicKey.verify signAlg (PublicKey.fromCose key) signedData stmtSig of
             Right () -> pure ()
-            Left err -> Left $ VerificationErrorInvalidSignature err
+            Left err -> failure $ VerificationErrorInvalidSignature err
 
           pure $ M.SomeAttestationType M.AttestationTypeSelf
 
@@ -174,7 +175,7 @@ instance M.AttestationStatementFormat Format where
           -- the attestation public key in attestnCert with the algorithm specified in alg.
           case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) pubKey signedData stmtSig of
             X509.SignaturePass -> pure ()
-            X509.SignatureFailed err -> Left $ VerificationErrorVerificationFailure err
+            X509.SignatureFailed err -> failure $ VerificationErrorVerificationFailure err
 
           -- Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation Statement Certificate
           -- Requirements.
@@ -185,14 +186,14 @@ instance M.AttestationStatementFormat Format where
                 && hasDnElement X509.DnCommonName dnElements
                 && findDnElement X509.DnOrganizationUnit dnElements == Just "Authenticator Attestation"
             )
-            $ Left VerificationErrorCertificateRequirementsUnmet
+            $ failure VerificationErrorCertificateRequirementsUnmet
 
           -- If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that
           -- the value of this extension matches the aaguid in authenticatorData.
           let aaguid = M.acdAaguid credData
 
           case aaguidExt of
-            Just (IdFidoGenCeAAGUID credAAGUID) -> unless (aaguid == credAAGUID) $ Left VerificationErrorCertificateAAGUIDMismatch
+            Just (IdFidoGenCeAAGUID credAAGUID) -> unless (aaguid == credAAGUID) $ failure VerificationErrorCertificateAAGUIDMismatch
             Nothing -> pure ()
 
           pure $

@@ -160,7 +160,7 @@ validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = al
     -- The User not being valided must be a result of the authenticator not validating the user
     isValidated WebAuthn.AttestationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
     isValidated (WebAuthn.AttestationUndesiredPublicKeyAlgorithm _ _) = False
-    isValidated (WebAuthn.AttestationFormatError _) = False
+    isValidated (WebAuthn.AttestationFormatError _ _) = False
 
 -- | Validates the result of assertion. Ensures that the proper errors are
 -- resulted in if the authenticator exhibits nonconforming behaviour, and

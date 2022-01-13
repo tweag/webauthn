@@ -123,6 +123,7 @@ import Data.Singletons (SingI, sing)
 import Data.String (IsString)
 import Data.Text (Text)
 import Data.UUID (UUID)
+import Data.Validation (Validation)
 import Data.Word (Word32)
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
@@ -1097,7 +1098,7 @@ class
     AttStmt a ->
     AuthenticatorData 'Create 'True ->
     ClientDataHash ->
-    Either (AttStmtVerificationError a) SomeAttestationType
+    Validation (NonEmpty (AttStmtVerificationError a)) SomeAttestationType
 
   -- | The trusted root certificates specifically for this attestation
   -- statement format. For attestation statement chain validation, these

@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,6 +18,7 @@ import Control.Monad (forM)
 import Control.Monad.Cont (unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Operations.Common (failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
@@ -151,12 +153,12 @@ instance M.AttestationStatementFormat Format where
 
       -- 4. Verify that nonce equals the value of the extension with OID
       -- 1.2.840.113635.100.8.2 in credCert.
-      unless (nonce == sNonce) . Left $ NonceMismatch nonce sNonce
+      unless (nonce == sNonce) . failure $ NonceMismatch nonce sNonce
 
       -- 5. Verify that the credential public key equals the Subject Public Key
       -- of credCert.
       let credentialPublicKey = PublicKey.fromCose $ M.acdCredentialPublicKey credData
-      unless (credentialPublicKey == pubKey) . Left $ PublickeyMismatch credentialPublicKey pubKey
+      unless (credentialPublicKey == pubKey) . failure $ PublickeyMismatch credentialPublicKey pubKey
 
       -- 6. If successful, return implementation-specific values representing
       -- attestation type Anonymization CA and attestation trust path x5c.
