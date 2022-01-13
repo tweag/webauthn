@@ -194,19 +194,19 @@ verify (Cose.CoseSignAlgRSA (toCryptHashRSA -> SomeHashAlgorithmASN1 hash)) Publ
 verify sigAlg pubKey _ _ =
   Left $ "Unsupported combination of signature algorithm " <> show sigAlg <> " and public key " <> show pubKey
 
--- Some cryptonite 'Hash.HashAlgorithm' type, used as a return value of 'toCryptHashECDSA'
+-- | Some cryptonite 'Hash.HashAlgorithm' type, used as a return value of 'toCryptHashECDSA'
 data SomeHashAlgorithm = forall a. Hash.HashAlgorithm a => SomeHashAlgorithm a
 
--- Returns the cryptonite 'SomeHashAlgorithm' corresponding to this hash algorithm
+-- | Returns the cryptonite 'SomeHashAlgorithm' corresponding to this hash algorithm
 toCryptHashECDSA :: Cose.CoseHashAlgECDSA -> SomeHashAlgorithm
 toCryptHashECDSA Cose.CoseHashAlgECDSASHA256 = SomeHashAlgorithm Hash.SHA256
 toCryptHashECDSA Cose.CoseHashAlgECDSASHA384 = SomeHashAlgorithm Hash.SHA384
 toCryptHashECDSA Cose.CoseHashAlgECDSASHA512 = SomeHashAlgorithm Hash.SHA512
 
--- Some cryptonite 'RSA.HashAlgorithmASN1' type, used as a return value of 'toCryptHashRSA'
+-- | Some cryptonite 'RSA.HashAlgorithmASN1' type, used as a return value of 'toCryptHashRSA'
 data SomeHashAlgorithmASN1 = forall a. RSA.HashAlgorithmASN1 a => SomeHashAlgorithmASN1 a
 
--- Returns the cryptonite 'SomeHashAlgorithmASN1' corresponding to this hash algorithm
+-- | Returns the cryptonite 'SomeHashAlgorithmASN1' corresponding to this hash algorithm
 toCryptHashRSA :: Cose.CoseHashAlgRSA -> SomeHashAlgorithmASN1
 toCryptHashRSA Cose.CoseHashAlgRSASHA1 = SomeHashAlgorithmASN1 Hash.SHA1
 toCryptHashRSA Cose.CoseHashAlgRSASHA256 = SomeHashAlgorithmASN1 Hash.SHA256

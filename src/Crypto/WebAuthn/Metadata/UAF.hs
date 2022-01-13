@@ -1,5 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 
+-- | Types related to the FIDO UAF Protocol as defined in the relevant
+-- [(spec)](https://fidoalliance.org/specs/fido-uaf-v1.2-ps-20201020/fido-uaf-protocol-v1.2-ps-20201020.html)
 module Crypto.WebAuthn.Metadata.UAF
   ( AAID (..),
     KeyIdentifier (..),
@@ -14,12 +16,14 @@ import Data.Text (Text)
 import qualified Deriving.Aeson as Aeson
 import GHC.Generics (Generic)
 
--- https://fidoalliance.org/specs/fido-uaf-v1.2-ps-20201020/fido-uaf-protocol-v1.2-ps-20201020.html#authenticator-attestation-id-aaid-typedef
+-- | [(spec)](https://fidoalliance.org/specs/fido-uaf-v1.2-ps-20201020/fido-uaf-protocol-v1.2-ps-20201020.html#authenticator-attestation-id-aaid-typedef)
 newtype AAID = AAID Text
   deriving (Show, Eq)
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)
 
--- Hex string, this value MUST be calculated according to method 1 for computing the keyIdentifier as defined in [RFC5280] section 4.2.1.2. https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2
+-- | Hex string, this value MUST be calculated according to method 1 for
+-- computing the keyIdentifier as defined in
+-- [RFC5280 section 4.2.1.2](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2).
 newtype KeyIdentifier = KeyIdentifier Text
   deriving (Show, Eq)
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)

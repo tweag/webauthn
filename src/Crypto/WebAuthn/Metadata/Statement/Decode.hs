@@ -4,6 +4,10 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- |
+-- This module contains functions to further decode
+-- [FIDO Metadata Statement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html)
+-- IDL types defined in 'Crypto.WebAuthn.Metadata.Statement.IDL' into the Haskell-specific types defined in 'Crypto.WebAuthn.Metadata.Statement.Types'
 module Crypto.WebAuthn.Metadata.Statement.Decode
   ( decodeMetadataStatement,
     decodeAAGUID,

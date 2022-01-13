@@ -2,6 +2,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 
+-- | This module maps every Model type to a WebIDL type. As the name of the
+-- module and typclass suggest, this is used to perform the conversion between
+-- the WebIDL and Model representations.
 module Crypto.WebAuthn.Model.WebIDL.Internal.Convert
   ( Convert (..),
   )

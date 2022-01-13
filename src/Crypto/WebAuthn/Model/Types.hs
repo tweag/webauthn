@@ -214,7 +214,7 @@ data ResidentKeyRequirement
     -- but will accept a [server-side credential](https://www.w3.org/TR/webauthn-2/#server-side-credential).
     -- For example, user agents SHOULD guide the user through setting up [user verification](https://www.w3.org/TR/webauthn-2/#user-verification)
     -- if needed to create a [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential)
-    -- in this case. This takes precedence over the setting of 'userVerification'.
+    -- in this case. This takes precedence over the setting of 'pkcogUserVerification'.
     ResidentKeyRequirementPreferred
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-required)
     -- This value indicates the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -307,7 +307,7 @@ data AttestationChain (p :: ProtocolKind) where
   -- | For Fido 2, we can have a chain consisting of multiple certificates.
   Fido2Chain :: NonEmpty X509.SignedCertificate -> AttestationChain 'Fido2
   -- | For Fido U2F, we can only have a single certificate, which is then also
-  -- used to generate the 'SubjectKeyIdentifier' from
+  -- used to generate the 'Crypto.WebAuthn.Identifier.SubjectKeyIdentifier' from
   FidoU2FCert :: X509.SignedCertificate -> AttestationChain 'FidoU2F
 
 deriving instance Eq (AttestationChain p)
@@ -453,7 +453,7 @@ newtype RpId = RpId {unRpId :: Text}
 -- - [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform
 -- enforcement, as prescribed in Section 2.3 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266)
 -- for the Nickname Profile of the PRECIS FreeformClass [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264),
--- when setting 'RelyingPartyName''s value, or displaying the value to the user.
+-- when setting 'RelyingPartyName's value, or displaying the value to the user.
 -- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
 -- SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir)
 -- about how this metadata is encoded.
@@ -488,7 +488,7 @@ generateUserHandle = UserHandle <$> getRandomBytes 16
 -- - [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform
 -- enforcement, as prescribed in Section 2.3 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266)
 -- for the Nickname Profile of the PRECIS FreeformClass [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264),
--- when setting 'displayName''s value, or displaying the value to the user.
+-- when setting 'pkcueDisplayName's value, or displaying the value to the user.
 -- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
 -- SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir)
 -- about how this metadata is encoded.
@@ -499,13 +499,13 @@ newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayNam
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) identifier for a user account.
 -- It is intended only for display, i.e., aiding the user in determining the difference between user accounts with
--- similar 'displayNames'. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
+-- similar 'pkcueDisplayName's. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
 --
 -- - The [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) MAY let the user choose this value.
 --   The [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform enforcement,
 --   as prescribed in Section 3.4.3 of [RFC8265](https://www.w3.org/TR/webauthn-2/#biblio-rfc8265)
 --   for the UsernameCasePreserved Profile of the PRECIS IdentifierClass
---   [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264), when setting 'UserAccountName''s value,
+--   [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264), when setting 'UserAccountName's value,
 --   or displaying the value to the user.
 -- - This string MAY contain language and direction metadata.
 --   [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD consider providing this information.
@@ -599,7 +599,7 @@ newtype SignatureCounter = SignatureCounter {unSignatureCounter :: Word32}
   deriving (Eq, Show)
   deriving newtype (Num, Ord, ToJSON)
 
--- | The encoding of a 'PublicKey'
+-- | The encoding of a 'Cose.CosePublicKey'
 newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
   deriving (Eq, Show)
   deriving newtype (ToJSON)
@@ -660,7 +660,7 @@ data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-id)
     -- The 'UserHandle' of the user account entity.
     -- To ensure secure operation, authentication and authorization decisions MUST
-    -- be made on the basis of this 'id' member, not the 'displayName' nor 'name' members.
+    -- be made on the basis of this 'pkcueId' member, not the 'pkcueDisplayName' nor 'pkcueName' members.
     -- See Section 6.1 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266).
     -- The 'UserHandle' MUST NOT contain personally identifying information about the user, such as a username
     -- or e-mail address; see [§ 14.6.1 User Handle Contents](https://www.w3.org/TR/webauthn-2/#sctn-user-handle-privacy)
@@ -676,7 +676,7 @@ data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
     -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) identifier for a user account.
     -- It is intended only for display, i.e., aiding the user in determining the difference between user
-    -- accounts with similar displayNames. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
+    -- accounts with similar 'pkcueDisplayName's. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
     pkcueName :: UserAccountName
   }
   deriving (Eq, Show, Generic, ToJSON)
@@ -758,6 +758,11 @@ data AuthenticatorDataFlags = AuthenticatorDataFlags
   }
   deriving (Eq, Show, Generic, ToJSON)
 
+-- | A type encompassing the credential options, both for
+-- [creation](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
+-- and
+-- [requesting](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options).
+-- The WebauthnKind argument specifies which.
 data PublicKeyCredentialOptions (t :: WebauthnKind) where
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
   PublicKeyCredentialCreationOptions ::
@@ -892,7 +897,7 @@ data CollectedClientData (t :: WebauthnKind) raw = CollectedClientData
     -- defined by [RFC6454](https://www.w3.org/TR/webauthn-2/#biblio-rfc6454).
     ccdOrigin :: Origin,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-crossorigin)
-    -- This member contains the inverse of the `sameOriginWithAncestors` argument value
+    -- This member contains the inverse of the @sameOriginWithAncestors@ argument value
     -- that was passed into the [internal method](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots).
     ccdCrossOrigin :: Bool,
     -- | Raw data of the client data, for verification purposes
@@ -989,10 +994,9 @@ data AuthenticatorData (t :: WebauthnKind) raw = AuthenticatorData
 
 -- | The result from verifying an attestation statement.
 -- Either the result is verifiable, in which case @k ~ 'Verifiable'@, the
--- 'AttestationType' contains a verifiable certificate chain and
--- 'AuthenticatorModel' contains a known authenticator.
+-- 'AttestationType' contains a verifiable certificate chain.
 -- Or the result is not verifiable, in which case @k ~ 'Unverifiable'@, the
--- 'AttestationType' is None or Self, and the 'AuthenticatorModel' is unknown.
+-- 'AttestationType' is None or Self.
 data SomeAttestationType = forall k. SomeAttestationType (AttestationType k)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
@@ -1037,7 +1041,7 @@ class
   --
   -- Attestation statement formats that may exist in multiple versions SHOULD
   -- include a version in their identifier. In effect, different versions are
-  -- thus treated as different formats, e.g., `packed2` as a new version of the
+  -- thus treated as different formats, e.g., @packed2@ as a new version of the
   -- [§ 8.2 Packed Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation).
   asfIdentifier :: a -> Text
 
@@ -1093,8 +1097,8 @@ class
     CBOR.Term
 
 -- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
--- In contrast to 'DecodingAttestationStatementFormat', this type can be put into a list.
--- This is used for 'mkSupportedAttestationStatementFormats'
+-- In contrast to 'AttestationStatementFormat', this type can be put into a list.
+-- This is used for 'sasfSingleton'
 data SomeAttestationStatementFormat
   = forall a.
     AttestationStatementFormat a =>
@@ -1110,10 +1114,14 @@ newtype SupportedAttestationStatementFormats
     SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
   deriving newtype (Semigroup, Monoid)
 
+-- | Creates a `SupportedAttestationStatementFormats`-Map containing a single
+-- supported format.
 sasfSingleton :: SomeAttestationStatementFormat -> SupportedAttestationStatementFormats
 sasfSingleton someFormat@(SomeAttestationStatementFormat format) =
   SupportedAttestationStatementFormats $ HashMap.singleton (asfIdentifier format) someFormat
 
+-- | Attempt to find the desired attestation statement format in a map of
+-- supported formats. Can then be used to perform attestation.
 sasfLookup :: Text -> SupportedAttestationStatementFormats -> Maybe SomeAttestationStatementFormat
 sasfLookup id (SupportedAttestationStatementFormats sasf) = sasf !? id
 

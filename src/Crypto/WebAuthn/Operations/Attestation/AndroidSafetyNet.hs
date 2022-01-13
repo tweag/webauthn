@@ -6,13 +6,17 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
+-- | This module implements
+-- [Android SafetyNet attestation](https://www.w3.org/TR/webauthn-2/#sctn-android-safetynet-attestation).
 module Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet
   ( format,
     Format (..),
     DecodingError (..),
     Statement (..),
+    Response (..),
     VerificationError (..),
     Integrity (..),
+    Milliseconds (..),
   )
 where
 
@@ -65,6 +69,8 @@ data Integrity
     CTSProfileIntegrity
   deriving (Enum, Bounded, Eq, Ord, Show)
 
+-- | The Android SafetyKey Format. Allows configuration of the required level of
+-- trust.
 data Format = Format
   { -- | What level the integrity check of the originating Android device must
     -- have passed.
@@ -92,6 +98,7 @@ data Response = Response
   }
   deriving (Eq, Show, Generic, Aeson.FromJSON, Aeson.ToJSON)
 
+-- | Milliseconds represented as an 'Integer', used for 'timestampMs'
 newtype Milliseconds = Milliseconds Integer
   deriving (Eq, Show)
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)
@@ -114,6 +121,7 @@ instance Aeson.ToJSON Statement where
         "response" .= response
       ]
 
+-- | Decoding errors specific to Android SafetyNet
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field
     -- was missing, or because the field contained the wrong type of data
@@ -126,6 +134,7 @@ data DecodingError
     DecodingErrorJWSMissingX5C
   deriving (Show, Exception)
 
+-- | Verification errors specific to Android SafetyNet
 data VerificationError
   = -- | The receiced nonce was not set to the concatenation of the
     -- authenticator data and client data hash
@@ -259,6 +268,9 @@ instance M.AttestationStatementFormat Format where
 
   asfTrustAnchors _ _ = mempty
 
+-- | The default SafetyNet format configuration. Requires full
+-- CTSProfileIntegrity and allows for the SafetyNet message to be at most 60
+-- seconds old. Does not allow any timedrift into the future.
 format :: M.SomeAttestationStatementFormat
 format =
   M.SomeAttestationStatementFormat $

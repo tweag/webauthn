@@ -3,6 +3,10 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
+-- |
+-- This module contains additional Haskell-specific type definitions for the
+-- [FIDO Metadata Statement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html)
+-- specification
 module Crypto.WebAuthn.Metadata.Statement.Types
   ( MetadataStatement (..),
     ProtocolVersion (..),

@@ -6,6 +6,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
+-- | This module implements attestation of the received authenticator response.
+-- See the WebAuthn
+-- [specification](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
+-- for the algorithm implemented in this module.
+-- Assertion is typically represented as a "register" action
+-- in the front-end.
+-- [Section 7 of the specification](https://www.w3.org/TR/webauthn-2/#sctn-rp-operations)
+-- describes when the relying party must perform attestation. Another relevant
+-- section is
+-- [Section 1.3.1](https://www.w3.org/TR/webauthn-2/#sctn-sample-registration)
+-- which is a high level overview of the registration procedure.
 module Crypto.WebAuthn.Operations.Attestation
   ( AttestationError (..),
     AttestationResult (..),
@@ -53,6 +64,8 @@ import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import GHC.Generics (Generic)
 
+-- | All supported [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
+-- of this library. This value can be passed to 'Crypto.WebAuthn.Model.WebIDL.Decoding.decodeCreatedPublicKeyCredential'
 allSupportedFormats :: M.SupportedAttestationStatementFormats
 allSupportedFormats =
   foldMap
@@ -66,6 +79,7 @@ allSupportedFormats =
       TPM.format
     ]
 
+-- | All the errors that can result from a call to 'verifyAttestationResponse'
 data AttestationError
   = -- | The returned challenge does not match the desired one
     AttestationChallengeMismatch M.Challenge M.Challenge
@@ -216,13 +230,13 @@ instance ToJSON SomeAttestationStatement where
 --
 -- * Disallowing [Basic](https://www.w3.org/TR/webauthn-2/#basic-attestation)
 --   and [Self](https://www.w3.org/TR/webauthn-2/#self-attestation) attestation
---   by inspecting 'rAuthenticator's 'asType'
+--   by inspecting 'rAttestationStatement's 'asType'
 --
 -- * Disallowing unverified authenticators by checking whether
---   'rAuthenticator's 'asModel' is an 'UnverifiedAuthenticator'
+--   'rAttestationStatement's 'asModel' is an 'UnverifiedAuthenticator'
 --
 -- * Disallowing authenticators that don't meet the required security level by
---   inspecting the 'rAuthenticator's 'asModel's 'vaMetadata'
+--   inspecting the 'rAttestationStatement's 'asModel's 'vaMetadata'
 data AttestationResult = AttestationResult
   { -- | The entry to insert into the database
     rEntry :: CredentialEntry,

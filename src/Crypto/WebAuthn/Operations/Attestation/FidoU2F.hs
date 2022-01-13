@@ -4,12 +4,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
+-- | This module implements
+-- [Fido U2F attestation](https://www.w3.org/TR/webauthn-2/#sctn-fido-u2f-attestation).
 module Crypto.WebAuthn.Operations.Attestation.FidoU2F
   ( format,
     Format (..),
     DecodingError (..),
     Statement (..),
-    VerifyingError (..),
+    VerificationError (..),
   )
 where
 
@@ -29,11 +31,14 @@ import qualified Data.X509 as X509
 import qualified Data.X509.EC as X509
 import qualified Data.X509.Validation as X509
 
+-- | The Fido U2F format. The sole purpose of this type is to instantiate the
+-- AttestationStatementFormat typeclass below.
 data Format = Format
 
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
 
+-- | Decoding errors specific to Fido U2F attestation
 data DecodingError
   = -- | No Signature field was present
     NoSig
@@ -45,7 +50,8 @@ data DecodingError
     DecodingErrorX5C String
   deriving (Show, Exception)
 
-data VerifyingError
+-- | Verification errors specific to Fido U2F attestation
+data VerificationError
   = -- | The public key in the certificate was not an EC Key or the curve was not the p256 curve
     InvalidCertificatePublicKey X509.PubKey
   | -- | The credential public key is not an ECDSA key
@@ -56,6 +62,7 @@ data VerifyingError
     InvalidSignature X509.SignatureFailure
   deriving (Show, Exception)
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-fido-u2f-attestation)
 data Statement = Statement
   { sig :: BS.ByteString,
     attCert :: X509.SignedCertificate
@@ -94,7 +101,7 @@ instance M.AttestationStatementFormat Format where
         (CBOR.TString "x5c", CBOR.TList [CBOR.TBytes $ X509.encodeSignedObject attCert])
       ]
 
-  type AttStmtVerificationError Format = VerifyingError
+  type AttStmtVerificationError Format = VerificationError
 
   asfVerify
     _
@@ -174,5 +181,7 @@ instance M.AttestationStatementFormat Format where
 
   asfTrustAnchors _ _ = mempty
 
+-- | Helper function that wraps the Fido U2F format into the general
+-- SomeAttestationStatementFormat type.
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

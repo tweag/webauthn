@@ -4,6 +4,10 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- |
+-- This module contains additional Haskell-specific type definitions for the
+-- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
+-- specification
 module Crypto.WebAuthn.Metadata.Service.Types
   ( MetadataServiceRegistry (..),
     MetadataPayload (..),

@@ -3,12 +3,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TupleSections #-}
 
+-- |
+-- This module exposes functions for processing and querying
+-- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
+-- blobs and entries.
 module Crypto.WebAuthn.Metadata.Service.Processing
   ( RootCertificate (..),
     ProcessingError (..),
@@ -34,7 +36,6 @@ import Crypto.JWT
     HasX5u (x5u),
     JWSHeader,
     JWTError,
-    SignedJWT,
     decodeCompact,
     defaultJWTValidationSettings,
     param,
@@ -176,7 +177,7 @@ jwtToJson ::
   DateTime ->
   Either ProcessingError Value
 jwtToJson blob rootCert now = runExcept $ do
-  jwt :: SignedJWT <- decodeCompact $ LBS.fromStrict blob
+  jwt <- decodeCompact $ LBS.fromStrict blob
   claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
   return $ Object (claims ^. unregisteredClaims)
 
@@ -196,7 +197,7 @@ jsonToPayload value = case Aeson.fromJSON value of
 -- directly
 --
 -- The resulting structure can be queried efficiently for
--- 'Service.MetadataEntry' using 'metadataByAaguid' and 'metadataBySubjectKeyIdentifier'
+-- 'Service.MetadataEntry' using 'queryMetadata'
 createMetadataRegistry :: [Service.SomeMetadataEntry] -> Service.MetadataServiceRegistry
 createMetadataRegistry entries = Service.MetadataServiceRegistry {..}
   where

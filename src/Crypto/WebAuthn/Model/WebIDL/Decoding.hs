@@ -42,9 +42,8 @@ class Convert a => Decode a where
   decode = pure . coerce
 
 -- | Like 'Decode', but with a 'decodeCreated' function that also takes a
--- 'SupportedAttestationStatementFormats' in order to allow decoding to depend
--- on the supported attestation formats. This function also throws a
--- 'CreatedDecodingError' instead of a 'DecodingError.
+-- 'M.SupportedAttestationStatementFormats' in order to allow decoding to depend
+-- on the supported attestation formats.
 class Convert a => DecodeCreated a where
   decodeCreated :: M.SupportedAttestationStatementFormats -> JS a -> Either MD.CreatedDecodingError a
 
@@ -249,17 +248,20 @@ instance DecodeCreated (M.PublicKeyCredential 'M.Create 'True) where
     pure $ M.PublicKeyCredential {..}
 
 -- | Decodes a 'IDL.CreatedPublicKeyCredential' result, corresponding to the
--- [`PublicKeyCredential` interface](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- [@PublicKeyCredential@ interface](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- as returned by the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- method while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 decodeCreatedPublicKeyCredential ::
+  -- | The [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
+  -- that should be supported. The value of 'Crypto.WebAuthn.Operations.Attestation.allSupportedFormats'
+  -- can be passed here, but additional or custom formats may also be used if needed
   M.SupportedAttestationStatementFormats ->
   IDL.CreatedPublicKeyCredential ->
   Either MD.CreatedDecodingError (M.PublicKeyCredential 'M.Create 'True)
 decodeCreatedPublicKeyCredential = decodeCreated
 
 -- | Decodes a 'IDL.RequestedPublicKeyCredential' result, corresponding to the
--- [`PublicKeyCredential` interface](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- [@PublicKeyCredential@ interface](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- as returned by the [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- method while [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 decodeRequestedPublicKeyCredential ::
@@ -267,11 +269,21 @@ decodeRequestedPublicKeyCredential ::
   Either MD.DecodingError (M.PublicKeyCredential 'M.Get 'True)
 decodeRequestedPublicKeyCredential = decode
 
+-- | Decodes a 'IDL.PublicKeyCredentialCreationOptions', corresponding to the
+-- [@PublicKeyCredentialCreationOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialcreationoptions)
+-- as passed to the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
+-- method for [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential).
+-- This function is mainly used for the emulation of the Authenticator tests.
 decodePublicKeyCredentialCreationOptions ::
   IDL.PublicKeyCredentialCreationOptions ->
   Either MD.DecodingError (M.PublicKeyCredentialOptions 'M.Create)
 decodePublicKeyCredentialCreationOptions = decode
 
+-- | Decodes a 'IDL.PublicKeyCredentialRequestOptions', corresponding to the
+-- [@PublicKeyCredentialRequestOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
+-- as passed to the [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
+-- method for [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
+-- This function is mainly used for the emulation of the Authenticator tests.
 decodePublicKeyCredentialRequestOptions ::
   IDL.PublicKeyCredentialRequestOptions ->
   Either MD.DecodingError (M.PublicKeyCredentialOptions 'M.Get)

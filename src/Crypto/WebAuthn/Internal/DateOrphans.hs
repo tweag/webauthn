@@ -15,8 +15,8 @@
 --   to the time library which is nicer to use. It is used by the
 --   [x509-validation](https://hackage.haskell.org/package/x509-validation) library
 -- * [Data.Fixed](https://hackage.haskell.org/package/base/docs/Data-Fixed.html)
---   in `base`, which is used as the underlying representation of `NominalDiffTime`
---   in the `time` library.
+--   in @base@, which is used as the underlying representation of 'Data.Time.NominalDiffTime'
+--   in the @time@ library.
 --
 -- This module contains a 'Timeable' and 'Time' implementation for 'UTCTime',
 -- and a 'MonadTime' implementation for any 'ReaderT' of a 'Timeable'

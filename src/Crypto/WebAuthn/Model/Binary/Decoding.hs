@@ -5,6 +5,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- | Certain parts of the specification require that data is decoded from a
+-- binary form. This module holds such functions.
 module Crypto.WebAuthn.Model.Binary.Decoding
   ( -- * Error types
     DecodingError (..),

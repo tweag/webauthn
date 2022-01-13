@@ -1,5 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
+-- |
+-- This module contains functions to further decode
+-- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
+-- IDL types defined in 'Crypto.WebAuthn.Metadata.Service.WebIDL' into the Haskell-specific types defined in 'Crypto.WebAuthn.Metadata.Service.Types'
 module Crypto.WebAuthn.Metadata.Service.Decode
   ( decodeMetadataPayload,
     decodeMetadataEntry,
@@ -37,6 +41,12 @@ liftEitherMaybe (Left Nothing) = Nothing
 liftEitherMaybe (Left (Just a)) = Just $ Left a
 liftEitherMaybe (Right b) = Just $ Right b
 
+-- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-entry-dictionary)
+-- | Decodes a 'ServiceIDL.MetadataBLOBPayloadEntry' into one or more
+-- 'ServiceTypes.SomeMetadataEntry'. If the entry is not relevant for webauthn
+-- (i.e. UAF authenticators or FIDO2 authenticators that only support basic
+-- surrogate attestation), then this function returns 'Nothing'. If an error
+-- occured during decoding, 'Left' is returned.
 decodeMetadataEntry :: ServiceIDL.MetadataBLOBPayloadEntry -> Maybe (Either Text (NonEmpty ServiceTypes.SomeMetadataEntry))
 decodeMetadataEntry ServiceIDL.MetadataBLOBPayloadEntry {..} = liftEitherMaybe $
   case (aaid, aaguid, attestationCertificateKeyIdentifiers) of

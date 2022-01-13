@@ -221,8 +221,8 @@ instance Encode (M.AuthenticatorResponse 'M.Create 'True) where
 instance Encode (M.AttestationObject 'True) where
   encode ao = IDL.URLEncodedBase64 $ ME.encodeAttestationObject ao
 
--- | Encodes a 'IDL.PublicKeyCredentialCreationOptions', corresponding to the
--- [`PublicKeyCredentialCreationOptions` dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
+-- | Encodes a @'M.PublicKeyCredentialOptions' M.Create@, corresponding to the
+-- [@PublicKeyCredentialCreationOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 -- to be passed to the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- method while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 encodePublicKeyCredentialCreationOptions ::
@@ -230,8 +230,8 @@ encodePublicKeyCredentialCreationOptions ::
   IDL.PublicKeyCredentialCreationOptions
 encodePublicKeyCredentialCreationOptions = encode
 
--- | Encodes a 'IDL.PublicKeyCredentialRequestOptions', corresponding to the
--- [`PublicKeyCredentialRequestOptions` dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
+-- | Encodes a @'M.PublicKeyCredentialOptions' M.Get@, corresponding to the
+-- [@PublicKeyCredentialRequestOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
 -- to be passed to the [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- method while [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 encodePublicKeyCredentialRequestOptions ::
