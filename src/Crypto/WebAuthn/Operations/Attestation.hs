@@ -1,12 +1,10 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Crypto.WebAuthn.Operations.Attestation
   ( AttestationError (..),
@@ -18,7 +16,6 @@ module Crypto.WebAuthn.Operations.Attestation
   )
 where
 
-import Control.Exception.Base (SomeException (SomeException))
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Key as Cose
@@ -42,7 +39,7 @@ import Data.Aeson (ToJSON, Value (String), object, toJSON, (.=))
 import Data.Hourglass (DateTime)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
-import Data.Validation (Validation)
+import Data.Validation (Validation (Failure, Success))
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
@@ -78,8 +75,9 @@ data AttestationError
     -- second: The list of requested algorithm
     AttestationUndesiredPublicKeyAlgorithm Cose.CoseSignAlg [Cose.CoseSignAlg]
   | -- | There was some exception in the statement format specific section
-    AttestationFormatError SomeException
-  deriving (Show)
+    forall a. M.AttestationStatementFormat a => AttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
+
+deriving instance Show AttestationError
 
 -- | Information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
 -- model that created the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential).
@@ -384,12 +382,12 @@ verifyAttestationResponse
     -- valid attestation signature, by using the attestation statement format
     -- fmt’s verification procedure given attStmt, authData and hash.
     attStmt <- case M.asfVerify aoFmt currentTime aoAttStmt authData hash of
-      Left err -> failure $ AttestationFormatError $ SomeException err
-      Right (M.SomeAttestationType M.AttestationTypeNone) ->
+      Failure err -> failure $ AttestationFormatError aoFmt err
+      Success (M.SomeAttestationType M.AttestationTypeNone) ->
         pure $ SomeAttestationStatement M.AttestationTypeNone UnknownAuthenticator
-      Right (M.SomeAttestationType M.AttestationTypeSelf) ->
+      Success (M.SomeAttestationType M.AttestationTypeSelf) ->
         pure $ SomeAttestationStatement M.AttestationTypeSelf UnknownAuthenticator
-      Right (M.SomeAttestationType attType@M.AttestationTypeVerifiable {}) ->
+      Success (M.SomeAttestationType attType@M.AttestationTypeVerifiable {}) ->
         pure $ validateAttestationChain credential aoFmt attType registry currentTime
     pure $
       AttestationResult

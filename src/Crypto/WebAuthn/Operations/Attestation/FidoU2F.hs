@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -12,16 +13,16 @@ module Crypto.WebAuthn.Operations.Attestation.FidoU2F
   )
 where
 
-import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Operations.Common (failure)
+import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
@@ -46,13 +47,11 @@ data DecodingError
 
 data VerifyingError
   = -- | The public key in the certificate was not an EC Key or the curve was not the p256 curve
-    IncorrectKeyInCertificate
-  | -- | The key in the attested credential data was not an EC key or the point was the point at infinity
-    NoECKeyInAttestedCredentialData
-  | -- | After encoding the x or y coordinate of the public key did not have the required 32 byte length
-    UnexpectedCoordinateLength
-  | -- | Error extracting coordinates
-    ExtractingCoordinatesError
+    InvalidCertificatePublicKey X509.PubKey
+  | -- | The credential public key is not an ECDSA key
+    NonECDSACredentialPublicKey PublicKey.PublicKey
+  | -- | The x and/or y coordinates of the credential public key don't have a length of 32 bytes
+    WrongCoordinateSize Int Int
   | -- | The provided public key cannot validate the signature over the verification data
     InvalidSignature X509.SignatureFailure
   deriving (Show, Exception)
@@ -103,7 +102,7 @@ instance M.AttestationStatementFormat Format where
     Statement {attCert, sig}
     M.AuthenticatorData
       { M.adRpIdHash,
-        M.adAttestedCredentialData = M.AttestedCredentialData {M.acdCredentialId, M.acdCredentialPublicKeyBytes}
+        M.adAttestedCredentialData = M.AttestedCredentialData {M.acdCredentialId, M.acdCredentialPublicKey}
       }
     clientDataHash = do
       -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above
@@ -121,8 +120,8 @@ instance M.AttestationStatementFormat Format where
         X509.PubKeyEC pk ->
           case X509.ecPubKeyCurveName pk of
             Just SEC_p256r1 -> pure ()
-            _ -> Left IncorrectKeyInCertificate
-        _ -> Left IncorrectKeyInCertificate
+            _ -> failure $ InvalidCertificatePublicKey certPubKey
+        _ -> failure $ InvalidCertificatePublicKey certPubKey
 
       -- 3. Extract the claimed rpIdHash from authenticatorData, and the claimed
       -- credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
@@ -140,29 +139,29 @@ instance M.AttestationStatementFormat Format where
       -- coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes.
       -- If size differs or "-3" key is not found, terminate this algorithm and
       -- return an appropriate error.
-      -- NOTE: The decoding already happened in the decoding step
-      (xb, yb) <- case extractPublicKey . M.unRaw $ acdCredentialPublicKeyBytes of
-        Just coords -> pure coords
-        Nothing -> Left ExtractingCoordinatesError
+      -- NOTE: Already done during decoding of the COSE public key
+      case PublicKey.fromCose acdCredentialPublicKey of
+        PublicKey.PublicKeyECDSA {ecdsaX = xb, ecdsaY = yb} -> do
+          let xlen = BS.length xb
+              ylen = BS.length yb
+          unless (xlen == 32 && ylen == 32) $ failure $ WrongCoordinateSize xlen ylen
 
-      -- We decode the x and y values in an earlier stage of the process. In order to construct the publicKeyU2F, we have to reencode the value.
-      unless (BS.length xb == 32 && BS.length yb == 32) $ Left UnexpectedCoordinateLength
+          -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
+          let publicKeyU2F = BS.singleton 0x04 <> xb <> yb
 
-      -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
-      let publicKeyU2F = BS.singleton 0x04 <> xb <> yb
+          -- 5. Let verificationData be the concatenation of (0x00 || rpIdHash ||
+          -- clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of
+          -- [FIDO-U2F-Message-Formats]).
+          let credId = M.unCredentialId acdCredentialId
+              verificationData = BS.singleton 0x00 <> BA.convert (M.unRpIdHash adRpIdHash) <> BA.convert (M.unClientDataHash clientDataHash) <> credId <> publicKeyU2F
 
-      -- 5. Let verificationData be the concatenation of (0x00 || rpIdHash ||
-      -- clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of
-      -- [FIDO-U2F-Message-Formats]).
-      let credId = M.unCredentialId acdCredentialId
-          verificationData = BS.singleton 0x00 <> BA.convert (M.unRpIdHash adRpIdHash) <> BA.convert (M.unClientDataHash clientDataHash) <> credId <> publicKeyU2F
-
-      -- 6. Verify the sig using verificationData and the certificate public key per
-      -- section 4.1.4 of [SEC1] with SHA-256 as the hash function used in step two.
-      case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) certPubKey verificationData sig of
-        X509.SignaturePass -> pure ()
-        -- TODO: Pass along SignatureFailure to error
-        X509.SignatureFailed e -> Left $ InvalidSignature e
+          -- 6. Verify the sig using verificationData and the certificate public key per
+          -- section 4.1.4 of [SEC1] with SHA-256 as the hash function used in step two.
+          case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) certPubKey verificationData sig of
+            X509.SignaturePass -> pure ()
+            X509.SignatureFailed e -> failure $ InvalidSignature e
+          pure ()
+        key -> failure $ NonECDSACredentialPublicKey key
 
       -- 7. Optionally, inspect x5c and consult externally provided knowledge to
       -- determine whether attStmt conveys a Basic or AttCA attestation.
@@ -177,21 +176,3 @@ instance M.AttestationStatementFormat Format where
 
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format
-
--- [(spec)](https://www.iana.org/assignments/cose/cose.xhtml)
--- This function assumes the provided key is an ECC key, which is a valid
--- assumption as we have already verified that in step 2.b
--- Any non ECC key would result in another error here, which is fine.
-extractPublicKey :: BS.ByteString -> Maybe (BS.ByteString, BS.ByteString)
-extractPublicKey keyBS = do
-  (rest, result) <- either (const Nothing) pure $ CBOR.deserialiseFromBytes CBOR.decodeTerm $ BSL.fromStrict keyBS
-  unless (BSL.null rest) Nothing
-  pairs <- case result of
-    CBOR.TMap pairs -> return pairs
-    _ -> Nothing
-  let xKey = -2
-  let yKey = -3
-  case (CBOR.TInt xKey `lookup` pairs, CBOR.TInt yKey `lookup` pairs) of
-    (Just (CBOR.TBytes x), Just (CBOR.TBytes y)) -> do
-      pure (x, y)
-    _ -> Nothing

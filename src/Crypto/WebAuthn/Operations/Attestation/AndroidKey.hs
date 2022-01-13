@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -19,6 +20,7 @@ import Control.Monad (forM, unless, void, when)
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Operations.Common (failure)
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
 import Data.ASN1.Types (ASN1 (IntVal, OctetString), ASN1Class (Context), ASN1ConstructionType (Container, Sequence, Set))
@@ -256,16 +258,16 @@ instance M.AttestationStatementFormat Format where
     let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
     case PublicKey.verify alg pubKey signedData sig of
       Right () -> pure ()
-      Left err -> Left $ VerificationErrorVerificationFailure err
+      Left err -> failure $ VerificationErrorVerificationFailure err
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the
     -- attestedCredentialData in authenticatorData.
-    unless (PublicKey.fromCose (M.acdCredentialPublicKey adAttestedCredentialData) == pubKey) $ Left VerificationErrorCredentialKeyMismatch
+    unless (PublicKey.fromCose (M.acdCredentialPublicKey adAttestedCredentialData) == pubKey) $ failure VerificationErrorCredentialKeyMismatch
 
     -- 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to
     -- clientDataHash.
     -- See https://source.android.com/security/keystore/attestation for the ASN1 description
-    unless (attestationChallenge attExt == M.unClientDataHash clientDataHash) . Left $ VerificationErrorClientDataHashMismatch
+    unless (attestationChallenge attExt == M.unClientDataHash clientDataHash) $ failure VerificationErrorClientDataHashMismatch
 
     -- 5. Verify the following using the appropriate authorization list from the attestation certificate extension data:
 
@@ -274,7 +276,7 @@ instance M.AttestationStatementFormat Format where
     -- PublicKeyCredential MUST be scoped to the RP ID.
     let software = softwareEnforced attExt
         tee = teeEnforced attExt
-    when (isJust (allApplications software) || isJust (allApplications tee)) $ Left VerificationErrorAndroidKeyAllApplicationsFieldFound
+    when (isJust (allApplications software) || isJust (allApplications tee)) $ failure VerificationErrorAndroidKeyAllApplicationsFieldFound
 
     -- 5.b For the following, use only the teeEnforced authorization list if the
     -- RP wants to accept only keys from a trusted execution environment,
@@ -285,11 +287,13 @@ instance M.AttestationStatementFormat Format where
     let targetSet = Just $ Set.singleton kmPurposeSign
     case requiredTrustLevel of
       SoftwareEnforced -> do
-        unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) $ Left VerificationErrorAndroidKeyOriginFieldInvalid
-        unless (targetSet == purpose software || targetSet == purpose tee) $ Left VerificationErrorAndroidKeyPurposeFieldInvalid
+        unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) $ failure VerificationErrorAndroidKeyOriginFieldInvalid
+        unless (targetSet == purpose software || targetSet == purpose tee) $ failure VerificationErrorAndroidKeyPurposeFieldInvalid
+        pure ()
       TeeEnforced -> do
-        unless (origin tee == Just kmOriginGenerated) $ Left VerificationErrorAndroidKeyOriginFieldInvalid
-        unless (targetSet == purpose tee) $ Left VerificationErrorAndroidKeyPurposeFieldInvalid
+        unless (origin tee == Just kmOriginGenerated) $ failure VerificationErrorAndroidKeyOriginFieldInvalid
+        unless (targetSet == purpose tee) $ failure VerificationErrorAndroidKeyPurposeFieldInvalid
+        pure ()
 
     -- 6. If successful, return implementation-specific values representing attestation type Basic and attestation trust
     -- path x5c.
