@@ -10,7 +10,6 @@ module Crypto.WebAuthn.Operations.Attestation.AndroidKey
   ( format,
     TrustLevel (..),
     Format (..),
-    DecodingError (..),
     Statement (..),
     VerificationError (..),
     ExtAttestation (..),
@@ -32,7 +31,7 @@ import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
-import Data.HashMap.Strict (HashMap, (!?))
+import Data.HashMap.Strict ((!?))
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
@@ -175,25 +174,6 @@ instance ToJSON Statement where
         "x5c" .= x5c
       ]
 
--- | Decoding errors specific to Android Key attestation
-data DecodingError
-  = -- | The provided CBOR encoded data was malformed. Either because a field
-    -- was missing, or because the field contained the wrong type of data
-    DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
-  | -- | The algorithm identifier was invalid, or unsupported by the library
-    DecodingErrorUnknownAlgorithmIdentifier Int
-  | -- | The x5c field of the attestation statement could not be decoded for
-    -- the provided reason
-    DecodingErrorCertificate String
-  | -- | The required "attestation" extension was not found in the certificate
-    DecodingErrorCertificateExtensionMissing
-  | -- | The required "attestation" extension of the certificate could not be
-    -- decoded
-    DecodingErrorCertificateExtension String
-  | -- | The public key of the certificate could not be decoded
-    DecodingErrorPublicKey X509.PubKey
-  deriving (Show, Exception)
-
 -- | Verification errors specific to Android Key attestation
 data VerificationError
   = -- | The public key in the certificate is different from the on in the
@@ -211,7 +191,7 @@ data VerificationError
     VerificationErrorAndroidKeyPurposeFieldInvalid
   | -- | The Public key cannot verify the signature over the authenticatorData
     -- and the clientDataHash.
-    VerificationErrorVerificationFailure String
+    VerificationErrorVerificationFailure Text
   deriving (Show, Exception)
 
 -- | [(spec)](https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h)
@@ -227,30 +207,26 @@ instance M.AttestationStatementFormat Format where
 
   asfIdentifier _ = "android-key"
 
-  type AttStmtDecodingError Format = DecodingError
-
   asfDecode _ xs = do
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
       (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw))) -> do
-        alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (Cose.toCoseSignAlg algId)
+        alg <- Cose.toCoseSignAlg algId
         x5c@(credCert :| _) <- forM x5cRaw $ \case
           CBOR.TBytes certBytes ->
-            first DecodingErrorCertificate (X509.decodeSignedCertificate certBytes)
-          _ ->
-            Left (DecodingErrorUnexpectedCBORStructure xs)
+            first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
+          cert ->
+            Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
 
         let cert = X509.getCertificate credCert
         attExt <- case X509.extensionGetE (X509.certExtensions cert) of
           Just (Right ext) -> pure ext
-          Just (Left err) -> Left $ DecodingErrorCertificateExtension err
-          Nothing -> Left DecodingErrorCertificateExtensionMissing
+          Just (Left err) -> Left $ "Failed to decode certificate attestation extension: " <> Text.pack err
+          Nothing -> Left "Certificate attestation extension is missing"
 
-        pubKey <- case PublicKey.fromX509 $ X509.certPubKey cert of
-          Nothing -> Left $ DecodingErrorPublicKey (X509.certPubKey cert)
-          Just key -> pure key
+        pubKey <- PublicKey.fromX509 $ X509.certPubKey cert
 
         pure Statement {..}
-      _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
+      _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, x5c: nonempty list): " <> Text.pack (show xs)
 
   asfEncode _ Statement {sig, x5c, alg} =
     CBOR.TMap

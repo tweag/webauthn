@@ -40,6 +40,8 @@ import Codec.CBOR.Encoding (encodeInt)
 import Codec.Serialise (Serialise)
 import Codec.Serialise.Class (decode, encode)
 import Data.Aeson (ToJSON)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import GHC.Generics (Generic)
 
 -- | [(spec)](https://www.iana.org/assignments/cose/cose.xhtml#key-common-parameters)
@@ -195,7 +197,11 @@ data CoseHashAlgRSA
 -- encoding and decoding respectively.
 instance Serialise CoseSignAlg where
   encode = encodeInt . fromCoseSignAlg
-  decode = decodeIntCanonical >>= toCoseSignAlg
+  decode = do
+    int <- decodeIntCanonical
+    case toCoseSignAlg int of
+      Right res -> pure res
+      Left err -> fail $ Text.unpack err
 
 -- | Converts a 'CoseSignAlg' to the corresponding integer value from the
 -- [COSE Algorithms registry](https://www.iana.org/assignments/cose/cose.xhtml#algorithms).
@@ -214,7 +220,7 @@ fromCoseSignAlg (CoseSignAlgECDSA CoseHashAlgECDSASHA256) = -7
 -- [COSE Algorithms registry](https://www.iana.org/assignments/cose/cose.xhtml#algorithms).
 -- Returns an error if the integer doesn't represent a known algorithm.
 -- The inverse operation is 'fromCoseSignAlg'
-toCoseSignAlg :: (Eq a, Num a, MonadFail f, Show a) => a -> f CoseSignAlg
+toCoseSignAlg :: (Eq a, Num a, Show a) => a -> Either Text CoseSignAlg
 toCoseSignAlg (-65535) = pure (CoseSignAlgRSA CoseHashAlgRSASHA1)
 toCoseSignAlg (-259) = pure (CoseSignAlgRSA CoseHashAlgRSASHA512)
 toCoseSignAlg (-258) = pure (CoseSignAlgRSA CoseHashAlgRSASHA384)
@@ -223,7 +229,7 @@ toCoseSignAlg (-36) = pure (CoseSignAlgECDSA CoseHashAlgECDSASHA512)
 toCoseSignAlg (-35) = pure (CoseSignAlgECDSA CoseHashAlgECDSASHA384)
 toCoseSignAlg (-8) = pure CoseSignAlgEdDSA
 toCoseSignAlg (-7) = pure (CoseSignAlgECDSA CoseHashAlgECDSASHA256)
-toCoseSignAlg value = fail $ "Unknown COSE algorithm value " <> show value
+toCoseSignAlg value = Left $ "Unknown COSE algorithm value " <> Text.pack (show value)
 
 -- | [(spec)](https://www.iana.org/assignments/cose/cose.xhtml#key-type-parameters)
 -- All the entries from the [COSE Key Type Parameters registry](https://www.iana.org/assignments/cose/cose.xhtml#key-type-parameters)

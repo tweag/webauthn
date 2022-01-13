@@ -8,11 +8,7 @@
 -- | Certain parts of the specification require that data is decoded from a
 -- binary form. This module holds such functions.
 module Crypto.WebAuthn.Model.Binary.Decoding
-  ( -- * Error types
-    DecodingError (..),
-    CreatedDecodingError (..),
-
-    -- * Decoding from bytes
+  ( -- * Decoding from bytes
     decodeAuthenticatorData,
     decodeAttestationObject,
     decodeCollectedClientData,
@@ -26,78 +22,30 @@ import qualified Codec.CBOR.Decoding as CBOR
 import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import Codec.Serialise (decode)
-import Control.Exception (Exception, SomeException (SomeException))
 import Control.Monad (forM, unless)
-import Control.Monad.Except (Except, MonadError (throwError), runExcept)
+import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (MonadState (get, put), StateT (runStateT))
 import qualified Crypto.Hash as Hash
 import Crypto.WebAuthn.Identifier (AAGUID (AAGUID))
 import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first)
 import qualified Data.Binary.Get as Binary
 import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Base64.URL as Base64Url
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Singletons (SingI, sing)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.UUID as UUID
 import GHC.Generics (Generic)
-
--- | Decoding errors that can only occur when decoding a
--- 'M.AttestationObject' result with 'decodeAttestationObject'
-data CreatedDecodingError
-  = -- | Any of the below specified 'DecodingError's occured
-    CreatedDecodingErrorCommon DecodingError
-  | -- | The Attestation format could not be decoded because the provided
-    -- format is not part of the webauthn specification or not supported by this
-    -- library
-    CreatedDecodingErrorUnknownAttestationStatementFormat Text
-  | -- | A CBOR String was expected but a different type was encountered
-    CreatedDecodingErrorUnexpectedAttestationStatementKey CBOR.Term
-  | -- | An error was encountered during the decoding of the attestation
-    -- statement format
-    CreatedDecodingErrorAttestationStatement SomeException
-  | -- | The CBOR-encoded attestation object did not contain the required
-    -- "authData", "fmt" and "attStmt" fields, or their respective values were
-    -- not the correct types
-    CreatedDecodingErrorUnexpectedAttestationObject CBOR.Term
-  deriving (Show, Exception)
-
--- | Decoding errors that can occur when doing binary decoding of webauthn client
--- responses
-data DecodingError
-  = -- | The Client data could not be decoded for the provided reason
-    DecodingErrorClientDataJSON String
-  | -- | The Challenge could not be decoded from its Base64-based encoding for
-    -- the provided reason
-    DecodingErrorClientDataChallenge String
-  | -- | The Client Data's Webauthn type did not match the expected one
-    -- (first: expected, second: received)
-    DecodingErrorUnexpectedWebauthnType IDL.DOMString IDL.DOMString
-  | -- | The client data had the create type but the authenticator data's
-    -- attested credential data flag was not set.
-    DecodingErrorExpectedAttestedCredentialData
-  | -- | The client data had the get type but the authenticator data's
-    -- attested credential data flag was set.
-    DecodingErrorUnexpectedAttestedCredentialData
-  | -- | After decoding the authenticator data, the data in the error remained
-    -- undecoded
-    DecodingErrorNotAllInputUsed LBS.ByteString
-  | -- | The given error occured during decoding of binary data
-    DecodingErrorBinary String
-  | -- | The given error occured during decoding of CBOR-encoded data
-    DecodingErrorCBOR CBOR.DeserialiseFailure
-  | -- | The decoded algorithm identifier does not match the desired algorithm
-    DecodingErrorUnexpectedAlgorithmIdentifier IDL.COSEAlgorithmIdentifier
-  deriving (Show, Exception)
 
 -- | Webauthn contains a mixture of binary formats. For one it's CBOR and
 -- for another it's a custom format. For CBOR we wish to use the
@@ -108,35 +56,35 @@ data DecodingError
 -- which is just a function that can partially consume a 'LBS.ByteString'.
 -- Using this we can somewhat easily flip between the two libraries while
 -- decoding without too much nastiness.
-type PartialBinaryDecoder e a = StateT LBS.ByteString (Except e) a
+type PartialBinaryDecoder a = StateT LBS.ByteString (Either Text) a
 
 -- | Runs a 'PartialBinaryDecoder' using a strict bytestring. Afterwards it
--- makes sure that no bytes are left, otherwise throws a 'DecodingErrorNotAllInputUsed'
-runPartialBinaryDecoder :: BS.ByteString -> PartialBinaryDecoder DecodingError a -> Either DecodingError a
-runPartialBinaryDecoder bytes decoder = case runExcept . runStateT decoder . LBS.fromStrict $ bytes of
+-- makes sure that no bytes are left, otherwise returns an error
+runPartialBinaryDecoder :: BS.ByteString -> PartialBinaryDecoder a -> Either Text a
+runPartialBinaryDecoder bytes decoder = case runStateT decoder . LBS.fromStrict $ bytes of
   Left err -> Left err
   Right (result, rest)
     | LBS.null rest -> return result
-    | otherwise -> Left $ DecodingErrorNotAllInputUsed rest
+    | otherwise -> Left $ "Not all binary input used, rest in base64 format is: " <> Text.decodeUtf8 (Base64.encode $ LBS.toStrict rest)
 
 -- | A 'PartialBinaryDecoder DecodingError' for a binary encoding specified using 'Binary.Get'
-runBinary :: Binary.Get a -> PartialBinaryDecoder DecodingError a
+runBinary :: Binary.Get a -> PartialBinaryDecoder a
 runBinary decoder = do
   bytes <- get
   case Binary.runGetOrFail decoder bytes of
     Left (_rest, _offset, err) ->
-      throwError $ DecodingErrorBinary err
+      throwError $ "Binary decoding error: " <> Text.pack err
     Right (rest, _offset, result) -> do
       put rest
       pure result
 
 -- | A 'PartialBinaryDecoder DecodingError' for a CBOR encoding specified using the given Decoder
-runCBOR :: (forall s. CBOR.Decoder s a) -> PartialBinaryDecoder DecodingError (LBS.ByteString, a)
+runCBOR :: (forall s. CBOR.Decoder s a) -> PartialBinaryDecoder (LBS.ByteString, a)
 runCBOR decoder = do
   bytes <- get
   case CBOR.deserialiseFromBytesWithSize decoder bytes of
     Left err ->
-      throwError $ DecodingErrorCBOR err
+      throwError $ "CBOR decoding error: " <> Text.pack (show err)
     Right (rest, consumed, a) -> do
       put rest
       pure (LBS.take (fromIntegral consumed) bytes, a)
@@ -150,7 +98,7 @@ decodeAuthenticatorData ::
   forall t.
   SingI t =>
   BS.ByteString ->
-  Either DecodingError (M.AuthenticatorData t 'True)
+  Either Text (M.AuthenticatorData t 'True)
 decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
   -- https://www.w3.org/TR/webauthn-2/#authenticator-data
   let adRawData = M.WithRaw strictBytes
@@ -177,12 +125,12 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
     -- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
     -- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
     (M.SCreate, True) -> decodeAttestedCredentialData
-    (M.SCreate, False) -> throwError DecodingErrorExpectedAttestedCredentialData
+    (M.SCreate, False) -> throwError "Expected attested credential data, but there is none"
     -- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature),
     -- the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the
     -- `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
     (M.SGet, False) -> pure M.NoAttestedCredentialData
-    (M.SGet, True) -> throwError DecodingErrorUnexpectedAttestedCredentialData
+    (M.SGet, True) -> throwError "Expected no attested credential data, but there is"
 
   -- https://www.w3.org/TR/webauthn-2/#authdataextensions
   adExtensions <-
@@ -192,7 +140,7 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
 
   pure M.AuthenticatorData {..}
   where
-    decodeAttestedCredentialData :: PartialBinaryDecoder DecodingError (M.AttestedCredentialData 'M.Create 'True)
+    decodeAttestedCredentialData :: PartialBinaryDecoder (M.AttestedCredentialData 'M.Create 'True)
     decodeAttestedCredentialData = do
       -- https://www.w3.org/TR/webauthn-2/#aaguid
       acdAaguid <-
@@ -216,7 +164,7 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
 
       pure M.AttestedCredentialData {..}
 
-    decodeExtensions :: PartialBinaryDecoder DecodingError M.AuthenticatorExtensionOutputs
+    decodeExtensions :: PartialBinaryDecoder M.AuthenticatorExtensionOutputs
     decodeExtensions = do
       -- TODO: Extensions are not implemented by this library, see the TODO in the
       -- module documentation of `Crypto.WebAuthn.Model` for more information.
@@ -229,30 +177,29 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
 -- field in the [AuthenticatorAttestationResponse](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
 -- structure This function takes a 'M.SupportedAttestationStatementFormats'
 -- argument to indicate which attestation statement formats are supported.
-decodeAttestationObject :: M.SupportedAttestationStatementFormats -> BS.ByteString -> Either CreatedDecodingError (M.AttestationObject 'True)
+-- structure
+decodeAttestationObject :: M.SupportedAttestationStatementFormats -> BS.ByteString -> Either Text (M.AttestationObject 'True)
 decodeAttestationObject supportedFormats bytes = do
-  (_consumed, result) <- first CreatedDecodingErrorCommon $ runPartialBinaryDecoder bytes (runCBOR CBOR.decodeTerm)
+  (_consumed, result) <- runPartialBinaryDecoder bytes (runCBOR CBOR.decodeTerm)
   pairs <- case result of
     CBOR.TMap pairs -> return pairs
-    _ -> Left $ CreatedDecodingErrorUnexpectedAttestationObject result
+    _ -> Left $ "The attestation object should be a CBOR map, but it's not: " <> Text.pack (show result)
 
   -- https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object
   case (CBOR.TString "authData" `lookup` pairs, CBOR.TString "fmt" `lookup` pairs, CBOR.TString "attStmt" `lookup` pairs) of
     (Just (CBOR.TBytes authDataBytes), Just (CBOR.TString fmt), Just (CBOR.TMap attStmtPairs)) -> do
-      aoAuthData <- first CreatedDecodingErrorCommon $ decodeAuthenticatorData authDataBytes
+      aoAuthData <- decodeAuthenticatorData authDataBytes
 
       case M.sasfLookup fmt supportedFormats of
-        Nothing -> Left $ CreatedDecodingErrorUnknownAttestationStatementFormat fmt
+        Nothing -> Left $ "Unknown attestation statement format: " <> fmt
         Just (M.SomeAttestationStatementFormat aoFmt) -> do
           attStmtMap <-
             HashMap.fromList <$> forM attStmtPairs \case
               (CBOR.TString text, term) -> pure (text, term)
-              (nonString, _) -> Left $ CreatedDecodingErrorUnexpectedAttestationStatementKey nonString
-          aoAttStmt <-
-            first (CreatedDecodingErrorAttestationStatement . SomeException) $
-              M.asfDecode aoFmt attStmtMap
+              (nonString, _) -> Left $ "Unexpected non-string attestation statement key: " <> Text.pack (show nonString)
+          aoAttStmt <- M.asfDecode aoFmt attStmtMap
           pure M.AttestationObject {..}
-    _ -> Left $ CreatedDecodingErrorUnexpectedAttestationObject result
+    _ -> Left $ "The attestation object doesn't have the expected structure of (authData: bytes, fmt: string, attStmt: map): " <> Text.pack (show result)
 
 --- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
 --- Intermediate type used to extract the JSON structure stored in the
@@ -274,16 +221,20 @@ data ClientDataJSON = ClientDataJSON
 -- to parse the [clientDataJSON](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
 -- field in the [AuthenticatorResponse](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
 -- structure, which is used for both attestation and assertion
-decodeCollectedClientData :: forall t. SingI t => BS.ByteString -> Either DecodingError (M.CollectedClientData t 'True)
+decodeCollectedClientData :: forall t. SingI t => BS.ByteString -> Either Text (M.CollectedClientData t 'True)
 decodeCollectedClientData bytes = do
   -- https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data
-  ClientDataJSON {..} <- first DecodingErrorClientDataJSON $ Aeson.eitherDecodeStrict bytes
+  ClientDataJSON {..} <-
+    first (("Collected client data JSON decoding error: " <>) . Text.pack) $
+      Aeson.eitherDecodeStrict bytes
   -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
   -- This member contains the base64url encoding of the challenge provided by the
   -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party). See the
   -- [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
   -- security consideration.
-  challenge <- first DecodingErrorClientDataChallenge $ Base64Url.decode (Text.encodeUtf8 challenge)
+  challenge <-
+    first ((("Failed to base64url-decode challenge " <> challenge <> ": ") <>) . Text.pack) $
+      Base64Url.decode (Text.encodeUtf8 challenge)
   -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-type)
   -- This member contains the string "webauthn.create" when creating new credentials,
   -- and "webauthn.get" when getting an assertion from an existing credential.
@@ -292,7 +243,9 @@ decodeCollectedClientData bytes = do
   let expectedType = case sing @t of
         M.SCreate -> "webauthn.create"
         M.SGet -> "webauthn.get"
-  unless (littype == expectedType) $ Left (DecodingErrorUnexpectedWebauthnType expectedType littype)
+  unless (littype == expectedType) $
+    Left $
+      "Expected collected client data to have webauthn type " <> expectedType <> " but it is " <> littype
   pure
     M.CollectedClientData
       { ccdChallenge = M.Challenge challenge,

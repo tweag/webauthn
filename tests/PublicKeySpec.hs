@@ -30,10 +30,10 @@ spec = do
 prop_x509PublicKeyRoundtrip :: PublicKey.PublicKey -> Bool
 prop_x509PublicKeyRoundtrip pubKey =
   case PublicKey.fromX509 (Key.toX509 pubKey) of
-    Just pubKey'
+    Right pubKey'
       | pubKey == pubKey' -> True
       | otherwise -> False
-    Nothing -> False
+    Left _ -> False
 
 prop_signverify :: Integer -> Key.KeyPair -> BS.ByteString -> Bool
 prop_signverify seed Key.KeyPair {..} msg = do

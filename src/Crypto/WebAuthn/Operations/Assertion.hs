@@ -23,6 +23,7 @@ where
 
 import qualified Codec.CBOR.Read as CBOR
 import Codec.Serialise (decode)
+import Control.Exception (Exception)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Key as Cose
@@ -34,6 +35,7 @@ import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
+import Data.Text (Text)
 import Data.Validation (Validation)
 
 -- | Errors that may occur during [assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
@@ -69,8 +71,8 @@ data AssertionError
   | -- | The public key provided in the 'CredentialEntry' could not be decoded
     AssertionSignatureDecodingError CBOR.DeserialiseFailure
   | -- | the public key does verify the signature over the authData
-    AssertionInvalidSignature PublicKey.PublicKey BS.ByteString M.AssertionSignature String
-  deriving (Show)
+    AssertionInvalidSignature PublicKey.PublicKey BS.ByteString M.AssertionSignature Text
+  deriving (Show, Exception)
 
 -- | [Section 6.1.1 of the specification](https://www.w3.org/TR/webauthn-2/#sctn-sign-counter)
 -- describes the use of the signature counter, and describes what the relying

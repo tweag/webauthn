@@ -11,7 +11,6 @@
 module Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet
   ( format,
     Format (..),
-    DecodingError (..),
     Statement (..),
     Response (..),
     VerificationError (..),
@@ -41,7 +40,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy as LBS
 import Data.Fixed (Fixed (MkFixed), Milli)
-import Data.HashMap.Lazy (HashMap, (!?))
+import Data.HashMap.Lazy ((!?))
 import qualified Data.Hourglass as HG
 import qualified Data.List.NonEmpty as NE
 import Data.String (IsString)
@@ -121,19 +120,6 @@ instance Aeson.ToJSON Statement where
         "response" .= response
       ]
 
--- | Decoding errors specific to Android SafetyNet
-data DecodingError
-  = -- | The provided CBOR encoded data was malformed. Either because a field
-    -- was missing, or because the field contained the wrong type of data
-    DecodingErrorUnexpectedCBORStructure (HashMap Text.Text CBOR.Term)
-  | -- | And error occured during the decoding of the JOSE data
-    DecodingErrorJOSEError JOSE.Error
-  | -- | The recieved JWS data was not signed
-    DecodingErrorJWSMissingSignature
-  | -- | The JWS header did not contain a x5c field
-    DecodingErrorJWSMissingX5C
-  deriving (Show, Exception)
-
 -- | Verification errors specific to Android SafetyNet
 data VerificationError
   = -- | The receiced nonce was not set to the concatenation of the
@@ -183,15 +169,14 @@ instance M.AttestationStatementFormat Format where
   type AttStmt Format = Statement
   asfIdentifier _ = "android-safetynet"
 
-  type AttStmtDecodingError Format = DecodingError
   asfDecode _ xs =
     case (xs !? "ver", xs !? "response") of
       (Just (TString ver), Just (TBytes responseRaw)) -> do
         jws <-
-          first DecodingErrorJOSEError $
-            runExcept $ JOSE.decodeCompact (LBS.fromStrict responseRaw)
+          first (("Failed to decode compact JWT response blob: " <>) . Text.pack . show) $
+            runExcept @JOSE.Error $ JOSE.decodeCompact (LBS.fromStrict responseRaw)
         response <-
-          first DecodingErrorJOSEError $
+          first (("Failed to verify/decode JWT payload: " <>) . Text.pack . show) $
             JOSE.verifyJWSWithPayload
               (first JOSE.JSONDecodeError . Aeson.eitherDecode)
               (JOSE.defaultJWTValidationSettings (const True))
@@ -199,12 +184,16 @@ instance M.AttestationStatementFormat Format where
               jws
         x5c <- extractX5C jws
         pure $ Statement {..}
-      _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
+      _ -> Left $ "CBOR map didn't have expected types (ver: string, response: bytes): " <> Text.pack (show xs)
     where
-      extractX5C :: JOSE.CompactJWS JOSE.JWSHeader -> Either DecodingError (NE.NonEmpty X509.SignedCertificate)
+      extractX5C :: JOSE.CompactJWS JOSE.JWSHeader -> Either Text (NE.NonEmpty X509.SignedCertificate)
       extractX5C jws = do
-        sig <- maybe (Left DecodingErrorJWSMissingSignature) pure $ jws ^? JOSE.signatures
-        JOSE.HeaderParam () x5c <- maybe (Left DecodingErrorJWSMissingX5C) pure $ sig ^. JOSE.header . JOSE.x5c
+        sig <- case jws ^? JOSE.signatures of
+          Nothing -> Left "Can't extract x5c because the JWT contains no signatures"
+          Just res -> pure res
+        JOSE.HeaderParam () x5c <- case sig ^. JOSE.header . JOSE.x5c of
+          Nothing -> Left "No x5c in the header of the first JWT signature"
+          Just res -> pure res
         pure x5c
 
   asfEncode _ Statement {ver, responseRaw} =

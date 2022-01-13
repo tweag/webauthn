@@ -23,7 +23,6 @@ instance M.AttestationStatementFormat Format where
   type AttStmt Format = ()
   asfIdentifier _ = "none"
 
-  type AttStmtDecodingError Format = Void
   asfDecode _ _ = Right ()
   asfEncode _ _ = CBOR.TMap []
 

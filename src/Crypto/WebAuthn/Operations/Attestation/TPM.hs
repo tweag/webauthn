@@ -10,7 +10,6 @@
 module Crypto.WebAuthn.Operations.Attestation.TPM
   ( format,
     Format (..),
-    DecodingError (..),
     Statement (..),
     VerificationError (..),
     SubjectAlternativeName (..),
@@ -50,7 +49,7 @@ import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.FileEmbed (embedDir)
-import Data.HashMap.Strict (HashMap, (!?))
+import Data.HashMap.Strict ((!?))
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
@@ -241,27 +240,6 @@ instance ToJSON Statement where
         "pubArea" .= pubArea
       ]
 
--- | Decoding errors specific to TPM attestation
-data DecodingError
-  = -- | The provided CBOR encoded data was malformed. Either because a field
-    -- was missing, or because the field contained the wrong type of data
-    DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
-  | -- | There was an error decoding the x5c certificate
-    DecodingErrorCertificate String
-  | -- | Unknown or unsupported COSE algorithm
-    DecodingErrorUnknownAlgorithmIdentifier Int
-  | -- | Error decoding the TPM data
-    DecodingErrorTPM (LBS.ByteString, Get.ByteOffset, String)
-  | -- | A required extension was not found in the
-    -- certificate
-    DecodingErrorCertificateExtensionMissing
-  | -- | A required extension of the certificate could
-    -- not be decoded
-    DecodingErrorCertificateExtension String
-  | -- | We could not extract a valid public key from the TPM data
-    DecodingErrorExtractingPublicKey
-  deriving (Show, Exception)
-
 -- | Verification errors specific to TPM attestation
 data VerificationError
   = -- | The public key in the certificate is different from the on in the
@@ -279,13 +257,13 @@ data VerificationError
     VerificationErrorInvalidName BS.ByteString BS.ByteString
   | -- | The public key in the certificate was invalid, either because the it
     -- had an unexpected algorithm, or because it was otherwise malformed
-    VerificationErrorInvalidPublicKey
+    VerificationErrorInvalidPublicKey Text
   | -- | The certificate didn't have the expected version-value
     -- (first: expected, second: received)
     VerificationErrorCertificateVersion Int Int
   | -- | The Public key cannot verify the signature over the authenticatorData
     -- and the clientDataHash.
-    VerificationErrorVerificationFailure String
+    VerificationErrorVerificationFailure Text
   | -- | The subject field was not empty
     VerificationErrorNonEmptySubjectField
   | -- | The vendor was unknown
@@ -362,44 +340,47 @@ instance M.AttestationStatementFormat Format where
 
   asfIdentifier _ = "tpm"
 
-  type AttStmtDecodingError Format = DecodingError
-
   asfDecode _ xs =
     case (xs !? "ver", xs !? "alg", xs !? "x5c", xs !? "sig", xs !? "certInfo", xs !? "pubArea") of
       (Just (CBOR.TString "2.0"), Just (CBOR.TInt algId), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)), Just (CBOR.TBytes sig), Just (CBOR.TBytes certInfoRaw), Just (CBOR.TBytes pubAreaRaw)) ->
         do
           x5c@(aikCert :| _) <- forM x5cRaw $ \case
             CBOR.TBytes certBytes ->
-              first DecodingErrorCertificate (X509.decodeSignedCertificate certBytes)
-            _ ->
-              Left (DecodingErrorUnexpectedCBORStructure xs)
-          alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (Cose.toCoseSignAlg algId)
+              first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
+            cert ->
+              Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
+          alg <- Cose.toCoseSignAlg algId
           -- The get interface requires lazy bytestrings but we typically use
           -- strict bytestrings in the library, so we have to convert between
           -- them
-          (_, _, certInfo) <- first DecodingErrorTPM $ Get.runGetOrFail getTPMAttest (LBS.fromStrict certInfoRaw)
-          (_, _, pubArea) <- first DecodingErrorTPM $ Get.runGetOrFail getTPMTPublic (LBS.fromStrict pubAreaRaw)
-          pubAreaKey <- maybe (Left DecodingErrorExtractingPublicKey) Right (extractPublicKey pubArea)
+          certInfo <- case Get.runGetOrFail getTPMAttest (LBS.fromStrict certInfoRaw) of
+            Left (_, _, err) -> Left $ "Failed to decode certInfo: " <> Text.pack (show err)
+            Right (_, _, res) -> pure res
+          pubArea <- case Get.runGetOrFail getTPMTPublic (LBS.fromStrict pubAreaRaw) of
+            Left (_, _, err) -> Left $ "Failed to decode pubArea: " <> Text.pack (show err)
+            Right (_, _, res) -> pure res
+          pubAreaKey <- extractPublicKey pubArea
 
           let cert = X509.getCertificate aikCert
+
           subjectAlternativeName <- case X509.extensionGetE (X509.certExtensions cert) of
             Just (Right ext) -> pure ext
-            Just (Left err) -> Left $ DecodingErrorCertificateExtension err
-            Nothing -> Left DecodingErrorCertificateExtensionMissing
+            Just (Left err) -> Left $ "Failed to decode certificate subject alternative name extension: " <> Text.pack err
+            Nothing -> Left "Certificate subject alternative name extension is missing"
           aaguidExt <- case X509.extensionGetE (X509.certExtensions cert) of
             Just (Right ext) -> pure $ Just ext
-            Just (Left err) -> Left $ DecodingErrorCertificateExtension err
+            Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
             Nothing -> pure Nothing
           X509.ExtExtendedKeyUsage extendedKeyUsage <- case X509.extensionGetE (X509.certExtensions cert) of
             Just (Right ext) -> pure ext
-            Just (Left err) -> Left $ DecodingErrorCertificateExtension err
-            Nothing -> Left DecodingErrorCertificateExtensionMissing
+            Just (Left err) -> Left $ "Failed to decode certificate extended key usage extension: " <> Text.pack err
+            Nothing -> Left "Certificate extended key usage extension is missing"
           X509.ExtBasicConstraints basicConstraintsCA _ <- case X509.extensionGetE (X509.certExtensions cert) of
             Just (Right ext) -> pure ext
-            Just (Left err) -> Left $ DecodingErrorCertificateExtension err
-            Nothing -> Left DecodingErrorCertificateExtensionMissing
+            Just (Left err) -> Left $ "Failed to decode certificate basic constraints extension: " <> Text.pack err
+            Nothing -> Left "Certificate basic constraints extension is missing"
           Right $ Statement {..}
-      _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
+      _ -> Left $ "CBOR map didn't have expected value types (ver: \"2.0\", alg: int, x5c: non-empty list, sig: bytes, certInfo: bytes, pubArea: bytes): " <> Text.pack (show xs)
     where
       getTPMAttest :: Get.Get TPMSAttest
       getTPMAttest = do
@@ -475,7 +456,7 @@ instance M.AttestationStatementFormat Format where
         tpmseY <- getTPMByteString
         pure TPMSECCPoint {..}
 
-      extractPublicKey :: TPMTPublic -> Maybe PublicKey.PublicKey
+      extractPublicKey :: TPMTPublic -> Either Text PublicKey.PublicKey
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgRSA,
@@ -499,7 +480,7 @@ instance M.AttestationStatementFormat Format where
                 ecdsaX = tpmseX,
                 ecdsaY = tpmseY
               }
-      extractPublicKey _ = Nothing
+      extractPublicKey key = Left $ "Unsupported TPM public key: " <> Text.pack (show key)
 
   asfEncode _ Statement {..} =
     CBOR.TMap
@@ -588,10 +569,10 @@ instance M.AttestationStatementFormat Format where
       -- attestation public key in aikCert with the algorithm specified in alg.
       let unsignedAikCert = X509.getCertificate aikCert
       case PublicKey.fromX509 $ X509.certPubKey unsignedAikCert of
-        Just certPubKey -> case PublicKey.verify alg certPubKey certInfoRaw sig of
+        Right certPubKey -> case PublicKey.verify alg certPubKey certInfoRaw sig of
           Right () -> pure ()
           Left err -> failure $ VerificationErrorVerificationFailure err
-        Nothing -> failure VerificationErrorInvalidPublicKey
+        Left err -> failure $ VerificationErrorInvalidPublicKey err
 
       -- 4.9 Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation
       -- Statement Certificate Requirements.
@@ -636,9 +617,9 @@ instance M.AttestationStatementFormat Format where
         M.SomeAttestationType $
           M.AttestationTypeVerifiable M.VerifiableAttestationTypeUncertain (M.Fido2Chain x5c)
       where
-        hashWithCorrectAlgorithm :: (MonadFail f, BA.ByteArrayAccess ba, BA.ByteArray bout) => Cose.CoseSignAlg -> ba -> f bout
+        hashWithCorrectAlgorithm :: (BA.ByteArrayAccess ba, BA.ByteArray bout) => Cose.CoseSignAlg -> ba -> Maybe bout
         hashWithCorrectAlgorithm Cose.CoseSignAlgEdDSA _ =
-          fail "No associated hash algorithm for EdDSA"
+          Nothing
         hashWithCorrectAlgorithm (Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256) bytes =
           pure $ BA.convert (Hash.hashWith Hash.SHA256 bytes)
         hashWithCorrectAlgorithm (Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA384) bytes =

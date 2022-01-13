@@ -57,6 +57,8 @@ import qualified Data.ASN1.Types as ASN1
 import Data.Aeson (ToJSON)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.EC as X509
 import GHC.Generics (Generic)
@@ -112,9 +114,9 @@ fromCose Cose.CosePublicKeyECDSA {..} = PublicKeyECDSA {..}
 fromCose Cose.CosePublicKeyRSA {..} = PublicKeyRSA {..}
 
 -- | Turns a X.509 certificates 'X509.PubKey' into a 'PublicKey'
-fromX509 :: X509.PubKey -> Maybe PublicKey
+fromX509 :: X509.PubKey -> Either Text PublicKey
 fromX509 (X509.PubKeyEd25519 key) =
-  Just $
+  Right $
     PublicKeyEdDSA
       { eddsaCurve = Cose.CoseCurveEd25519,
         eddsaX = convert key
@@ -122,34 +124,40 @@ fromX509 (X509.PubKeyEd25519 key) =
 fromX509 (X509.PubKeyEC X509.PubKeyEC_Named {..}) = do
   let curve = ECC.getCurveByName pubkeyEC_name
   ecdsaCurve <- fromCryptCurveECDSA pubkeyEC_name
-  point <- X509.unserializePoint curve pubkeyEC_pub
+  point <- case X509.unserializePoint curve pubkeyEC_pub of
+    Nothing -> Left "Failed to unserialize ECDSA point in X509 certificate"
+    Just res -> pure res
   -- Round up to a full byte
   let byteSize = (ECC.curveSizeBits curve + 7) `div` 8
   case point of
     ECC.Point x y -> do
-      ecdsaX <- i2ospOf byteSize x
-      ecdsaY <- i2ospOf byteSize y
-      Just $ PublicKeyECDSA {..}
-    ECC.PointO -> Nothing
+      ecdsaX <- case i2ospOf byteSize x of
+        Nothing -> Left $ "Failed to convert ECDSA x coordinate integer " <> Text.pack (show x) <> " to bytes of size " <> Text.pack (show byteSize)
+        Just res -> pure res
+      ecdsaY <- case i2ospOf byteSize y of
+        Nothing -> Left $ "Failed to convert ECDSA y coordinate integer " <> Text.pack (show y) <> " to bytes of size " <> Text.pack (show byteSize)
+        Just res -> pure res
+      Right $ PublicKeyECDSA {..}
+    ECC.PointO -> Left "The infinity point is not supported"
 fromX509 (X509.PubKeyRSA RSA.PublicKey {..}) =
-  Just
+  Right
     PublicKeyRSA
       { rsaN = public_n,
         rsaE = public_e
       }
-fromX509 _ = Nothing
+fromX509 key = Left $ "X509 public key algorithm is not supported: " <> Text.pack (show (X509.pubkeyToAlg key))
 
 -- | Verifies an asymmetric signature for a message using a 'Cose.CoseSignAlg'
 -- and a 'PublicKey'. Returns an error if the signature algorithm doesn't
 -- match. Also returns an error if the signature wasn't valid or for other
 -- errors.
-verify :: Cose.CoseSignAlg -> PublicKey -> BS.ByteString -> BS.ByteString -> Either String ()
+verify :: Cose.CoseSignAlg -> PublicKey -> BS.ByteString -> BS.ByteString -> Either Text ()
 verify Cose.CoseSignAlgEdDSA PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} msg sig = do
   key <- case Ed25519.publicKey eddsaX of
-    CryptoFailed err -> Left $ "Failed to create Ed25519 public key: " <> show err
+    CryptoFailed err -> Left $ "Failed to create Ed25519 public key: " <> Text.pack (show err)
     CryptoPassed res -> pure res
   sig <- case Ed25519.signature sig of
-    CryptoFailed err -> Left $ "Failed to create Ed25519 signature: " <> show err
+    CryptoFailed err -> Left $ "Failed to create Ed25519 signature: " <> Text.pack (show err)
     CryptoPassed res -> pure res
   if Ed25519.verify key msg sig
     then Right ()
@@ -166,11 +174,11 @@ verify (Cose.CoseSignAlgECDSA (toCryptHashECDSA -> SomeHashAlgorithm hash)) Publ
   -- the `sig` value MUST be encoded as an ASN.1 DER Ecdsa-Sig-Value, as defined
   -- in [RFC3279](https://www.w3.org/TR/webauthn-2/#biblio-rfc3279) section 2.2.3.
   sig <- case ASN1.decodeASN1' ASN1.DER sig of
-    Left err -> Left $ "Failed to decode ECDSA DER value: " <> show err
+    Left err -> Left $ "Failed to decode ECDSA DER value: " <> Text.pack (show err)
     -- Ecdsa-Sig-Value in https://datatracker.ietf.org/doc/html/rfc3279#section-2.2.3
     Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
       pure $ ECDSA.Signature r s
-    Right asns -> Left $ "Unexpected ECDSA ASN.1 structure: " <> show asns
+    Right asns -> Left $ "Unexpected ECDSA ASN.1 structure: " <> Text.pack (show asns)
 
   if ECDSA.verify hash key sig msg
     then Right ()
@@ -192,7 +200,7 @@ verify (Cose.CoseSignAlgRSA (toCryptHashRSA -> SomeHashAlgorithmASN1 hash)) Publ
     then Right ()
     else Left "RSA Signature invalid"
 verify sigAlg pubKey _ _ =
-  Left $ "Unsupported combination of signature algorithm " <> show sigAlg <> " and public key " <> show pubKey
+  Left $ "Unsupported combination of signature algorithm " <> Text.pack (show sigAlg) <> " and public key " <> Text.pack (show pubKey)
 
 -- | Some cryptonite 'Hash.HashAlgorithm' type, used as a return value of 'toCryptHashECDSA'
 data SomeHashAlgorithm = forall a. Hash.HashAlgorithm a => SomeHashAlgorithm a
@@ -222,8 +230,8 @@ toCryptCurveECDSA Cose.CoseCurveP521 = ECC.SEC_p521r1
 
 -- | Tries to converts a 'ECC.CurveName' to an 'Cose.CoseCurveECDSA'. The inverse
 -- function is 'toCryptCurveECDSA'
-fromCryptCurveECDSA :: ECC.CurveName -> Maybe Cose.CoseCurveECDSA
-fromCryptCurveECDSA ECC.SEC_p256r1 = Just Cose.CoseCurveP256
-fromCryptCurveECDSA ECC.SEC_p384r1 = Just Cose.CoseCurveP384
-fromCryptCurveECDSA ECC.SEC_p521r1 = Just Cose.CoseCurveP521
-fromCryptCurveECDSA _ = Nothing
+fromCryptCurveECDSA :: ECC.CurveName -> Either Text Cose.CoseCurveECDSA
+fromCryptCurveECDSA ECC.SEC_p256r1 = Right Cose.CoseCurveP256
+fromCryptCurveECDSA ECC.SEC_p384r1 = Right Cose.CoseCurveP384
+fromCryptCurveECDSA ECC.SEC_p521r1 = Right Cose.CoseCurveP521
+fromCryptCurveECDSA curve = Left $ "Curve " <> Text.pack (show curve) <> " is not a supported COSE ECDSA public key curve"

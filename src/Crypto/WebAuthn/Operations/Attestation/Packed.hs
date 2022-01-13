@@ -2,14 +2,12 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ViewPatterns #-}
 
 -- | This module implements
 -- [Packed attestation](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation).
 module Crypto.WebAuthn.Operations.Attestation.Packed
   ( format,
     Format (..),
-    DecodingError (..),
     Statement (..),
     VerificationError (..),
   )
@@ -30,7 +28,7 @@ import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
-import Data.HashMap.Strict (HashMap, (!?))
+import Data.HashMap.Strict ((!?))
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust)
@@ -50,8 +48,7 @@ instance Show Format where
 data Statement = Statement
   { alg :: Cose.CoseSignAlg,
     sig :: BS.ByteString,
-    x5c :: Maybe (NE.NonEmpty X509.SignedCertificate),
-    aaguidExt :: Maybe IdFidoGenCeAAGUID
+    x5c :: Maybe (NE.NonEmpty X509.SignedCertificate, IdFidoGenCeAAGUID)
   }
   deriving (Eq, Show)
 
@@ -61,26 +58,8 @@ instance ToJSON Statement where
       ( [ "alg" .= alg,
           "sig" .= sig
         ]
-          ++ maybe [] (\x5c' -> ["x5c" .= x5c']) x5c
+          ++ maybe [] (\(x5c', _) -> ["x5c" .= x5c']) x5c
       )
-
--- | Decoding errors specific to Packed attestation
-data DecodingError
-  = -- | The provided CBOR encoded data was malformed. Either because a field
-    -- was missing, or because the field contained the wrong type of data
-    DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
-  | -- | The algorithm identifier was invalid, or unsupported by the library
-    DecodingErrorUnknownAlgorithmIdentifier Int
-  | -- | The x5c field of the attestation statement could not be decoded for
-    -- the provided reason
-    DecodingErrorCertificate String
-  | -- | The required id-fido-gen-ce-aaguid extension was not found in the
-    -- certificate
-    DecodingErrorCertificateExtensionMissing
-  | -- | The required id-fido-gen-ce-aaguid extension of the certificate could
-    -- not be decoded
-    DecodingErrorCertificateExtension String
-  deriving (Show, Exception)
 
 -- | Verification errors specific to Packed attestation
 data VerificationError
@@ -89,7 +68,7 @@ data VerificationError
     VerificationErrorAlgorithmMismatch
   | -- | The statement key cannot verify the signature over the attested
     -- credential data and client data for self attestation
-    VerificationErrorInvalidSignature String
+    VerificationErrorInvalidSignature Text
   | -- | The statement certificate cannot verify the signature over the attested
     -- credential data and client data for nonself attestation
     VerificationErrorVerificationFailure X509.SignatureFailure
@@ -112,37 +91,32 @@ instance M.AttestationStatementFormat Format where
 
   asfIdentifier _ = "packed"
 
-  type AttStmtDecodingError Format = DecodingError
-
   asfDecode _ xs =
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
-      (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), x5cValue) -> do
-        alg <- maybe (Left $ DecodingErrorUnknownAlgorithmIdentifier algId) Right (Cose.toCoseSignAlg algId)
-        x5c <- case x5cValue of
+      (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), Just (CBOR.TList x5cRaw)) -> do
+        alg <- Cose.toCoseSignAlg algId
+        x5c <- case NE.nonEmpty x5cRaw of
           Nothing -> pure Nothing
-          Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)) -> do
-            chain <- forM x5cRaw $ \case
+          Just x5cBytes -> do
+            x5c@(signedCert :| _) <- forM x5cBytes $ \case
               CBOR.TBytes certBytes ->
-                first DecodingErrorCertificate (X509.decodeSignedCertificate certBytes)
-              _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
-            pure $ Just chain
-          _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
+                first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
+              cert ->
+                Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
 
-        aaguidExt <- case x5c of
-          Nothing -> pure Nothing
-          Just chain -> do
-            let cert = X509.getCertificate $ NE.head chain
-            case X509.extensionGetE (X509.certExtensions cert) of
-              Just (Right ext) -> pure $ Just ext
-              Just (Left err) -> Left $ DecodingErrorCertificateExtension err
-              Nothing -> pure Nothing
+            let cert = X509.getCertificate signedCert
+            aaguidExt <- case X509.extensionGetE (X509.certExtensions cert) of
+              Just (Right ext) -> pure ext
+              Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
+              Nothing -> Left "Certificate aaguid extension is missing"
+            pure $ Just (x5c, aaguidExt)
         pure $ Statement {..}
-      _ -> Left $ DecodingErrorUnexpectedCBORStructure xs
+      _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, x5c: list): " <> Text.pack (show xs)
 
   asfEncode _ Statement {alg, sig, x5c} =
     let encodedx5c = case x5c of
           Nothing -> []
-          Just certChain -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
+          Just (certChain, _) -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
      in CBOR.TMap
           [ (CBOR.TString "sig", CBOR.TBytes sig),
             (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
@@ -154,7 +128,7 @@ instance M.AttestationStatementFormat Format where
   asfVerify
     _
     _
-    Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c, aaguidExt}
+    Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c}
     M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
       let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
@@ -175,7 +149,7 @@ instance M.AttestationStatementFormat Format where
           pure $ M.SomeAttestationType M.AttestationTypeSelf
 
         -- Basic, AttCA
-        Just x5c@(certCred :| _) -> do
+        Just (x5c@(certCred :| _), IdFidoGenCeAAGUID credAAGUID) -> do
           let cert = X509.getCertificate certCred
               pubKey = X509.certPubKey cert
           -- Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using
@@ -198,10 +172,7 @@ instance M.AttestationStatementFormat Format where
           -- If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that
           -- the value of this extension matches the aaguid in authenticatorData.
           let aaguid = M.acdAaguid credData
-
-          case aaguidExt of
-            Just (IdFidoGenCeAAGUID credAAGUID) -> unless (aaguid == credAAGUID) $ failure VerificationErrorCertificateAAGUIDMismatch
-            Nothing -> pure ()
+          unless (aaguid == credAAGUID) $ failure VerificationErrorCertificateAAGUIDMismatch
 
           pure $
             M.SomeAttestationType $
