@@ -42,6 +42,7 @@ import Crypto.JWT
     verifyClaims,
   )
 import Crypto.WebAuthn.DateOrphans ()
+import qualified Crypto.WebAuthn.Internal.X509Validation as X509
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
@@ -73,7 +74,7 @@ data RootCertificate = RootCertificate
 -- | Errors related to the processing of the metadata
 data ProcessingError
   = -- | An error wrapping the errors encountered by the X509 Validation
-    ProcessingValidationErrors [X509.FailedReason]
+    ProcessingValidationErrors (NE.NonEmpty X509.FailedReason)
   | -- | There was no x5c header present in the metadata JWT
     ProcessingMissingX5CHeader
   | -- | An error wrapping the general Errors from the JOSE library
@@ -148,12 +149,12 @@ instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationK
             (hostName, "")
             (X509.CertificateChain (NE.toList chain))
 
-    case validationErrors of
-      [] -> do
+    case NE.nonEmpty validationErrors of
+      Nothing -> do
         -- Create a JWK from the leaf certificate, which is used to sign the payload
         jwk <- fromX509Certificate (NE.head chain)
         return [jwk]
-      errors ->
+      Just errors ->
         throwError $ ProcessingValidationErrors errors
 
 -- | Extracts a FIDO Metadata payload JSON value from a JWT bytestring according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html

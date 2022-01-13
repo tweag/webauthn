@@ -70,6 +70,7 @@ library
     Crypto.WebAuthn.Cose.Registry,
     Crypto.WebAuthn.DateOrphans,
     Crypto.WebAuthn.EncodingUtils,
+    Crypto.WebAuthn.Internal.X509Validation,
     Crypto.WebAuthn.Metadata.Service.Decode,
     Crypto.WebAuthn.Metadata.Service.IDL,
     Crypto.WebAuthn.Metadata.Service.Types,
