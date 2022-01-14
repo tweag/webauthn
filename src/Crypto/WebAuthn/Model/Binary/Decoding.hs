@@ -223,16 +223,12 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
       (_, _extensions :: CBOR.Term) <- runCBOR CBOR.decodeTerm
       pure M.AuthenticatorExtensionOutputs {}
 
--- | Decodes a 'M.AttestationObject' from a 'BS.ByteString'. This is needed
--- to parse a clients webauthn response for attestation only. This function takes
--- a 'M.SupportedAttestationStatementFormats' argument to indicate which
--- attestation statement formats are supported.
---
 -- | Decodes a 'M.AttestationObject' from a 'BS.ByteString'.
 -- This is needed to parse a webauthn clients
 -- [attestationObject](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
 -- field in the [AuthenticatorAttestationResponse](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
--- structure
+-- structure This function takes a 'M.SupportedAttestationStatementFormats'
+-- argument to indicate which attestation statement formats are supported.
 decodeAttestationObject :: M.SupportedAttestationStatementFormats -> BS.ByteString -> Either CreatedDecodingError (M.AttestationObject 'True)
 decodeAttestationObject supportedFormats bytes = do
   (_consumed, result) <- first CreatedDecodingErrorCommon $ runPartialBinaryDecoder bytes (runCBOR CBOR.decodeTerm)
