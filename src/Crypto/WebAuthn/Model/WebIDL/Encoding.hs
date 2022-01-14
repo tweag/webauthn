@@ -11,7 +11,7 @@
 -- and [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- methods while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
-module Crypto.WebAuthn.Model.JavaScript.Encoding
+module Crypto.WebAuthn.Model.WebIDL.Encoding
   ( encodePublicKeyCredentialCreationOptions,
     encodePublicKeyCredentialRequestOptions,
     encodeCreatedPublicKeyCredential,
@@ -20,10 +20,10 @@ module Crypto.WebAuthn.Model.JavaScript.Encoding
 where
 
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
-import qualified Crypto.WebAuthn.Model.JavaScript as JS
-import Crypto.WebAuthn.Model.JavaScript.Types (Convert (JS))
+import qualified Crypto.WebAuthn.Model.Types as M
+import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (JS))
+import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Map as Map
@@ -104,14 +104,14 @@ instance Encode M.AttestationConveyancePreference where
 
 instance Encode M.PublicKeyCredentialRpEntity where
   encode M.PublicKeyCredentialRpEntity {..} =
-    JS.PublicKeyCredentialRpEntity
+    IDL.PublicKeyCredentialRpEntity
       { id = encode pkcreId,
         name = encode pkcreName
       }
 
 instance Encode M.PublicKeyCredentialUserEntity where
   encode M.PublicKeyCredentialUserEntity {..} =
-    JS.PublicKeyCredentialUserEntity
+    IDL.PublicKeyCredentialUserEntity
       { id = encode pkcueId,
         displayName = encode pkcueDisplayName,
         name = encode pkcueName
@@ -121,14 +121,14 @@ instance Encode [M.PublicKeyCredentialParameters] where
   encode = map encodeParameters
     where
       encodeParameters M.PublicKeyCredentialParameters {..} =
-        JS.PublicKeyCredentialParameters
+        IDL.PublicKeyCredentialParameters
           { littype = encode pkcpTyp,
             alg = encode pkcpAlg
           }
 
 instance Encode M.PublicKeyCredentialDescriptor where
   encode M.PublicKeyCredentialDescriptor {..} =
-    JS.PublicKeyCredentialDescriptor
+    IDL.PublicKeyCredentialDescriptor
       { littype = encode pkcdTyp,
         id = encode pkcdId,
         transports = encode pkcdTransports
@@ -136,7 +136,7 @@ instance Encode M.PublicKeyCredentialDescriptor where
 
 instance Encode M.AuthenticatorSelectionCriteria where
   encode M.AuthenticatorSelectionCriteria {..} =
-    JS.AuthenticatorSelectionCriteria
+    IDL.AuthenticatorSelectionCriteria
       { authenticatorAttachment = encode ascAuthenticatorAttachment,
         residentKey = encode ascResidentKey,
         -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
@@ -150,7 +150,7 @@ instance Encode [M.PublicKeyCredentialDescriptor] where
 
 instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
   encode M.PublicKeyCredentialCreationOptions {..} =
-    JS.PublicKeyCredentialCreationOptions
+    IDL.PublicKeyCredentialCreationOptions
       { rp = encode pkcocRp,
         user = encode pkcocUser,
         challenge = encode pkcocChallenge,
@@ -164,7 +164,7 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
 
 instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
   encode M.PublicKeyCredentialRequestOptions {..} =
-    JS.PublicKeyCredentialRequestOptions
+    IDL.PublicKeyCredentialRequestOptions
       { challenge = encode pkcogChallenge,
         timeout = encode pkcogTimeout,
         rpId = encode pkcogRpId,
@@ -178,7 +178,7 @@ instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
 -- of the client.
 instance Encode (M.PublicKeyCredential 'M.Create 'True) where
   encode M.PublicKeyCredential {..} =
-    JS.PublicKeyCredential
+    IDL.PublicKeyCredential
       { rawId = encode pkcIdentifier,
         response = encode pkcResponse,
         -- TODO: Extensions are not implemented by this library, see the TODO in the
@@ -192,7 +192,7 @@ instance SingI t => Encode (M.CollectedClientData t 'True) where
 
 instance Encode (M.AuthenticatorResponse 'M.Get 'True) where
   encode M.AuthenticatorAssertionResponse {..} =
-    JS.AuthenticatorAssertionResponse
+    IDL.AuthenticatorAssertionResponse
       { clientDataJSON = encode argClientData,
         authenticatorData = IDL.URLEncodedBase64 $ M.unRaw $ M.adRawData argAuthenticatorData,
         signature = IDL.URLEncodedBase64 $ M.unAssertionSignature argSignature,
@@ -201,7 +201,7 @@ instance Encode (M.AuthenticatorResponse 'M.Get 'True) where
 
 instance Encode (M.PublicKeyCredential 'M.Get 'True) where
   encode M.PublicKeyCredential {..} =
-    JS.PublicKeyCredential
+    IDL.PublicKeyCredential
       { rawId = encode pkcIdentifier,
         response = encode pkcResponse,
         -- TODO: Extensions are not implemented by this library, see the TODO in the
@@ -212,7 +212,7 @@ instance Encode (M.PublicKeyCredential 'M.Get 'True) where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
 instance Encode (M.AuthenticatorResponse 'M.Create 'True) where
   encode M.AuthenticatorAttestationResponse {..} =
-    JS.AuthenticatorAttestationResponse
+    IDL.AuthenticatorAttestationResponse
       { clientDataJSON = encode arcClientData,
         attestationObject = encode arcAttestationObject
       }
@@ -221,32 +221,32 @@ instance Encode (M.AuthenticatorResponse 'M.Create 'True) where
 instance Encode (M.AttestationObject 'True) where
   encode ao = IDL.URLEncodedBase64 $ ME.encodeAttestationObject ao
 
--- | Encodes a 'JS.PublicKeyCredentialCreationOptions', corresponding to the
--- [`PublicKeyCredentialCreationOptions` dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
+-- | Encodes a @'M.PublicKeyCredentialOptions' M.Create@, corresponding to the
+-- [@PublicKeyCredentialCreationOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 -- to be passed to the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- method while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 encodePublicKeyCredentialCreationOptions ::
   M.PublicKeyCredentialOptions 'M.Create ->
-  JS.PublicKeyCredentialCreationOptions
+  IDL.PublicKeyCredentialCreationOptions
 encodePublicKeyCredentialCreationOptions = encode
 
--- | Encodes a 'JS.PublicKeyCredentialRequestOptions', corresponding to the
--- [`PublicKeyCredentialRequestOptions` dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
+-- | Encodes a @'M.PublicKeyCredentialOptions' M.Get@, corresponding to the
+-- [@PublicKeyCredentialRequestOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
 -- to be passed to the [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- method while [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 encodePublicKeyCredentialRequestOptions ::
   M.PublicKeyCredentialOptions 'M.Get ->
-  JS.PublicKeyCredentialRequestOptions
+  IDL.PublicKeyCredentialRequestOptions
 encodePublicKeyCredentialRequestOptions = encode
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- Encodes the PublicKeyCredential for attestation, this function is mostly used in the tests where we emulate the
 -- of the client.
-encodeCreatedPublicKeyCredential :: M.PublicKeyCredential 'M.Create 'True -> JS.CreatedPublicKeyCredential
+encodeCreatedPublicKeyCredential :: M.PublicKeyCredential 'M.Create 'True -> IDL.CreatedPublicKeyCredential
 encodeCreatedPublicKeyCredential = encode
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- Encodes the PublicKeyCredential for assertion, this function is mostly used in the tests where we emulate the
 -- of the client.
-encodeRequestedPublicKeyCredential :: M.PublicKeyCredential 'M.Get 'True -> JS.RequestedPublicKeyCredential
+encodeRequestedPublicKeyCredential :: M.PublicKeyCredential 'M.Get 'True -> IDL.RequestedPublicKeyCredential
 encodeRequestedPublicKeyCredential = encode

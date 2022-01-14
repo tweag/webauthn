@@ -60,7 +60,7 @@ data CoseKeyCommonParameter
   | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-struct-15#section-7.1)
     --
     -- * COSE value type: tstr / int
-    -- * Value registry: 'CoseAlgorithm'
+    -- * Value registry: 'CoseSignAlg'
     -- * Description: Key usage restriction to this algorithm
     --
     -- This parameter is used to restrict the algorithm that is used
@@ -191,15 +191,15 @@ data CoseHashAlgRSA
 
 -- | Serialises COSE Algorithms using the @Value@ column from the
 -- [COSE Algorithms registry](https://www.iana.org/assignments/cose/cose.xhtml#algorithms).
--- This uses the 'fromCoseAlgorithm' and 'toCoseAlgorithm' functions to do the
+-- This uses the 'fromCoseSignAlg' and 'toCoseSignAlg' functions to do the
 -- encoding and decoding respectively.
 instance Serialise CoseSignAlg where
   encode = encodeInt . fromCoseSignAlg
   decode = decodeIntCanonical >>= toCoseSignAlg
 
--- | Converts a 'CoseAlgorithm' to the corresponding integer value from the
+-- | Converts a 'CoseSignAlg' to the corresponding integer value from the
 -- [COSE Algorithms registry](https://www.iana.org/assignments/cose/cose.xhtml#algorithms).
--- The inverse operation is 'toCoseAlgorithm'
+-- The inverse operation is 'toCoseSignAlg'
 fromCoseSignAlg :: Num p => CoseSignAlg -> p
 fromCoseSignAlg (CoseSignAlgRSA CoseHashAlgRSASHA1) = -65535
 fromCoseSignAlg (CoseSignAlgRSA CoseHashAlgRSASHA512) = -259
@@ -210,10 +210,10 @@ fromCoseSignAlg (CoseSignAlgECDSA CoseHashAlgECDSASHA384) = -35
 fromCoseSignAlg CoseSignAlgEdDSA = -8
 fromCoseSignAlg (CoseSignAlgECDSA CoseHashAlgECDSASHA256) = -7
 
--- | Converts an integer value to the corresponding 'CoseAlgorithm' from the
+-- | Converts an integer value to the corresponding 'CoseSignAlg' from the
 -- [COSE Algorithms registry](https://www.iana.org/assignments/cose/cose.xhtml#algorithms).
 -- Returns an error if the integer doesn't represent a known algorithm.
--- The inverse operation is 'fromCoseAlgorithm'
+-- The inverse operation is 'fromCoseSignAlg'
 toCoseSignAlg :: (Eq a, Num a, MonadFail f, Show a) => a -> f CoseSignAlg
 toCoseSignAlg (-65535) = pure (CoseSignAlgRSA CoseHashAlgRSASHA1)
 toCoseSignAlg (-259) = pure (CoseSignAlgRSA CoseHashAlgRSASHA512)

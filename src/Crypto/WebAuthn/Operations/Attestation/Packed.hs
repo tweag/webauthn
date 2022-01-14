@@ -4,6 +4,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- | This module implements
+-- [Packed attestation](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation).
 module Crypto.WebAuthn.Operations.Attestation.Packed
   ( format,
     Format (..),
@@ -18,8 +20,9 @@ import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
+import Crypto.WebAuthn.Identifier (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import qualified Data.ASN1.OID as OID
@@ -36,6 +39,8 @@ import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 
+-- | The Packed format. The sole purpose of this type is to instantiate the
+-- AttestationStatementFormat typeclass below.
 data Format = Format
 
 instance Show Format where
@@ -59,6 +64,7 @@ instance ToJSON Statement where
           ++ maybe [] (\x5c' -> ["x5c" .= x5c']) x5c
       )
 
+-- | Decoding errors specific to Packed attestation
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field
     -- was missing, or because the field contained the wrong type of data
@@ -76,6 +82,7 @@ data DecodingError
     DecodingErrorCertificateExtension String
   deriving (Show, Exception)
 
+-- | Verification errors specific to Packed attestation
 data VerificationError
   = -- | The Algorithm from the attestation format does not match the algorithm
     -- of the key in the credential data
@@ -208,5 +215,7 @@ instance M.AttestationStatementFormat Format where
 
   asfTrustAnchors _ _ = mempty
 
+-- | Helper function that wraps the Packed format into the general
+-- SomeAttestationStatementFormat type.
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

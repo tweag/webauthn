@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- | <https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html>
-module Crypto.WebAuthn.Metadata.Statement.IDL
+module Crypto.WebAuthn.Metadata.Statement.WebIDL
   ( -- * Types
     AAGUID (..),
     CodeAccuracyDescriptor (..),
@@ -26,9 +26,9 @@ module Crypto.WebAuthn.Metadata.Statement.IDL
   )
 where
 
-import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), EnumJSONEncoding, JSONEncoding)
-import qualified Crypto.WebAuthn.Registry as Registry
-import qualified Crypto.WebAuthn.UAF as UAF
+import qualified Crypto.WebAuthn.FidoRegistry as Registry
+import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), EnumJSONEncoding, JSONEncoding)
+import qualified Crypto.WebAuthn.Metadata.UAF as UAF
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.List.NonEmpty (NonEmpty)

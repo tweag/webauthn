@@ -6,9 +6,16 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- | This module implements
+-- [Apple attestation](https://www.w3.org/TR/webauthn-2/#sctn-apple-anonymous-attestation).
+-- Note that the Apple attestation format is the only one not tracked by
+-- [IANA](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids).
 module Crypto.WebAuthn.Operations.Attestation.Apple
   ( format,
     Format (..),
+    DecodingError (..),
+    Statement (..),
+    VerificationError (..),
   )
 where
 
@@ -17,8 +24,8 @@ import Control.Exception (Exception)
 import Control.Monad (forM)
 import Control.Monad.Cont (unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (failure)
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
@@ -34,11 +41,14 @@ import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 
+-- | The Apple format. The sole purpose of this type is to instantiate the
+-- AttestationStatementFormat typeclass below.
 data Format = Format
 
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
 
+-- | Decoding errors specific to Apple attestation
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field
     -- was missing, or because the field contained the wrong type of data
@@ -51,6 +61,7 @@ data DecodingError
     DecodingErrorCertificateExtensionMissing
   deriving (Show, Exception)
 
+-- | Verification errors specific to Apple attestation
 data VerificationError
   = -- | The nonce found in the certificate extension does not match the
     -- expected nonce
@@ -177,5 +188,7 @@ rootCertificate = case X509.decodeSignedCertificate $(embedFile "root-certs/appl
   Left err -> error $ "Error while decoding Apple root certificate: " <> err
   Right cert -> cert
 
+-- | Helper function that wraps the Apple format into the general
+-- SomeAttestationStatementFormat type.
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

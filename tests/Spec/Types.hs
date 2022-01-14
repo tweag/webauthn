@@ -13,8 +13,9 @@ import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Identifier (AAGUID (AAGUID))
 import Crypto.WebAuthn.Model.Kinds (SWebauthnKind (SCreate, SGet))
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.Operations.Attestation.None as None
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ByteString.Lazy as LBS
@@ -27,7 +28,18 @@ import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Spec.Key as Key
 import Spec.Util (runSeededMonadRandom)
-import Test.QuickCheck (Arbitrary (arbitrary), Gen, arbitraryBoundedEnum, elements, frequency, liftArbitrary, oneof, resize, shuffle, sublistOf)
+import Test.QuickCheck
+  ( Arbitrary (arbitrary),
+    Gen,
+    arbitraryBoundedEnum,
+    elements,
+    frequency,
+    liftArbitrary,
+    oneof,
+    resize,
+    shuffle,
+    sublistOf,
+  )
 import Test.QuickCheck.Instances.Text ()
 
 instance Arbitrary Key.KeyPair where
@@ -146,9 +158,9 @@ instance SingI t => Arbitrary (M.AttestedCredentialData t 'False) where
     SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
     SGet -> pure M.NoAttestedCredentialData
 
-instance Arbitrary M.AAGUID where
+instance Arbitrary AAGUID where
   arbitrary =
-    M.AAGUID
+    AAGUID
       <$> frequency
         [ (1, pure UUID.nil),
           (10, randomUUID <$> arbitrary)

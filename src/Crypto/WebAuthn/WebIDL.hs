@@ -75,4 +75,5 @@ instance Aeson.FromJSON BufferSource where
 instance Aeson.ToJSON BufferSource where
   toJSON (URLEncodedBase64 bs) = Aeson.String . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
 
+-- | [(spec)](https://webidl.spec.whatwg.org/#idl-ArrayBuffer)
 type ArrayBuffer = BufferSource

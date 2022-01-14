@@ -20,7 +20,7 @@ import Codec.Serialise (Serialise (decode, encode))
 import Control.Monad (unless)
 import Crypto.Number.Serialize (i2osp, os2ip)
 import qualified Crypto.WebAuthn.Cose.Registry as R
-import Crypto.WebAuthn.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans ()
 import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
 import GHC.Generics (Generic)

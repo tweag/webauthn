@@ -5,12 +5,23 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- | This module implements
+-- [TPM attestation](https://www.w3.org/TR/webauthn-2/#sctn-tpm-attestation).
 module Crypto.WebAuthn.Operations.Attestation.TPM
   ( format,
     Format (..),
     DecodingError (..),
     Statement (..),
     VerificationError (..),
+    SubjectAlternativeName (..),
+    TPMSAttest (..),
+    TPMTPublic (..),
+    TPMSClockInfo (..),
+    TPMSCertifyInfo (..),
+    TPMAlgId (..),
+    TPMAObject,
+    TPMUPublicParms (..),
+    TPMUPublicId (..),
   )
 where
 
@@ -22,8 +33,9 @@ import qualified Crypto.Hash as Hash
 import Crypto.Number.Serialize (os2ip)
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
+import Crypto.WebAuthn.Identifier (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import Data.ASN1.OID (OID)
@@ -107,6 +119,8 @@ tpmGeneratedValue = 0xff544347
 tpmStAttestCertify :: Word16
 tpmStAttestCertify = 0x8017
 
+-- | The TPMS_CLOCK_INFO structure as specified in [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 10.11.1.
 data TPMSClockInfo = TPMSClockInfo
   { tpmsciClock :: Word64,
     tpmsciResetCount :: Word32,
@@ -115,12 +129,17 @@ data TPMSClockInfo = TPMSClockInfo
   }
   deriving (Eq, Show, Generic, ToJSON)
 
+-- | The TPMS_CERTIFY_INFO structure as specified in [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 10.12.3.
 data TPMSCertifyInfo = TPMSCertifyInfo
   { tpmsciName :: BS.ByteString,
     tpmsciQualifiedName :: BS.ByteString
   }
   deriving (Eq, Show, Generic, ToJSON)
 
+-- | The TPMS_ATTEST structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 10.12.8.
 data TPMSAttest = TPMSAttest
   { tpmsaMagic :: Word32,
     tpmsaType :: Word16,
@@ -132,9 +151,14 @@ data TPMSAttest = TPMSAttest
   }
   deriving (Eq, Show, Generic, ToJSON)
 
--- We don't need the flags set in the Object
+-- | The TPMA_OBJECT structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 8.3
 type TPMAObject = Word32
 
+-- | The TPMU_PUBLIC_PARMS structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 12.2.3.7.
 data TPMUPublicParms
   = TPMSRSAParms
       { tpmsrpSymmetric :: Word16,
@@ -150,6 +174,9 @@ data TPMUPublicParms
       }
   deriving (Eq, Show, Generic, ToJSON)
 
+-- | The TPMU_PUBLIC_ID structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 12.2.3.2.
 data TPMUPublicId
   = TPM2BPublicKeyRSA BS.ByteString
   | TPMSECCPoint
@@ -158,6 +185,7 @@ data TPMUPublicId
       }
   deriving (Eq, Show, Generic, ToJSON)
 
+-- | The TPMT_PUBLIC structure (see [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf) section 12.2.4) used by the TPM to represent the credential public key.
 data TPMTPublic = TPMTPublic
   { tpmtpType :: TPMAlgId,
     tpmtpNameAlg :: TPMAlgId,
@@ -169,11 +197,14 @@ data TPMTPublic = TPMTPublic
   }
   deriving (Eq, Show, Generic, ToJSON)
 
+-- | The TPM format. The sole purpose of this type is to instantiate the
+-- AttestationStatementFormat typeclass below.
 data Format = Format
 
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
 
+-- | TPM Subject Alternative Name as described in section 3.2.9 [here](https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf)
 data SubjectAlternativeName = SubjectAlternativeName
   { tpmManufacturer :: Text,
     tpmModel :: Text,
@@ -210,6 +241,7 @@ instance ToJSON Statement where
         "pubArea" .= pubArea
       ]
 
+-- | Decoding errors specific to TPM attestation
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field
     -- was missing, or because the field contained the wrong type of data
@@ -230,6 +262,7 @@ data DecodingError
     DecodingErrorExtractingPublicKey
   deriving (Show, Exception)
 
+-- | Verification errors specific to TPM attestation
 data VerificationError
   = -- | The public key in the certificate is different from the on in the
     -- attested credential data
@@ -635,5 +668,7 @@ rootCertificates = processEntry <$> $(embedDir "root-certs/tpm")
       Right cert -> (Text.takeWhile (/= '/') (Text.pack path), cert)
       Left err -> error $ "Error while decoding certificate " <> path <> ": " <> err
 
+-- | Helper function that wraps the TPM format into the general
+-- SomeAttestationStatementFormat type.
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

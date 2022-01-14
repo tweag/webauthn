@@ -3,6 +3,17 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 
+-- | This module implements assertion of the received authenticator response.
+-- See the WebAuthn
+-- [specification](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
+-- for the algorithm implemented in this module.
+-- Assertion is typically represented as a "login" or "authentication" action
+-- in the front-end.
+-- [Section 7 of the specification](https://www.w3.org/TR/webauthn-2/#sctn-rp-operations)
+-- describes when the relying party must perform assertion. Another relevant
+-- section is
+-- [Section 1.3.3](https://www.w3.org/TR/webauthn-2/#sctn-sample-authentication)
+-- which is a high level overview of the authentication procedure.
 module Crypto.WebAuthn.Operations.Assertion
   ( verifyAssertionResponse,
     AssertionError (..),
@@ -15,8 +26,9 @@ import Codec.Serialise (decode)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle), failure)
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
+import Crypto.WebAuthn.Operations.CredentialEntry (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
@@ -24,6 +36,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Validation (Validation)
 
+-- | Errors that may occur during [assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 data AssertionError
   = -- | The provided Credential was not one explicitly allowed by the server
     -- (first: allowed credentials, second: received credential)
@@ -59,6 +72,38 @@ data AssertionError
     AssertionInvalidSignature PublicKey.PublicKey BS.ByteString M.AssertionSignature String
   deriving (Show)
 
+-- | [Section 6.1.1 of the specification](https://www.w3.org/TR/webauthn-2/#sctn-sign-counter)
+-- describes the use of the signature counter, and describes what the relying
+-- part must do with them. In particular:
+--
+-- The [signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
+-- 's purpose is to aid
+-- [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) in
+-- detecting cloned authenticators. Clone detection is more important for
+-- authenticators with limited protection measures.
+--
+-- A [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) stores
+-- the [signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
+-- of the most recent
+-- [authenticatorGetAssertion](https://www.w3.org/TR/webauthn-2/#authenticatorgetassertion)
+-- operation. (Or the counter from the
+-- [authenticatorMakeCredential](https://www.w3.org/TR/webauthn-2/#authenticatormakecredential)
+-- operation if no
+-- [authenticatorGetAssertion](https://www.w3.org/TR/webauthn-2/#authenticatorgetassertion)
+-- has ever been performed on a credential.) In subsequent
+-- [authenticatorGetAssertion](https://www.w3.org/TR/webauthn-2/#authenticatorgetassertion)
+-- operations, the
+-- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) compares
+-- the stored
+-- [signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
+-- value with the new
+-- `[signCount](https://www.w3.org/TR/webauthn-2/#signcount)` value returned in
+-- the assertion’s
+-- [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data).
+-- If either is non-zero, and the new
+-- `[signCount](https://www.w3.org/TR/webauthn-2/#signcount)` value is less
+-- than or equal to the stored value, a cloned authenticator may exist, or the
+-- authenticator may be malfunctioning.
 data SignatureCounterResult
   = -- | There is no signature counter being used, the database entry doesn't
     -- need to be updated
@@ -70,6 +115,7 @@ data SignatureCounterResult
     SignatureCounterPotentiallyCloned
   deriving (Show)
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 verifyAssertionResponse ::
   -- | The origin of the server
   M.Origin ->

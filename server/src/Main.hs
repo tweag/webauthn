@@ -14,15 +14,14 @@ import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import Crypto.Hash (hash)
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
-import qualified Crypto.WebAuthn.Model.JavaScript as JS
-import Crypto.WebAuthn.Model.JavaScript.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
-import Crypto.WebAuthn.Model.JavaScript.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
-import Crypto.WebAuthn.Operations.Assertion (verifyAssertionResponse)
-import qualified Crypto.WebAuthn.Operations.Assertion as M
+import qualified Crypto.WebAuthn.Model.Types as M
+import Crypto.WebAuthn.Model.WebIDL.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
+import Crypto.WebAuthn.Model.WebIDL.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
+import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
+import Crypto.WebAuthn.Operations.Assertion (SignatureCounterResult (SignatureCounterPotentiallyCloned, SignatureCounterUpdated, SignatureCounterZero), verifyAssertionResponse)
 import Crypto.WebAuthn.Operations.Attestation (AttestationResult (rEntry), allSupportedFormats, verifyAttestationResponse)
-import Crypto.WebAuthn.Operations.Common (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
+import Crypto.WebAuthn.Operations.CredentialEntry (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
 import Data.Aeson (FromJSON, ToJSON, Value (String))
 import qualified Data.Aeson.Encode.Pretty as AP
 import qualified Data.ByteString.Base64.URL as Base64
@@ -188,7 +187,7 @@ beginLogin db pending = do
 
 completeLogin :: M.Origin -> M.RpIdHash -> Database.Connection -> PendingOps -> Scotty.ActionM ()
 completeLogin origin rpIdHash db pending = do
-  credential <- Scotty.jsonData @JS.RequestedPublicKeyCredential
+  credential <- Scotty.jsonData @IDL.RequestedPublicKeyCredential
 
   cred <- case decodeRequestedPublicKeyCredential credential of
     Left err -> do
@@ -220,15 +219,15 @@ completeLogin origin rpIdHash db pending = do
     Success result -> pure result
 
   case newSigCount of
-    M.SignatureCounterZero ->
+    SignatureCounterZero ->
       Scotty.liftAndCatchIO $
         TIO.putStrLn "SignatureCounter is Zero"
-    (M.SignatureCounterUpdated counter) ->
+    (SignatureCounterUpdated counter) ->
       Scotty.liftAndCatchIO $ do
         TIO.putStrLn $ "Updating SignatureCounter to: " <> Text.pack (show counter)
         Database.withTransaction db $
           \tx -> Database.updateSignatureCounter tx (M.pkcIdentifier cred) counter
-    M.SignatureCounterPotentiallyCloned -> Scotty.raiseStatus HTTP.status401 "Signature Counter Cloned"
+    SignatureCounterPotentiallyCloned -> Scotty.raiseStatus HTTP.status401 "Signature Counter Cloned"
 
   setAuthenticatedAs db (ceUserHandle entry)
   let result = String "success"
@@ -273,7 +272,7 @@ completeRegistration ::
   TVar Service.MetadataServiceRegistry ->
   Scotty.ActionM ()
 completeRegistration origin rpIdHash db pending registryVar = do
-  credential <- Scotty.jsonData @JS.CreatedPublicKeyCredential
+  credential <- Scotty.jsonData @IDL.CreatedPublicKeyCredential
   cred <- case decodeCreatedPublicKeyCredential allSupportedFormats credential of
     Left err -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete failed to decode request: " <> jsonText credential <> ": " <> Text.pack (show err)

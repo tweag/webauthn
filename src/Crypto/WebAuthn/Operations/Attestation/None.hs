@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
+-- | Implements None attestation
 module Crypto.WebAuthn.Operations.Attestation.None
   ( format,
     Format (..),
@@ -7,10 +8,12 @@ module Crypto.WebAuthn.Operations.Attestation.None
 where
 
 import qualified Codec.CBOR.Term as CBOR
-import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Data.Text as Text
 import Data.Void (Void)
 
+-- | The None format. The sole purpose of this type is to instantiate the
+-- AttestationStatementFormat typeclass below.
 data Format = Format
 
 instance Show Format where
@@ -29,5 +32,7 @@ instance M.AttestationStatementFormat Format where
 
   asfTrustAnchors _ _ = mempty
 
+-- | Helper function that wraps the None format into the general
+-- SomeAttestationStatementFormat type.
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format

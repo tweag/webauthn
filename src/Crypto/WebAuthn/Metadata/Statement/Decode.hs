@@ -4,6 +4,10 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- |
+-- This module contains functions to further decode
+-- [FIDO Metadata Statement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html)
+-- IDL types defined in 'Crypto.WebAuthn.Metadata.Statement.IDL' into the Haskell-specific types defined in 'Crypto.WebAuthn.Metadata.Statement.Types'
 module Crypto.WebAuthn.Metadata.Statement.Decode
   ( decodeMetadataStatement,
     decodeAAGUID,
@@ -14,13 +18,17 @@ where
 
 import Control.Monad (unless)
 import Crypto.Hash (SHA1, digestFromByteString)
-import qualified Crypto.WebAuthn.Metadata.Statement.IDL as StatementIDL
+import qualified Crypto.WebAuthn.FidoRegistry as Registry
+import Crypto.WebAuthn.Identifier
+  ( AAGUID (AAGUID),
+    AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F),
+    SubjectKeyIdentifier (SubjectKeyIdentifier),
+  )
 import Crypto.WebAuthn.Metadata.Statement.Types (WebauthnAttestationType (WebauthnAttestationAttCA, WebauthnAttestationBasic))
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as StatementTypes
-import qualified Crypto.WebAuthn.Model as M
-import qualified Crypto.WebAuthn.Registry as Registry
-import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier (SubjectKeyIdentifier))
-import qualified Crypto.WebAuthn.UAF as UAF
+import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
+import qualified Crypto.WebAuthn.Metadata.UAF as UAF
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Bifunctor (first)
 import qualified Data.ByteString as BS
@@ -37,18 +45,18 @@ import qualified Data.UUID as UUID
 import qualified Data.X509 as X509
 
 -- | Decodes an 'M.AAGUID' from an [aaguid](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-aaguid) field of a metadata statement or an [aaguid](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-aaguid) field of a metadata service payload entry field
-decodeAAGUID :: StatementIDL.AAGUID -> Either Text (M.AuthenticatorIdentifier 'M.Fido2)
+decodeAAGUID :: StatementIDL.AAGUID -> Either Text (AuthenticatorIdentifier 'M.Fido2)
 decodeAAGUID (StatementIDL.AAGUID aaguidText) = case UUID.fromText aaguidText of
   Nothing -> Left $ "Could not decode metadata aaguid: " <> aaguidText
-  Just aaguid -> Right $ M.AuthenticatorIdentifierFido2 $ M.AAGUID aaguid
+  Just aaguid -> Right $ AuthenticatorIdentifierFido2 $ AAGUID aaguid
 
 -- | Decodes a 'M.SubjectKeyIdentifier' from an [attestationCertificateKeyIdentifiers](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-attestationcertificatekeyidentifiers) field of a metadata statement or an [attestationCertificateKeyIdentifiers](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-attestationcertificatekeyidentifiers) field of a metadata service payload entry
-decodeSubjectKeyIdentifier :: IDL.DOMString -> Either Text (M.AuthenticatorIdentifier 'M.FidoU2F)
+decodeSubjectKeyIdentifier :: IDL.DOMString -> Either Text (AuthenticatorIdentifier 'M.FidoU2F)
 decodeSubjectKeyIdentifier subjectKeyIdentifierText = case Base16.decode (encodeUtf8 subjectKeyIdentifierText) of
   Left err -> Left $ "A attestationCertificateKeyIdentifier failed to parse because it's not a valid base-16 encoding: " <> subjectKeyIdentifierText <> ", error: " <> Text.pack err
   Right bytes -> case digestFromByteString @SHA1 bytes of
     Nothing -> Left $ "A attestationCertificateKeyIdentifier failed to parse because it has the wrong length for a SHA1 hash: " <> subjectKeyIdentifierText
-    Just hash -> Right $ M.AuthenticatorIdentifierFidoU2F $ SubjectKeyIdentifier hash
+    Just hash -> Right $ AuthenticatorIdentifierFidoU2F $ SubjectKeyIdentifier hash
 
 -- | Decodes a 'X509.SignedCertificate' from an [attestationRootCertificates](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-attestationrootcertificates) field of a metadata statement or the [certificate](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-statusreport-certificate) field of a metadata service status report
 decodeCertificate :: IDL.DOMString -> Either Text X509.SignedCertificate

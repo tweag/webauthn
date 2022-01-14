@@ -4,6 +4,10 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- |
+-- This module contains additional Haskell-specific type definitions for the
+-- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
+-- specification
 module Crypto.WebAuthn.Metadata.Service.Types
   ( MetadataServiceRegistry (..),
     MetadataPayload (..),
@@ -13,10 +17,10 @@ module Crypto.WebAuthn.Metadata.Service.Types
   )
 where
 
-import qualified Crypto.WebAuthn.Metadata.Service.IDL as ServiceIDL
+import Crypto.WebAuthn.Identifier (AAGUID, AuthenticatorIdentifier, SubjectKeyIdentifier)
+import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import Crypto.WebAuthn.Metadata.Statement.Types (MetadataStatement)
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
+import qualified Crypto.WebAuthn.Model.Types as M
 import Data.Aeson (ToJSON)
 import Data.HashMap.Strict (HashMap)
 import Data.Hourglass (Date)
@@ -29,7 +33,7 @@ import GHC.Generics (Generic)
 
 -- | A registry of 'MetadataEntry's, allowing fast lookup using 'M.AAGUID's or 'SubjectKeyIdentifier's
 data MetadataServiceRegistry = MetadataServiceRegistry
-  { fido2Entries :: HashMap M.AAGUID (MetadataEntry 'M.Fido2),
+  { fido2Entries :: HashMap AAGUID (MetadataEntry 'M.Fido2),
     fidoU2FEntries :: HashMap SubjectKeyIdentifier (MetadataEntry 'M.FidoU2F)
   }
 
@@ -73,7 +77,7 @@ data MetadataEntry (p :: M.ProtocolKind) = MetadataEntry
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | Same as 'MetadataEntry', but with its type parameter erased
-data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (M.AuthenticatorIdentifier p) (MetadataEntry p)
+data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (AuthenticatorIdentifier p) (MetadataEntry p)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#statusreport-dictionary)
 -- Same as 'StatementIDL.StatusReport', but fully decoded.

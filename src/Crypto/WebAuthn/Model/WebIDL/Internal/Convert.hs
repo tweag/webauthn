@@ -2,14 +2,17 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Crypto.WebAuthn.Model.JavaScript.Types
+-- | This module maps every Model type to a WebIDL type. As the name of the
+-- module and typclass suggest, this is used to perform the conversion between
+-- the WebIDL and Model representations.
+module Crypto.WebAuthn.Model.WebIDL.Internal.Convert
   ( Convert (..),
   )
 where
 
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model as M
-import qualified Crypto.WebAuthn.Model.JavaScript as JS
+import qualified Crypto.WebAuthn.Model.Types as M
+import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Kind (Type)
@@ -31,7 +34,7 @@ instance Convert M.RelyingPartyName where
   type JS M.RelyingPartyName = IDL.DOMString
 
 instance Convert M.PublicKeyCredentialRpEntity where
-  type JS M.PublicKeyCredentialRpEntity = JS.PublicKeyCredentialRpEntity
+  type JS M.PublicKeyCredentialRpEntity = IDL.PublicKeyCredentialRpEntity
 
 instance Convert M.UserHandle where
   type JS M.UserHandle = IDL.BufferSource
@@ -43,7 +46,7 @@ instance Convert M.UserAccountName where
   type JS M.UserAccountName = IDL.DOMString
 
 instance Convert M.PublicKeyCredentialUserEntity where
-  type JS M.PublicKeyCredentialUserEntity = JS.PublicKeyCredentialUserEntity
+  type JS M.PublicKeyCredentialUserEntity = IDL.PublicKeyCredentialUserEntity
 
 instance Convert M.Challenge where
   type JS M.Challenge = IDL.BufferSource
@@ -52,10 +55,10 @@ instance Convert M.PublicKeyCredentialType where
   type JS M.PublicKeyCredentialType = IDL.DOMString
 
 instance Convert Cose.CoseSignAlg where
-  type JS Cose.CoseSignAlg = JS.COSEAlgorithmIdentifier
+  type JS Cose.CoseSignAlg = IDL.COSEAlgorithmIdentifier
 
 instance Convert [M.PublicKeyCredentialParameters] where
-  type JS [M.PublicKeyCredentialParameters] = [JS.PublicKeyCredentialParameters]
+  type JS [M.PublicKeyCredentialParameters] = [IDL.PublicKeyCredentialParameters]
 
 instance Convert M.Timeout where
   type JS M.Timeout = IDL.UnsignedLong
@@ -67,10 +70,10 @@ instance Convert [M.AuthenticatorTransport] where
   type JS [M.AuthenticatorTransport] = [IDL.DOMString]
 
 instance Convert M.PublicKeyCredentialDescriptor where
-  type JS M.PublicKeyCredentialDescriptor = JS.PublicKeyCredentialDescriptor
+  type JS M.PublicKeyCredentialDescriptor = IDL.PublicKeyCredentialDescriptor
 
 instance Convert [M.PublicKeyCredentialDescriptor] where
-  type JS [M.PublicKeyCredentialDescriptor] = Maybe [JS.PublicKeyCredentialDescriptor]
+  type JS [M.PublicKeyCredentialDescriptor] = Maybe [IDL.PublicKeyCredentialDescriptor]
 
 instance Convert M.AuthenticatorAttachment where
   type JS M.AuthenticatorAttachment = IDL.DOMString
@@ -82,7 +85,7 @@ instance Convert M.UserVerificationRequirement where
   type JS M.UserVerificationRequirement = Maybe IDL.DOMString
 
 instance Convert M.AuthenticatorSelectionCriteria where
-  type JS M.AuthenticatorSelectionCriteria = JS.AuthenticatorSelectionCriteria
+  type JS M.AuthenticatorSelectionCriteria = IDL.AuthenticatorSelectionCriteria
 
 instance Convert M.AttestationConveyancePreference where
   type JS M.AttestationConveyancePreference = Maybe IDL.DOMString
@@ -91,22 +94,22 @@ instance Convert M.AuthenticationExtensionsClientInputs where
   type JS M.AuthenticationExtensionsClientInputs = Map Text Aeson.Value
 
 instance Convert (M.PublicKeyCredentialOptions 'M.Create) where
-  type JS (M.PublicKeyCredentialOptions 'M.Create) = JS.PublicKeyCredentialCreationOptions
+  type JS (M.PublicKeyCredentialOptions 'M.Create) = IDL.PublicKeyCredentialCreationOptions
 
 instance Convert (M.PublicKeyCredentialOptions 'M.Get) where
-  type JS (M.PublicKeyCredentialOptions 'M.Get) = JS.PublicKeyCredentialRequestOptions
+  type JS (M.PublicKeyCredentialOptions 'M.Get) = IDL.PublicKeyCredentialRequestOptions
 
 instance Convert (M.PublicKeyCredential 'M.Create raw) where
-  type JS (M.PublicKeyCredential 'M.Create raw) = JS.PublicKeyCredential JS.AuthenticatorAttestationResponse
+  type JS (M.PublicKeyCredential 'M.Create raw) = IDL.PublicKeyCredential IDL.AuthenticatorAttestationResponse
 
 instance Convert (M.AuthenticatorResponse 'M.Create raw) where
-  type JS (M.AuthenticatorResponse 'M.Create raw) = JS.AuthenticatorAttestationResponse
+  type JS (M.AuthenticatorResponse 'M.Create raw) = IDL.AuthenticatorAttestationResponse
 
 instance Convert (M.PublicKeyCredential 'M.Get raw) where
-  type JS (M.PublicKeyCredential 'M.Get raw) = JS.PublicKeyCredential JS.AuthenticatorAssertionResponse
+  type JS (M.PublicKeyCredential 'M.Get raw) = IDL.PublicKeyCredential IDL.AuthenticatorAssertionResponse
 
 instance Convert (M.AuthenticatorResponse 'M.Get raw) where
-  type JS (M.AuthenticatorResponse 'M.Get raw) = JS.AuthenticatorAssertionResponse
+  type JS (M.AuthenticatorResponse 'M.Get raw) = IDL.AuthenticatorAssertionResponse
 
 instance Convert M.AuthenticationExtensionsClientOutputs where
   type JS M.AuthenticationExtensionsClientOutputs = Map Text Aeson.Value

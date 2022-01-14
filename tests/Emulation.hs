@@ -12,10 +12,10 @@ import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
 import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
-import qualified Crypto.WebAuthn.Operations.Common as WebAuthn
+import qualified Crypto.WebAuthn.Operations.CredentialEntry as WebAuthn
 import Data.Bifunctor (Bifunctor (second))
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
@@ -28,7 +28,13 @@ import Emulation.Authenticator
     AuthenticatorSignatureCounter (Unsupported),
   )
 import Emulation.Authenticator.Arbitrary ()
-import Emulation.Client (AnnotatedOrigin (AnnotatedOrigin, aoOrigin, aoRpId), UserAgentConformance, UserAgentNonConformingBehaviour (RandomChallenge), clientAssertion, clientAttestation)
+import Emulation.Client
+  ( AnnotatedOrigin (AnnotatedOrigin, aoOrigin, aoRpId),
+    UserAgentConformance,
+    UserAgentNonConformingBehaviour (RandomChallenge),
+    clientAssertion,
+    clientAttestation,
+  )
 import Emulation.Client.Arbitrary ()
 import System.Hourglass (dateCurrent)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)

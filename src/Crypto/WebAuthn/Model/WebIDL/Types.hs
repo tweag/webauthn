@@ -8,7 +8,7 @@
 -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- and [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get) methods, as used by [Webauthn2](https://www.w3.org/TR/webauthn-2).
 -- Note that these types don't encode the semantics of their values. E.g. if the JavaScript object has a @DOMString@
--- field, but only values @"foo"@ and @"bar"@ are possible, the type is still encoded as a generic 'DOMString'.
+-- field, but only values @"foo"@ and @"bar"@ are possible, the type is still encoded as a generic 'IDL.DOMString'.
 -- This allows us to match the specification very closely, deferring decoding of these values to another module.
 -- This module also implements 'Aeson.FromJSON' and 'Aeson.ToJSON' instances of its types, which are compatible with
 -- [webauthn-json](https://github.com/github/webauthn-json)'s JSON schema.
@@ -26,7 +26,7 @@
 -- - @'PublicKeyCredential' response@ and all its subtypes. Responses of the
 --   [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) (in which case @response ~ 'AuthenticatorAttestationResponse'@) and
 --   [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get) (in which case @response ~ 'AuthenticatorAssertionResponse'@ methods.
-module Crypto.WebAuthn.Model.JavaScript
+module Crypto.WebAuthn.Model.WebIDL.Types
   ( -- * Top-level types
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),
@@ -46,7 +46,7 @@ module Crypto.WebAuthn.Model.JavaScript
   )
 where
 
-import Crypto.WebAuthn.EncodingUtils (CustomJSON (CustomJSON), JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Map (Map)
@@ -179,8 +179,14 @@ deriving via
     Aeson.ToJSON response =>
     Aeson.ToJSON (PublicKeyCredential response)
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- The PublicKey Credential with the response being an
+-- [attestation response](https://www.w3.org/TR/webauthn-2/#authenticatorattestationresponse).
 type CreatedPublicKeyCredential = PublicKeyCredential AuthenticatorAttestationResponse
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
+-- The PublicKey Credential with the response being an
+-- [assertion response](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse).
 type RequestedPublicKeyCredential = PublicKeyCredential AuthenticatorAssertionResponse
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)

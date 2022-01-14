@@ -2,15 +2,15 @@
 
 module Encoding (spec) where
 
-import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Binary.Encoding (encodeRawPublicKeyCredential)
-import Crypto.WebAuthn.Model.JavaScript.Decoding
+import qualified Crypto.WebAuthn.Model.Types as M
+import Crypto.WebAuthn.Model.WebIDL.Decoding
   ( decodeCreatedPublicKeyCredential,
     decodePublicKeyCredentialCreationOptions,
     decodePublicKeyCredentialRequestOptions,
     decodeRequestedPublicKeyCredential,
   )
-import Crypto.WebAuthn.Model.JavaScript.Encoding
+import Crypto.WebAuthn.Model.WebIDL.Encoding
   ( encodeCreatedPublicKeyCredential,
     encodePublicKeyCredentialCreationOptions,
     encodePublicKeyCredentialRequestOptions,

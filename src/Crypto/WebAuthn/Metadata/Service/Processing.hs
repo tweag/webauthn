@@ -3,12 +3,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TupleSections #-}
 
+-- |
+-- This module exposes functions for processing and querying
+-- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
+-- blobs and entries.
 module Crypto.WebAuthn.Metadata.Service.Processing
   ( RootCertificate (..),
     ProcessingError (..),
@@ -34,19 +36,27 @@ import Crypto.JWT
     HasX5u (x5u),
     JWSHeader,
     JWTError,
-    SignedJWT,
     decodeCompact,
     defaultJWTValidationSettings,
     param,
     unregisteredClaims,
     verifyClaims,
   )
-import Crypto.WebAuthn.DateOrphans ()
+import Crypto.WebAuthn.Identifier
+  ( AAGUID,
+    AuthenticatorIdentifier
+      ( AuthenticatorIdentifierFido2,
+        AuthenticatorIdentifierFidoU2F,
+        idAaguid,
+        idSubjectKeyIdentifier
+      ),
+    SubjectKeyIdentifier,
+  )
+import Crypto.WebAuthn.Internal.DateOrphans ()
 import qualified Crypto.WebAuthn.Internal.X509Validation as X509
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.SubjectKeyIdentifier (SubjectKeyIdentifier)
+import qualified Crypto.WebAuthn.Model.Types as M
 import Data.Aeson (Value (Object))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
@@ -167,7 +177,7 @@ jwtToJson ::
   DateTime ->
   Either ProcessingError Value
 jwtToJson blob rootCert now = runExcept $ do
-  jwt :: SignedJWT <- decodeCompact $ LBS.fromStrict blob
+  jwt <- decodeCompact $ LBS.fromStrict blob
   claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
   return $ Object (claims ^. unregisteredClaims)
 
@@ -187,7 +197,7 @@ jsonToPayload value = case Aeson.fromJSON value of
 -- directly
 --
 -- The resulting structure can be queried efficiently for
--- 'Service.MetadataEntry' using 'metadataByAaguid' and 'metadataBySubjectKeyIdentifier'
+-- 'Service.MetadataEntry' using 'queryMetadata'
 createMetadataRegistry :: [Service.SomeMetadataEntry] -> Service.MetadataServiceRegistry
 createMetadataRegistry entries = Service.MetadataServiceRegistry {..}
   where
@@ -200,31 +210,31 @@ createMetadataRegistry entries = Service.MetadataServiceRegistry {..}
     getFido2Pairs' ::
       forall p.
       SingI p =>
-      M.AuthenticatorIdentifier p ->
+      AuthenticatorIdentifier p ->
       Service.MetadataEntry p ->
-      Maybe (M.AAGUID, Service.MetadataEntry 'M.Fido2)
+      Maybe (AAGUID, Service.MetadataEntry 'M.Fido2)
     getFido2Pairs' ident entry = case sing @p of
       M.SFido2 ->
-        Just (M.idAaguid ident, entry)
+        Just (idAaguid ident, entry)
       _ -> Nothing
 
     getFidoU2FPairs' ::
       forall p.
       SingI p =>
-      M.AuthenticatorIdentifier p ->
+      AuthenticatorIdentifier p ->
       Service.MetadataEntry p ->
       Maybe (SubjectKeyIdentifier, Service.MetadataEntry 'M.FidoU2F)
     getFidoU2FPairs' ident entry = case sing @p of
       M.SFidoU2F ->
-        Just (M.idSubjectKeyIdentifier ident, entry)
+        Just (idSubjectKeyIdentifier ident, entry)
       _ -> Nothing
 
 -- | Query a 'Service.MetadataEntry' for an 'M.AuthenticatorIdentifier'
 queryMetadata ::
   Service.MetadataServiceRegistry ->
-  M.AuthenticatorIdentifier p ->
+  AuthenticatorIdentifier p ->
   Maybe (Service.MetadataEntry p)
-queryMetadata registry (M.AuthenticatorIdentifierFido2 aaguid) =
+queryMetadata registry (AuthenticatorIdentifierFido2 aaguid) =
   HashMap.lookup aaguid (Service.fido2Entries registry)
-queryMetadata registry (M.AuthenticatorIdentifierFidoU2F subjectKeyIdentifier) =
+queryMetadata registry (AuthenticatorIdentifierFidoU2F subjectKeyIdentifier) =
   HashMap.lookup subjectKeyIdentifier (Service.fidoU2FEntries registry)

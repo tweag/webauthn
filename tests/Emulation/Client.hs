@@ -17,9 +17,8 @@ where
 
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
-import Crypto.WebAuthn.Model (Challenge (Challenge))
-import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
+import qualified Crypto.WebAuthn.Model.Types as M
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Emulation.Authenticator
@@ -58,7 +57,7 @@ clientAttestation ::
 clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..} conformance authenticator = do
   challenge <-
     if Set.member RandomChallenge conformance
-      then Challenge <$> Random.getRandomBytes 16
+      then M.Challenge <$> Random.getRandomBytes 16
       else pure pkcocChallenge
   let clientData =
         ME.encodeRawCollectedClientData
@@ -114,7 +113,7 @@ clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} co
         xs -> Just xs
   challenge <-
     if Set.member RandomChallenge conformance
-      then Challenge <$> Random.getRandomBytes 16
+      then M.Challenge <$> Random.getRandomBytes 16
       else pure pkcogChallenge
   let clientData =
         ME.encodeRawCollectedClientData

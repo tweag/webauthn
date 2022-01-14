@@ -21,8 +21,8 @@ where
 import Control.Concurrent (forkIO, threadDelay)
 import qualified Control.Concurrent.STM as STM
 import Control.Monad (forever, unless, when)
-import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Kinds (SWebauthnKind (SCreate, SGet))
+import qualified Crypto.WebAuthn.Model.Types as M
 import Data.Binary (Binary (get, put))
 import qualified Data.Binary as Binary
 import qualified Data.Binary.Get as Binary

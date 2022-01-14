@@ -4,6 +4,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- | This module implements
+-- [Android Key attestation](https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation).
 module Crypto.WebAuthn.Operations.Attestation.AndroidKey
   ( format,
     TrustLevel (..),
@@ -11,6 +13,8 @@ module Crypto.WebAuthn.Operations.Attestation.AndroidKey
     DecodingError (..),
     Statement (..),
     VerificationError (..),
+    ExtAttestation (..),
+    AuthorizationList (..),
   )
 where
 
@@ -19,8 +23,8 @@ import Control.Exception (Exception)
 import Control.Monad (forM, unless, void, when)
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operations.Common (failure)
+import Crypto.WebAuthn.Internal.Utils (failure)
+import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
 import Data.ASN1.Types (ASN1 (IntVal, OctetString), ASN1Class (Context), ASN1ConstructionType (Container, Sequence, Set))
@@ -39,21 +43,24 @@ import qualified Data.Text as Text
 import Data.X509 (Extension (extDecode, extEncode, extHasNestedASN1, extOID))
 import qualified Data.X509 as X509
 
+-- | [(spec)](https://source.android.com/security/keystore/attestation#attestation-extension)
+-- The X509 extension android uses for attestation information
 data ExtAttestation = ExtAttestation
   { attestationChallenge :: Digest SHA256,
-    softwareEnforced :: AuthorisationList,
-    teeEnforced :: AuthorisationList
+    softwareEnforced :: AuthorizationList,
+    teeEnforced :: AuthorizationList
   }
   deriving (Eq, Show)
 
-data AuthorisationList = AuthorisationList
+-- | [(spec)](https://source.android.com/security/keystore/attestation#schema)
+-- A partial @AuthorizationList@ structure
+data AuthorizationList = AuthorizationList
   { purpose :: Maybe (Set Integer),
     allApplications :: Maybe (),
     origin :: Maybe Integer
   }
   deriving (Eq, Show)
 
--- | [(spec)](https://source.android.com/security/keystore/attestation#tbscertificate-sequence)
 instance Extension ExtAttestation where
   extOID = const [1, 3, 6, 1, 4, 1, 11129, 2, 1, 17]
   extHasNestedASN1 = const True
@@ -76,7 +83,7 @@ instance Extension ExtAttestation where
         attestationChallengeHash <- maybe (fail "Could not create hash from AttestationChallenge: ") pure $ digestFromByteString attestationChallenge
         pure $ ExtAttestation attestationChallengeHash softwareEnforced teeEnforced
 
-      decodeAttestationList :: ParseASN1 AuthorisationList
+      decodeAttestationList :: ParseASN1 AuthorizationList
       decodeAttestationList = do
         purpose <- onNextContainerMaybe (Container Context 1) (onNextContainer Set $ decodeIntSet Set.empty)
         _algorithm <- getNextContainerMaybe (Container Context 2)
@@ -119,7 +126,7 @@ instance Extension ExtAttestation where
         _attestationIdModel <- getNextContainerMaybe (Container Context 717)
         _vendorPatchLevel <- getNextContainerMaybe (Container Context 718)
         _bootPatchLevel <- getNextContainerMaybe (Container Context 719)
-        pure $ AuthorisationList purpose allApplications origin
+        pure $ AuthorizationList purpose allApplications origin
 
       decodeIntSet :: Set Integer -> ParseASN1 (Set Integer)
       decodeIntSet set = do
@@ -130,10 +137,17 @@ instance Extension ExtAttestation where
             decodeIntSet (Set.insert elem set)
           else pure set
 
+-- | The required Trust level for Android Key attestation.
 data TrustLevel
-  = SoftwareEnforced
-  | TeeEnforced
+  = -- | Trust has to be ensured on the software level. This is weaker than TEE
+    -- enforced trust.
+    SoftwareEnforced
+  | -- | Hardware backed attestation, this requires that the Trusted Executing
+    -- Environment enforced the attestation.
+    TeeEnforced
 
+-- | The Android Key Format. Allow configuration of the required level of
+-- trust.
 newtype Format = Format
   { requiredTrustLevel :: TrustLevel
   }
@@ -161,6 +175,7 @@ instance ToJSON Statement where
         "x5c" .= x5c
       ]
 
+-- | Decoding errors specific to Android Key attestation
 data DecodingError
   = -- | The provided CBOR encoded data was malformed. Either because a field
     -- was missing, or because the field contained the wrong type of data
@@ -179,6 +194,7 @@ data DecodingError
     DecodingErrorPublicKey X509.PubKey
   deriving (Show, Exception)
 
+-- | Verification errors specific to Android Key attestation
 data VerificationError
   = -- | The public key in the certificate is different from the on in the
     -- attested credential data
@@ -303,5 +319,7 @@ instance M.AttestationStatementFormat Format where
 
   asfTrustAnchors _ _ = mempty
 
+-- | The default Android Key format configuration. Requires the attestation to
+-- be backed by a Trusted Executing Environment (TEE).
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat $ Format TeeEnforced

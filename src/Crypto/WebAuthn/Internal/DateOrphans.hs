@@ -1,6 +1,10 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- | This module contains orphan instances connecting different date libraries together:
+-- |
+-- /Warning/: this is an internal module, and does not have a stable
+-- API or name. Use at your own risk!
+--
+-- This module contains orphan instances connecting different date libraries together:
 --
 -- * [time](https://hackage.haskell.org/package/time), a commonly used library
 --   containing the 'UTCTime' type, which is a bit slow and inconvenient to use
@@ -11,12 +15,12 @@
 --   to the time library which is nicer to use. It is used by the
 --   [x509-validation](https://hackage.haskell.org/package/x509-validation) library
 -- * [Data.Fixed](https://hackage.haskell.org/package/base/docs/Data-Fixed.html)
---   in `base`, which is used as the underlying representation of `NominalDiffTime`
---   in the `time` library.
+--   in @base@, which is used as the underlying representation of 'Data.Time.NominalDiffTime'
+--   in the @time@ library.
 --
 -- This module contains a 'Timeable' and 'Time' implementation for 'UTCTime',
 -- and a 'MonadTime' implementation for any 'ReaderT' of a 'Timeable'
-module Crypto.WebAuthn.DateOrphans () where
+module Crypto.WebAuthn.Internal.DateOrphans () where
 
 import Control.Monad.Reader (ReaderT, asks)
 import Control.Monad.Time (MonadTime, currentTime)
