@@ -1,0 +1,29 @@
+#!/usr/bin/env nix-shell
+#!nix-shell -i bash -p jq wget
+set -euo pipefail
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+blobFile=$(realpath "$SCRIPT_DIR"/../tests/golden-metadata/big/blob.jwt)
+payloadFile=$(realpath "$SCRIPT_DIR"/../tests/golden-metadata/big/payload.json)
+
+# Delete old files
+rm -rf "$blobFile"
+rm -rf "$payloadFile"
+
+# Download new file
+wget --no-verbose https://mds.fidoalliance.org/ -O "$blobFile"
+
+jq_query='gsub("-";"+") |
+  gsub("_";"/") |
+  split(".") |
+  .[1] |
+  @base64d |
+  fromjson |
+  .entries |=
+  sort_by(.metadataStatement.protocolFamily, .metadataStatement.description)'
+
+# Use jq to convert blob into normal base64, parse as json and print
+jq -SR "$jq_query" "$blobFile" | \
+  jq 'to_entries | sort_by(.key == "entries") | from_entries' \
+  > "$payloadFile"
