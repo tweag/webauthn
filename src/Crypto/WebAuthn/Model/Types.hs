@@ -1009,7 +1009,6 @@ class
     ToJSON (AttStmt a),
     Typeable a,
     Show a,
-    Exception (AttStmtDecodingError a),
     Exception (AttStmtVerificationError a)
   ) =>
   AttestationStatementFormat a
@@ -1076,17 +1075,13 @@ class
     VerifiableAttestationType ->
     X509.CertificateStore
 
-  -- | The type of decoding errors that can occur when decoding this
-  -- attestation statement using 'asfDecode'
-  type AttStmtDecodingError a :: Type
-
   -- | A decoder for the attestation statement [syntax](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
   -- The @attStmt@ CBOR map is given as an input. See
   -- [Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
   asfDecode ::
     a ->
     HashMap Text CBOR.Term ->
-    Either (AttStmtDecodingError a) (AttStmt a)
+    Either Text (AttStmt a)
 
   -- | An encoder for the attestation statement [syntax](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
   -- The @attStmt@ CBOR map is expected as the result. See

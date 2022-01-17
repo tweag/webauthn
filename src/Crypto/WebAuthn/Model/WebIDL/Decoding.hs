@@ -29,23 +29,23 @@ import qualified Crypto.WebAuthn.Model.Types as M
 import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (JS))
 import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
-import Data.Bifunctor (first)
 import Data.Coerce (Coercible, coerce)
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Singletons (SingI)
+import Data.Text (Text)
 
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be
 -- decoded from the more generic JavaScript type @'JS' a@ with the 'decode' function.
 class Convert a => Decode a where
-  decode :: JS a -> Either MD.DecodingError a
-  default decode :: Coercible (JS a) a => JS a -> Either MD.DecodingError a
+  decode :: JS a -> Either Text a
+  default decode :: Coercible (JS a) a => JS a -> Either Text a
   decode = pure . coerce
 
 -- | Like 'Decode', but with a 'decodeCreated' function that also takes a
 -- 'M.SupportedAttestationStatementFormats' in order to allow decoding to depend
 -- on the supported attestation formats.
 class Convert a => DecodeCreated a where
-  decodeCreated :: M.SupportedAttestationStatementFormats -> JS a -> Either MD.CreatedDecodingError a
+  decodeCreated :: M.SupportedAttestationStatementFormats -> JS a -> Either Text a
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -111,7 +111,7 @@ instance Decode Cose.CoseSignAlg where
   -- assertion/attestation. We implement the check here to go to a Haskell
   -- type. Erring on the side of caution by failing to parse if an unsupported
   -- alg was encountered.
-  decode n = maybe (Left $ MD.DecodingErrorUnexpectedAlgorithmIdentifier n) Right $ Cose.toCoseSignAlg n
+  decode = Cose.toCoseSignAlg
 
 instance Decode M.Timeout
 
@@ -134,7 +134,7 @@ instance Decode [M.PublicKeyCredentialDescriptor] where
   decode Nothing = pure []
   decode (Just xs) = catMaybes <$> traverse decodeDescriptor xs
     where
-      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Either MD.DecodingError (Maybe M.PublicKeyCredentialDescriptor)
+      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Either Text (Maybe M.PublicKeyCredentialDescriptor)
       decodeDescriptor IDL.PublicKeyCredentialDescriptor {littype = "public-key", id, transports} = do
         let pkcdTyp = M.PublicKeyCredentialTypePublicKey
         pkcdId <- decode id
@@ -197,7 +197,7 @@ instance Decode M.AttestationConveyancePreference where
 instance Decode [M.PublicKeyCredentialParameters] where
   decode xs = catMaybes <$> traverse decodeParam xs
     where
-      decodeParam :: IDL.PublicKeyCredentialParameters -> Either MD.DecodingError (Maybe M.PublicKeyCredentialParameters)
+      decodeParam :: IDL.PublicKeyCredentialParameters -> Either Text (Maybe M.PublicKeyCredentialParameters)
       decodeParam IDL.PublicKeyCredentialParameters {littype = "public-key", alg} = do
         let pkcpTyp = M.PublicKeyCredentialTypePublicKey
         pkcpAlg <- decode alg
@@ -236,15 +236,15 @@ instance DecodeCreated (M.AttestationObject 'True) where
 
 instance DecodeCreated (M.AuthenticatorResponse 'M.Create 'True) where
   decodeCreated asfMap IDL.AuthenticatorAttestationResponse {..} = do
-    arcClientData <- first MD.CreatedDecodingErrorCommon $ decode clientDataJSON
+    arcClientData <- decode clientDataJSON
     arcAttestationObject <- decodeCreated asfMap attestationObject
     pure $ M.AuthenticatorAttestationResponse {..}
 
 instance DecodeCreated (M.PublicKeyCredential 'M.Create 'True) where
   decodeCreated asfMap IDL.PublicKeyCredential {..} = do
-    pkcIdentifier <- first MD.CreatedDecodingErrorCommon $ decode rawId
+    pkcIdentifier <- decode rawId
     pkcResponse <- decodeCreated asfMap response
-    pkcClientExtensionResults <- first MD.CreatedDecodingErrorCommon $ decode clientExtensionResults
+    pkcClientExtensionResults <- decode clientExtensionResults
     pure $ M.PublicKeyCredential {..}
 
 -- | Decodes a 'IDL.CreatedPublicKeyCredential' result, corresponding to the
@@ -257,7 +257,7 @@ decodeCreatedPublicKeyCredential ::
   -- can be passed here, but additional or custom formats may also be used if needed
   M.SupportedAttestationStatementFormats ->
   IDL.CreatedPublicKeyCredential ->
-  Either MD.CreatedDecodingError (M.PublicKeyCredential 'M.Create 'True)
+  Either Text (M.PublicKeyCredential 'M.Create 'True)
 decodeCreatedPublicKeyCredential = decodeCreated
 
 -- | Decodes a 'IDL.RequestedPublicKeyCredential' result, corresponding to the
@@ -266,7 +266,7 @@ decodeCreatedPublicKeyCredential = decodeCreated
 -- method while [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 decodeRequestedPublicKeyCredential ::
   IDL.RequestedPublicKeyCredential ->
-  Either MD.DecodingError (M.PublicKeyCredential 'M.Get 'True)
+  Either Text (M.PublicKeyCredential 'M.Get 'True)
 decodeRequestedPublicKeyCredential = decode
 
 -- | Decodes a 'IDL.PublicKeyCredentialCreationOptions', corresponding to the
@@ -276,7 +276,7 @@ decodeRequestedPublicKeyCredential = decode
 -- This function is mainly used for the emulation of the Authenticator tests.
 decodePublicKeyCredentialCreationOptions ::
   IDL.PublicKeyCredentialCreationOptions ->
-  Either MD.DecodingError (M.PublicKeyCredentialOptions 'M.Create)
+  Either Text (M.PublicKeyCredentialOptions 'M.Create)
 decodePublicKeyCredentialCreationOptions = decode
 
 -- | Decodes a 'IDL.PublicKeyCredentialRequestOptions', corresponding to the
@@ -286,5 +286,5 @@ decodePublicKeyCredentialCreationOptions = decode
 -- This function is mainly used for the emulation of the Authenticator tests.
 decodePublicKeyCredentialRequestOptions ::
   IDL.PublicKeyCredentialRequestOptions ->
-  Either MD.DecodingError (M.PublicKeyCredentialOptions 'M.Get)
+  Either Text (M.PublicKeyCredentialOptions 'M.Get)
 decodePublicKeyCredentialRequestOptions = decode

@@ -13,7 +13,6 @@
 module Crypto.WebAuthn.Operations.Attestation.Apple
   ( format,
     Format (..),
-    DecodingError (..),
     Statement (..),
     VerificationError (..),
   )
@@ -33,10 +32,9 @@ import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
 import Data.FileEmbed (embedFile)
-import Data.HashMap.Strict (HashMap, (!?))
+import Data.HashMap.Strict ((!?))
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
@@ -47,19 +45,6 @@ data Format = Format
 
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
-
--- | Decoding errors specific to Apple attestation
-data DecodingError
-  = -- | The provided CBOR encoded data was malformed. Either because a field
-    -- was missing, or because the field contained the wrong type of data
-    DecodingErrorUnexpectedCBORStructure (HashMap Text CBOR.Term)
-  | -- | An error occurred during the decoding of the certificate
-    DecodingErrorCertificate String
-  | -- | An error occurred during the decoding of the public key in the certificate
-    DecodingErrorPublicKey X509.PubKey
-  | -- | The required apple extension is missing from the certificate
-    DecodingErrorCertificateExtensionMissing
-  deriving (Show, Exception)
 
 -- | Verification errors specific to Apple attestation
 data VerificationError
@@ -115,25 +100,25 @@ instance M.AttestationStatementFormat Format where
   type AttStmt Format = Statement
   asfIdentifier _ = "apple"
 
-  type AttStmtDecodingError Format = DecodingError
   asfDecode _ xs = case xs !? "x5c" of
     Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)) -> do
       x5c@(credCert :| _) <- forM x5cRaw $ \case
         CBOR.TBytes certBytes ->
-          first DecodingErrorCertificate (X509.decodeSignedCertificate certBytes)
-        _ ->
-          Left (DecodingErrorUnexpectedCBORStructure xs)
+          first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
+        cert ->
+          Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
 
       let cert = X509.getCertificate credCert
 
-      pubKey <- case PublicKey.fromX509 $ X509.certPubKey cert of
-        Nothing -> Left $ DecodingErrorPublicKey (X509.certPubKey cert)
-        Just key -> pure key
+      pubKey <- PublicKey.fromX509 $ X509.certPubKey cert
 
-      AppleNonceExtension {..} <- maybe (Left DecodingErrorCertificateExtensionMissing) pure $ X509.extensionGet $ X509.certExtensions cert
+      AppleNonceExtension {..} <- case X509.extensionGetE $ X509.certExtensions cert of
+        Just (Right ext) -> pure ext
+        Just (Left err) -> Left $ "Failed to decode certificate apple nonce extension: " <> Text.pack err
+        Nothing -> Left "Certificate apple nonce extension is missing"
 
       pure $ Statement x5c nonce pubKey
-    _ -> Left (DecodingErrorUnexpectedCBORStructure xs)
+    _ -> Left $ "CBOR map didn't have expected value types (x5c: nonempty list): " <> Text.pack (show xs)
 
   asfEncode _ Statement {x5c} =
     let encodedx5c = map (CBOR.TBytes . X509.encodeSignedObject) $ toList x5c

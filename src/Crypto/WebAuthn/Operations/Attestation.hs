@@ -27,6 +27,7 @@ module Crypto.WebAuthn.Operations.Attestation
   )
 where
 
+import Control.Exception (Exception)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Key as Cose
@@ -100,6 +101,8 @@ data AttestationError
     forall a. M.AttestationStatementFormat a => AttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
 
 deriving instance Show AttestationError
+
+deriving instance Exception AttestationError
 
 -- | Information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
 -- model that created the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential).

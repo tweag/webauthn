@@ -9,7 +9,6 @@
 module Crypto.WebAuthn.Operations.Attestation.FidoU2F
   ( format,
     Format (..),
-    DecodingError (..),
     Statement (..),
     VerificationError (..),
   )
@@ -23,9 +22,10 @@ import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Aeson (ToJSON, object, toJSON, (.=))
+import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
-import qualified Data.HashMap.Strict as HashMap
+import Data.HashMap.Strict ((!?))
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.EC as X509
@@ -80,20 +80,11 @@ instance M.AttestationStatementFormat Format where
   type AttStmt Format = Statement
   asfIdentifier _ = "fido-u2f"
 
-  type AttStmtDecodingError Format = DecodingError
-
-  asfDecode _ m = do
-    sig <- case HashMap.lookup "sig" m of
-      Just (CBOR.TBytes sig) -> pure sig
-      _ -> Left NoSig
-    -- 2. Check that x5c has exactly one element and let attCert be that element.
-    attCert <- case HashMap.lookup "x5c" m of
-      Just (CBOR.TList [CBOR.TBytes certBytes]) ->
-        either (Left . DecodingErrorX5C) pure $ X509.decodeSignedCertificate certBytes
-      Just (CBOR.TList []) -> Left NoX5C
-      Just (CBOR.TList _) -> Left MultipleX5C
-      _ -> Left NoX5C
-    pure $ Statement sig attCert
+  asfDecode _ xs = case (xs !? "sig", xs !? "x5c") of
+    (Just (CBOR.TBytes sig), Just (CBOR.TList [CBOR.TBytes certBytes])) -> do
+      attCert <- first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
+      pure $ Statement sig attCert
+    _ -> Left $ "CBOR map didn't have expected value types (sig: bytes, x5c: one-element list): " <> Text.pack (show xs)
 
   asfEncode _ Statement {sig, attCert} =
     CBOR.TMap
