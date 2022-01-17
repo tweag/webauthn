@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -9,15 +10,12 @@ module Main
 where
 
 import Crypto.Hash (hash)
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Metadata.Service.Processing as Service
+import Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats)
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Metadata as Meta
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Model.WebIDL.Decoding as IDL
-import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
-import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
-import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
-import qualified Crypto.WebAuthn.Operations.CredentialEntry as WebAuthn
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Operation as O
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
@@ -27,6 +25,7 @@ import Data.Either (isRight)
 import Data.Foldable (for_)
 import qualified Data.Hourglass as HG
 import Data.List.NonEmpty (NonEmpty)
+import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import Data.Validation (toEither)
 import qualified Emulation
@@ -55,18 +54,15 @@ timeZero = HG.TimeOfDay {todHour = HG.Hours 0, todMin = HG.Minutes 0, todSec = H
 -- decoded. The caller can pass in a function to run further checks on the
 -- decoded value, but this is mainly there to ensure that `a` occurs after the
 -- fat arrow.
-canDecodeAllToJSRepr :: (FromJSON a, HasCallStack) => FilePath -> (a -> IO ()) -> Spec
-canDecodeAllToJSRepr path inspect = do
+canDecodeAllToJSRepr :: forall a. (FromJSON a, HasCallStack) => FilePath -> Spec
+canDecodeAllToJSRepr path = do
   files <- Hspec.runIO $ Directory.listDirectory path
   for_ files $ \fname ->
     it ("can decode " <> (path </> fname)) $ do
       bytes <- ByteString.readFile $ path </> fname
-      case Aeson.eitherDecode' $ LazyByteString.fromStrict bytes of
+      case Aeson.eitherDecode' @a $ LazyByteString.fromStrict bytes of
         Left err -> fail err
-        Right value -> inspect value
-
-ignoreDecodedValue :: a -> IO ()
-ignoreDecodedValue _ = pure ()
+        Right _value -> pure ()
 
 -- | During tests, we need access to the metadata to verify the attestation of the test registration message.
 -- We use the blob we also use for metadata parsing tests.
@@ -74,12 +70,9 @@ registryFromBlobFile :: IO Service.MetadataServiceRegistry
 registryFromBlobFile = do
   blobBytes <- BS.readFile "tests/golden-metadata/big/blob.jwt"
   now <- dateCurrent
-  let rootCert = Service.fidoAllianceRootCertificate
-  case Service.jwtToJson blobBytes rootCert now of
-    Left err -> error $ show err
-    Right value -> case Service.jsonToPayload value of
-      Left err -> error $ show err
-      Right result -> return $ Service.createMetadataRegistry $ Service.mpEntries result
+  case Meta.metadataBlobToRegistry blobBytes now of
+    Left err -> error $ Text.unpack err
+    Right res -> pure res
 
 -- | Given a JSON Message in a file, performs attestation.
 -- The Boolean argument denotes if the attestation message can be verified using the metadata service.
@@ -87,18 +80,18 @@ registryFromBlobFile = do
 registerTestFromFile :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
 registerTestFromFile fp origin rpId verifiable service now = do
   pkCredential <-
-    either (error . show) id . IDL.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
+    either (error . show) id . M.decodeCredentialRegistration allSupportedFormats
       <$> decodeFile fp
   let options = defaultPublicKeyCredentialCreationOptions pkCredential
   let registerResult =
         toEither $
-          WebAuthn.verifyAttestationResponse
+          O.verifyRegistrationResponse
             origin
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ rpId)
             service
+            now
             options
             pkCredential
-            now
   registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options verifiable
 
 main :: IO ()
@@ -108,15 +101,13 @@ main = Hspec.hspec $ do
     -- Check if all attestation responses can be decoded
     describe "attestation responses" $
       canDecodeAllToJSRepr
-        @(IDL.PublicKeyCredential IDL.AuthenticatorAttestationResponse)
+        @M.IDLCredentialRegistration
         "tests/responses/attestation/"
-        ignoreDecodedValue
     -- Check if all assertion responses can be decoded
     describe "assertion responses" $
       canDecodeAllToJSRepr
-        @(IDL.PublicKeyCredential IDL.AuthenticatorAssertionResponse)
+        @M.IDLCredentialAuthentication
         "tests/responses/assertion/"
-        ignoreDecodedValue
   -- Test public key related tests
   describe "PublicKey" PublicKeySpec.spec
   describe
@@ -133,39 +124,39 @@ main = Hspec.hspec $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
-          either (error . show) id . IDL.decodeCreatedPublicKeyCredential WebAuthn.allSupportedFormats
+          either (error . show) id . M.decodeCredentialRegistration allSupportedFormats
             <$> decodeFile
               "tests/responses/attestation/01-none.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
             registerResult =
               toEither $
-                WebAuthn.verifyAttestationResponse
+                O.verifyRegistrationResponse
                   (M.Origin "http://localhost:8080")
                   (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   registry
+                  predeterminedDateTime
                   options
                   pkCredential
-                  predeterminedDateTime
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
-        let Right WebAuthn.AttestationResult {WebAuthn.rEntry = credentialEntry} = registerResult
+        let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
         loginReq <-
-          either (error . show) id . IDL.decodeRequestedPublicKeyCredential
+          either (error . show) id . M.decodeCredentialAuthentication
             <$> decodeFile
-              @(IDL.PublicKeyCredential IDL.AuthenticatorAssertionResponse)
+              @M.IDLCredentialAuthentication
               "tests/responses/assertion/01-none.json"
-        let M.PublicKeyCredential {M.pkcResponse = pkcResponse} = loginReq
+        let M.Credential {M.cResponse = cResponse} = loginReq
             signInResult =
               toEither $
-                WebAuthn.verifyAssertionResponse
+                O.verifyAuthenticationResponse
                   (M.Origin "http://localhost:8080")
                   (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   (Just (M.UserHandle "UserId"))
                   credentialEntry
                   (defaultPublicKeyCredentialRequestOptions loginReq)
-                  M.PublicKeyCredential
-                    { M.pkcIdentifier = WebAuthn.ceCredentialId credentialEntry,
-                      M.pkcResponse = pkcResponse,
-                      M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+                  M.Credential
+                    { M.cIdentifier = O.ceCredentialId credentialEntry,
+                      M.cResponse = cResponse,
+                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
                     }
         signInResult `shouldSatisfy` isRight
   describe "Packed register" $ do
@@ -306,69 +297,69 @@ main = Hspec.hspec $ do
         predeterminedDateTime
 
 -- | Checks if the received attestation response if one we expect
-isExpectedAttestationResponse :: M.PublicKeyCredential 'M.Create 'True -> M.PublicKeyCredentialOptions 'M.Create -> Bool -> Either (NonEmpty WebAuthn.AttestationError) WebAuthn.AttestationResult -> Bool
+isExpectedAttestationResponse :: M.Credential 'M.Registration 'True -> M.CredentialOptions 'M.Registration -> Bool -> Either (NonEmpty O.RegistrationError) O.RegistrationResult -> Bool
 isExpectedAttestationResponse _ _ _ (Left _) = False -- We should never receive errors
-isExpectedAttestationResponse M.PublicKeyCredential {..} M.PublicKeyCredentialCreationOptions {..} verifiable (Right WebAuthn.AttestationResult {..}) =
-  rEntry == expectedCredentialEntry
+isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration {..} verifiable (Right O.RegistrationResult {..}) =
+  rrEntry == expectedCredentialEntry
     && not verifiable
-      || ( case rAttestationStatement of
-             WebAuthn.SomeAttestationStatement _ WebAuthn.VerifiedAuthenticator {} -> True
+      || ( case rrAttestationStatement of
+             O.SomeAttestationStatement _ O.VerifiedAuthenticator {} -> True
              _ -> False
          )
   where
-    expectedCredentialEntry :: WebAuthn.CredentialEntry
+    expectedCredentialEntry :: O.CredentialEntry
     expectedCredentialEntry =
-      WebAuthn.CredentialEntry
-        { ceCredentialId = pkcIdentifier,
-          ceUserHandle = M.pkcueId pkcocUser,
+      O.CredentialEntry
+        { ceCredentialId = cIdentifier,
+          ceUserHandle = M.cueId corUser,
           cePublicKeyBytes =
             M.PublicKeyBytes . M.unRaw
               . M.acdCredentialPublicKeyBytes
               . M.adAttestedCredentialData
               . M.aoAuthData
-              $ M.arcAttestationObject pkcResponse,
-          ceSignCounter = M.adSignCount . M.aoAuthData $ M.arcAttestationObject pkcResponse
+              $ M.arrAttestationObject cResponse,
+          ceSignCounter = M.adSignCount . M.aoAuthData $ M.arrAttestationObject cResponse
         }
 
-defaultPublicKeyCredentialCreationOptions :: M.PublicKeyCredential 'M.Create raw -> M.PublicKeyCredentialOptions 'M.Create
-defaultPublicKeyCredentialCreationOptions pkc =
-  M.PublicKeyCredentialCreationOptions
-    { M.pkcocRp =
-        M.PublicKeyCredentialRpEntity
-          { M.pkcreId = Nothing,
-            M.pkcreName = "Tweag I/O Test Server"
+defaultPublicKeyCredentialCreationOptions :: M.Credential 'M.Registration raw -> M.CredentialOptions 'M.Registration
+defaultPublicKeyCredentialCreationOptions c =
+  M.CredentialOptionsRegistration
+    { M.corRp =
+        M.CredentialRpEntity
+          { M.creId = Nothing,
+            M.creName = "Tweag I/O Test Server"
           },
-      M.pkcocUser =
-        M.PublicKeyCredentialUserEntity
-          { M.pkcueId = M.UserHandle "UserId",
-            M.pkcueDisplayName = "UserDisplayName",
-            M.pkcueName = "UserAccountName"
+      M.corUser =
+        M.CredentialUserEntity
+          { M.cueId = M.UserHandle "UserId",
+            M.cueDisplayName = "UserDisplayName",
+            M.cueName = "UserAccountName"
           },
-      M.pkcocChallenge = M.ccdChallenge . M.arcClientData $ M.pkcResponse pkc,
-      M.pkcocPubKeyCredParams =
-        [ M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256
+      M.corChallenge = M.ccdChallenge . M.arrClientData $ M.cResponse c,
+      M.corPubKeyCredParams =
+        [ M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmES256
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA256
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmRS256
             }
         ],
-      M.pkcocTimeout = Nothing,
-      M.pkcocExcludeCredentials = [],
-      M.pkcocAuthenticatorSelection = Nothing,
-      M.pkcocAttestation = M.AttestationConveyancePreferenceNone,
-      M.pkcocExtensions = Nothing
+      M.corTimeout = Nothing,
+      M.corExcludeCredentials = [],
+      M.corAuthenticatorSelection = Nothing,
+      M.corAttestation = M.AttestationConveyancePreferenceNone,
+      M.corExtensions = Nothing
     }
 
-defaultPublicKeyCredentialRequestOptions :: M.PublicKeyCredential 'M.Get raw -> M.PublicKeyCredentialOptions 'M.Get
-defaultPublicKeyCredentialRequestOptions pkc =
-  M.PublicKeyCredentialRequestOptions
-    { M.pkcogChallenge = M.ccdChallenge . M.argClientData $ M.pkcResponse pkc,
-      M.pkcogTimeout = Nothing,
-      M.pkcogRpId = Just "localhost",
-      M.pkcogAllowCredentials = [],
-      M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
-      M.pkcogExtensions = Nothing
+defaultPublicKeyCredentialRequestOptions :: M.Credential 'M.Authentication raw -> M.CredentialOptions 'M.Authentication
+defaultPublicKeyCredentialRequestOptions c =
+  M.CredentialOptionsAuthentication
+    { M.coaChallenge = M.ccdChallenge . M.araClientData $ M.cResponse c,
+      M.coaTimeout = Nothing,
+      M.coaRpId = Just "localhost",
+      M.coaAllowCredentials = [],
+      M.coaUserVerification = M.UserVerificationRequirementPreferred,
+      M.coaExtensions = Nothing
     }

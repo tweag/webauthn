@@ -7,7 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- |
+-- | Stability: experimental
 -- This module exposes functions for processing and querying
 -- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
 -- blobs and entries.
@@ -42,7 +42,11 @@ import Crypto.JWT
     unregisteredClaims,
     verifyClaims,
   )
-import Crypto.WebAuthn.Identifier
+import Crypto.WebAuthn.Internal.DateOrphans ()
+import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
+import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.Identifier
   ( AAGUID,
     AuthenticatorIdentifier
       ( AuthenticatorIdentifierFido2,
@@ -52,15 +56,12 @@ import Crypto.WebAuthn.Identifier
       ),
     SubjectKeyIdentifier,
   )
-import Crypto.WebAuthn.Internal.DateOrphans ()
-import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
-import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model.Types as M
 import Data.Aeson (Value (Object))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.FileEmbed (embedFile)
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
@@ -174,17 +175,20 @@ jwtToJson ::
   RootCertificate ->
   -- | The current time for which to validate the JWT blob
   DateTime ->
-  Either ProcessingError Value
+  Either ProcessingError (HashMap Text Value)
 jwtToJson blob rootCert now = runExcept $ do
   jwt <- decodeCompact $ LBS.fromStrict blob
   claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
-  return $ Object (claims ^. unregisteredClaims)
+  return $ claims ^. unregisteredClaims
 
 -- | Decodes a FIDO Metadata payload JSON value to a 'Service.MetadataPayload',
 -- returning an error when the JSON is invalid, and ignoring any entries not
--- relevant for webauthn
-jsonToPayload :: Value -> Either Text Service.MetadataPayload
-jsonToPayload value = case Aeson.fromJSON value of
+-- relevant for webauthn. For the purposes of implementing the
+-- relying party the `Crypto.WebAuthn.Metadata.Service.Types.mpNextUpdate`
+-- and `Crypto.WebAuthn.Metadata.Service.Types.mpEntries` fields are most
+-- important.
+jsonToPayload :: HashMap Text Value -> Either Text Service.MetadataPayload
+jsonToPayload value = case Aeson.fromJSON $ Object value of
   Aeson.Error err -> Left $ Text.pack err
   Aeson.Success payload -> case decodeMetadataPayload payload of
     Left err -> Left err

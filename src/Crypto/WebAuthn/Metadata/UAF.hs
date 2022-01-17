@@ -1,6 +1,5 @@
-{-# LANGUAGE DataKinds #-}
-
--- | Types related to the FIDO UAF Protocol as defined in the relevant
+-- | Stability: experimental
+-- Types related to the FIDO UAF Protocol as defined in the relevant
 -- [(spec)](https://fidoalliance.org/specs/fido-uaf-v1.2-ps-20201020/fido-uaf-protocol-v1.2-ps-20201020.html)
 module Crypto.WebAuthn.Metadata.UAF
   ( AAID (..),

@@ -27,8 +27,7 @@ module Database
 where
 
 import Crypto.Random (MonadRandom, getRandomBytes)
-import qualified Crypto.WebAuthn.Model.Types as M
-import Crypto.WebAuthn.Operations.CredentialEntry (CredentialEntry (CredentialEntry, ceCredentialId, cePublicKeyBytes, ceSignCounter, ceUserHandle))
+import qualified Crypto.WebAuthn as WA
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import Data.Word (Word32)
@@ -102,35 +101,35 @@ withTransaction conn action = Sqlite.withTransaction conn (action (Transaction c
 
 insertUser ::
   Transaction ->
-  M.PublicKeyCredentialUserEntity ->
+  WA.CredentialUserEntity ->
   IO ()
 insertUser (Transaction conn) user =
-  let M.PublicKeyCredentialUserEntity
-        { M.pkcueId = M.UserHandle handle,
-          M.pkcueName = M.UserAccountName accountName,
-          M.pkcueDisplayName = M.UserAccountDisplayName accountDisplayName
+  let WA.CredentialUserEntity
+        { WA.cueId = WA.UserHandle handle,
+          WA.cueName = WA.UserAccountName accountName,
+          WA.cueDisplayName = WA.UserAccountDisplayName accountDisplayName
         } = user
    in Sqlite.execute
         conn
         "insert into users (handle, account_name, account_display_name) values (?, ?, ?);"
         (handle, accountName, accountDisplayName)
 
-userExists :: Transaction -> M.UserAccountName -> IO Bool
-userExists (Transaction conn) (M.UserAccountName accountName) = do
+userExists :: Transaction -> WA.UserAccountName -> IO Bool
+userExists (Transaction conn) (WA.UserAccountName accountName) = do
   results :: [Sqlite.Only Text] <- Sqlite.query conn "select account_name from users where account_name = ?;" (Sqlite.Only accountName)
   pure $ not $ null results
 
 insertCredentialEntry ::
   Transaction ->
-  CredentialEntry ->
+  WA.CredentialEntry ->
   IO ()
 insertCredentialEntry
   (Transaction conn)
-  CredentialEntry
-    { ceUserHandle = M.UserHandle userHandle,
-      ceCredentialId = M.CredentialId credentialId,
-      cePublicKeyBytes = M.PublicKeyBytes publicKey,
-      ceSignCounter = M.SignatureCounter signCounter
+  WA.CredentialEntry
+    { WA.ceUserHandle = WA.UserHandle userHandle,
+      WA.ceCredentialId = WA.CredentialId credentialId,
+      WA.cePublicKeyBytes = WA.PublicKeyBytes publicKey,
+      WA.ceSignCounter = WA.SignatureCounter signCounter
     } =
     do
       Sqlite.execute
@@ -145,8 +144,8 @@ insertCredentialEntry
           signCounter
         )
 
-queryCredentialEntryByCredential :: Transaction -> M.CredentialId -> IO (Maybe CredentialEntry)
-queryCredentialEntryByCredential (Transaction conn) (M.CredentialId credentialId) = do
+queryCredentialEntryByCredential :: Transaction -> WA.CredentialId -> IO (Maybe WA.CredentialEntry)
+queryCredentialEntryByCredential (Transaction conn) (WA.CredentialId credentialId) = do
   entries <-
     Sqlite.query
       conn
@@ -159,8 +158,8 @@ queryCredentialEntryByCredential (Transaction conn) (M.CredentialId credentialId
     [entry] -> pure $ Just $ toCredentialEntry entry
     _ -> fail "Unreachable: credential_entries.credential_id has a unique index."
 
-queryCredentialEntriesByUser :: Transaction -> M.UserAccountName -> IO [CredentialEntry]
-queryCredentialEntriesByUser (Transaction conn) (M.UserAccountName accountName) = do
+queryCredentialEntriesByUser :: Transaction -> WA.UserAccountName -> IO [WA.CredentialEntry]
+queryCredentialEntriesByUser (Transaction conn) (WA.UserAccountName accountName) = do
   entries <-
     Sqlite.query
       conn
@@ -171,8 +170,8 @@ queryCredentialEntriesByUser (Transaction conn) (M.UserAccountName accountName) 
       [accountName]
   pure $ map toCredentialEntry entries
 
-updateSignatureCounter :: Transaction -> M.CredentialId -> M.SignatureCounter -> IO ()
-updateSignatureCounter (Transaction conn) (M.CredentialId credentialId) (M.SignatureCounter counter) =
+updateSignatureCounter :: Transaction -> WA.CredentialId -> WA.SignatureCounter -> IO ()
+updateSignatureCounter (Transaction conn) (WA.CredentialId credentialId) (WA.SignatureCounter counter) =
   Sqlite.execute
     conn
     " update credential_entries \
@@ -180,13 +179,13 @@ updateSignatureCounter (Transaction conn) (M.CredentialId credentialId) (M.Signa
     \ where credential_id = ?;  "
     (counter, credentialId)
 
-toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32) -> CredentialEntry
+toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32) -> WA.CredentialEntry
 toCredentialEntry (credentialId, userHandle, publicKey, signCounter) =
-  CredentialEntry
-    { ceCredentialId = M.CredentialId credentialId,
-      ceUserHandle = M.UserHandle userHandle,
-      cePublicKeyBytes = M.PublicKeyBytes publicKey,
-      ceSignCounter = M.SignatureCounter signCounter
+  WA.CredentialEntry
+    { WA.ceCredentialId = WA.CredentialId credentialId,
+      WA.ceUserHandle = WA.UserHandle userHandle,
+      WA.cePublicKeyBytes = WA.PublicKeyBytes publicKey,
+      WA.ceSignCounter = WA.SignatureCounter signCounter
     }
 
 newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
@@ -194,7 +193,7 @@ newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
 generateAuthToken :: MonadRandom m => m AuthToken
 generateAuthToken = AuthToken <$> getRandomBytes 16
 
-queryUserByAuthToken :: Transaction -> AuthToken -> IO (Maybe M.UserAccountName)
+queryUserByAuthToken :: Transaction -> AuthToken -> IO (Maybe WA.UserAccountName)
 queryUserByAuthToken (Transaction conn) (AuthToken token) = do
   result <-
     Sqlite.query
@@ -205,11 +204,11 @@ queryUserByAuthToken (Transaction conn) (AuthToken token) = do
       [token]
   case result of
     [] -> pure Nothing
-    [Sqlite.Only accountName] -> pure $ Just $ M.UserAccountName accountName
+    [Sqlite.Only accountName] -> pure $ Just $ WA.UserAccountName accountName
     _ -> fail "Unreachable: credential_entries.credential_id has a unique index."
 
-insertAuthToken :: Transaction -> AuthToken -> M.UserHandle -> IO ()
-insertAuthToken (Transaction conn) (AuthToken token) (M.UserHandle userHandle) = do
+insertAuthToken :: Transaction -> AuthToken -> WA.UserHandle -> IO ()
+insertAuthToken (Transaction conn) (AuthToken token) (WA.UserHandle userHandle) = do
   Sqlite.execute
     conn
     "insert into auth_tokens (token, user_handle) values (?, ?);"

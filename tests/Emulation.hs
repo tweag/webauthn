@@ -10,12 +10,10 @@ where
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Operations.Assertion as WebAuthn
-import qualified Crypto.WebAuthn.Operations.Attestation as WebAuthn
-import qualified Crypto.WebAuthn.Operations.CredentialEntry as WebAuthn
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Operation as O
 import Data.Bifunctor (Bifunctor (second))
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
@@ -64,19 +62,19 @@ register ::
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  Service.MetadataServiceRegistry ->
+  Meta.MetadataServiceRegistry ->
   DateTime ->
-  m (Either (NE.NonEmpty WebAuthn.AttestationError) WebAuthn.AttestationResult, Authenticator, M.PublicKeyCredentialOptions 'M.Create)
+  m (Either (NE.NonEmpty O.RegistrationError) O.RegistrationResult, Authenticator, M.CredentialOptions 'M.Registration)
 register ao conformance authenticator registry now = do
   -- Generate new random input
   assertionChallenge <- M.generateChallenge
   userId <- M.generateUserHandle
   -- Create dummy user
   let user =
-        M.PublicKeyCredentialUserEntity
-          { M.pkcueId = userId,
-            M.pkcueDisplayName = M.UserAccountDisplayName "John Doe",
-            M.pkcueName = M.UserAccountName "john-doe"
+        M.CredentialUserEntity
+          { M.cueId = userId,
+            M.cueDisplayName = M.UserAccountDisplayName "John Doe",
+            M.cueName = M.UserAccountName "john-doe"
           }
   let options = defaultPkcoc user assertionChallenge
   -- Perform client Attestation emulation with a fresh authenticator
@@ -84,13 +82,13 @@ register ao conformance authenticator registry now = do
   -- Verify the result
   let registerResult =
         toEither $
-          WebAuthn.verifyAttestationResponse
+          O.verifyRegistrationResponse
             (aoOrigin ao)
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
             registry
+            now
             options
             mPkcCreate
-            now
   pure (registerResult, authenticator, options)
 
 login ::
@@ -98,17 +96,18 @@ login ::
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  WebAuthn.CredentialEntry ->
-  m (Either (NE.NonEmpty WebAuthn.AssertionError) WebAuthn.SignatureCounterResult)
-login ao conformance authenticator ce@WebAuthn.CredentialEntry {..} = do
+  O.CredentialEntry ->
+  m (Either (NE.NonEmpty O.AuthenticationError) O.SignatureCounterResult)
+login ao conformance authenticator ce@O.CredentialEntry {..} = do
   attestationChallenge <- M.generateChallenge
-  let options = defaultPkcog attestationChallenge
+  let options = defaultCog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
   -- authenticator should now store the created credential
   (mPkcGet, _) <- clientAssertion options ao conformance authenticator
   pure
+    . second O.arSignatureCounterResult
     . toEither
-    $ WebAuthn.verifyAssertionResponse
+    $ O.verifyAuthenticationResponse
       (aoOrigin ao)
       (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
       (Just ceUserHandle)
@@ -135,7 +134,7 @@ spec =
         -- interested in its errors.
         let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry now)
         -- Since we only do None attestation, we only care about the resulting entry
-        let registerResult' = second WebAuthn.rEntry registerResult
+        let registerResult' = second O.rrEntry registerResult
         registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options
         -- Only if attestation succeeded can we continue with assertion
         case registerResult' of
@@ -148,124 +147,124 @@ spec =
 -- resulted in if the authenticator exhibits nonconforming behaviour, and
 -- checks if the correct result was given if the authenticator does not exhibit
 -- any nonconforming behaviour.
-validAttestationResult :: Authenticator -> UserAgentConformance -> M.PublicKeyCredentialOptions 'M.Create -> Either (NE.NonEmpty WebAuthn.AttestationError) WebAuthn.CredentialEntry -> Bool
+validAttestationResult :: Authenticator -> UserAgentConformance -> M.CredentialOptions 'M.Registration -> Either (NE.NonEmpty O.RegistrationError) O.CredentialEntry -> Bool
 -- A valid result can only happen if we exhibited no non-conforming behaviour
 -- The userHandle must be the one specified by the options
-validAttestationResult _ _ M.PublicKeyCredentialCreationOptions {..} (Right WebAuthn.CredentialEntry {..}) = ceUserHandle == M.pkcueId pkcocUser
+validAttestationResult _ _ M.CredentialOptionsRegistration {..} (Right O.CredentialEntry {..}) = ceUserHandle == M.cueId corUser
 -- If we did result in errors, we want every error to be validated by some
 -- configuration issue (NOTE: We cannot currently exhibit non conforming
 -- behaviour during attestation)
 validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = all isValidated errors
   where
-    isValidated :: WebAuthn.AttestationError -> Bool
-    isValidated (WebAuthn.AttestationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
-    isValidated (WebAuthn.AttestationOriginMismatch _ _) = False
-    isValidated (WebAuthn.AttestationRpIdHashMismatch _ _) = False
+    isValidated :: O.RegistrationError -> Bool
+    isValidated (O.RegistrationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
+    isValidated (O.RegistrationOriginMismatch _ _) = False
+    isValidated (O.RegistrationRpIdHashMismatch _ _) = False
     -- The User not being present must be a result of the authenticator not checking for a user being present
-    isValidated WebAuthn.AttestationUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
+    isValidated O.RegistrationUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
     -- The User not being valided must be a result of the authenticator not validating the user
-    isValidated WebAuthn.AttestationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
-    isValidated (WebAuthn.AttestationUndesiredPublicKeyAlgorithm _ _) = False
-    isValidated (WebAuthn.AttestationFormatError _ _) = False
+    isValidated O.RegistrationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
+    isValidated (O.RegistrationUndesiredPublicKeyAlgorithm _ _) = False
+    isValidated (O.RegistrationAttestationFormatError _ _) = False
 
 -- | Validates the result of assertion. Ensures that the proper errors are
 -- resulted in if the authenticator exhibits nonconforming behaviour, and
 -- checks if the correct result was given if the authenticator does not exhibit
 -- any nonconforming behaviour.
-validAssertionResult :: Authenticator -> UserAgentConformance -> Either (NE.NonEmpty WebAuthn.AssertionError) WebAuthn.SignatureCounterResult -> Bool
+validAssertionResult :: Authenticator -> UserAgentConformance -> Either (NE.NonEmpty O.AuthenticationError) O.SignatureCounterResult -> Bool
 -- We can only result in a 0 signature counter if the authenticator doesn't
 -- have a counter and is either conforming or only has a static counter
-validAssertionResult AuthenticatorNone {..} _ (Right WebAuthn.SignatureCounterZero) =
+validAssertionResult AuthenticatorNone {..} _ (Right O.SignatureCounterZero) =
   aSignatureCounter == Unsupported && (Set.null aConformance || aConformance == Set.singleton StaticCounter)
 -- A valid response must only happen if we have no non-confirming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right (WebAuthn.SignatureCounterUpdated _)) = Set.null aConformance
+validAssertionResult AuthenticatorNone {..} _ (Right (O.SignatureCounterUpdated _)) = Set.null aConformance
 -- A potentially cloned counter must imply that we only exhibited the static
 -- counter non-conforming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right WebAuthn.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
+validAssertionResult AuthenticatorNone {..} _ (Right O.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
 -- If we did result in errors, we want every error to be validated by some
 -- non-conforming behaviour or configuration issue
 validAssertionResult AuthenticatorNone {..} uaConformance (Left errors) = all isValidated errors
   where
-    isValidated :: WebAuthn.AssertionError -> Bool
-    isValidated (WebAuthn.AssertionDisallowedCredential _ _) = False
-    isValidated (WebAuthn.AssertionIdentifiedUserHandleMismatch _ _) = False
-    isValidated (WebAuthn.AssertionCredentialUserHandleMismatch _ _) = False
-    isValidated WebAuthn.AssertionCannotVerifyUserHandle = False
-    isValidated (WebAuthn.AssertionChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
-    isValidated (WebAuthn.AssertionOriginMismatch _ _) = False
-    isValidated (WebAuthn.AssertionRpIdHashMismatch _ _) = False
+    isValidated :: O.AuthenticationError -> Bool
+    isValidated (O.AuthenticationDisallowedCredential _ _) = False
+    isValidated (O.AuthenticationIdentifiedUserHandleMismatch _ _) = False
+    isValidated (O.AuthenticationCredentialUserHandleMismatch _ _) = False
+    isValidated O.AuthenticationCannotVerifyUserHandle = False
+    isValidated (O.AuthenticationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
+    isValidated (O.AuthenticationOriginMismatch _ _) = False
+    isValidated (O.AuthenticationRpIdHashMismatch _ _) = False
     -- The User not being present must be a result of the authenticator not checking for a user being present
-    isValidated WebAuthn.AssertionUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
+    isValidated O.AuthenticationUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
     -- The User not being valided must be a result of the authenticator not validating the user
-    isValidated WebAuthn.AssertionUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
+    isValidated O.AuthenticationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
     -- The Signature being invalid can happen when the data was wrong or the wrong private key was used
-    isValidated (WebAuthn.AssertionSignatureDecodingError _) = False
-    isValidated WebAuthn.AssertionInvalidSignature {} = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
+    isValidated (O.AuthenticationSignatureDecodingError _) = False
+    isValidated O.AuthenticationInvalidSignature {} = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
 
 -- | Create a default set of options for attestation. These options can be modified before using them in the tests
-defaultPkcoc :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
+defaultPkcoc :: M.CredentialUserEntity -> M.Challenge -> M.CredentialOptions 'M.Registration
 defaultPkcoc userEntity challenge =
-  M.PublicKeyCredentialCreationOptions
-    { M.pkcocRp = M.PublicKeyCredentialRpEntity {M.pkcreId = Nothing, M.pkcreName = "ACME"},
-      M.pkcocUser = userEntity,
-      M.pkcocChallenge = challenge,
+  M.CredentialOptionsRegistration
+    { M.corRp = M.CredentialRpEntity {M.creId = Nothing, M.creName = "ACME"},
+      M.corUser = userEntity,
+      M.corChallenge = challenge,
       -- Empty credentialparameters are not supported.
-      M.pkcocPubKeyCredParams =
-        [ M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256
+      M.corPubKeyCredParams =
+        [ M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmES256
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA384
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmES384
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA512
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmES512
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgEdDSA
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmEdDSA
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA1
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmRS1
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA256
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmRS256
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA384
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmRS384
             },
-          M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgRSA Cose.CoseHashAlgRSASHA512
+          M.CredentialParameters
+            { M.cpTyp = M.CredentialTypePublicKey,
+              M.cpAlg = Cose.CoseAlgorithmRS512
             }
         ],
-      M.pkcocTimeout = Nothing,
-      M.pkcocExcludeCredentials = [],
-      M.pkcocAuthenticatorSelection =
+      M.corTimeout = Nothing,
+      M.corExcludeCredentials = [],
+      M.corAuthenticatorSelection =
         Just
           M.AuthenticatorSelectionCriteria
             { M.ascAuthenticatorAttachment = Nothing,
               M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
               M.ascUserVerification = M.UserVerificationRequirementPreferred
             },
-      M.pkcocAttestation = M.AttestationConveyancePreferenceDirect,
-      M.pkcocExtensions = Nothing
+      M.corAttestation = M.AttestationConveyancePreferenceDirect,
+      M.corExtensions = Nothing
     }
 
 -- | Create a default set of options for assertion. These options can be modified before using them in the tests
-defaultPkcog :: M.Challenge -> M.PublicKeyCredentialOptions 'M.Get
-defaultPkcog challenge =
-  M.PublicKeyCredentialRequestOptions
-    { M.pkcogChallenge = challenge,
-      M.pkcogTimeout = Nothing,
-      M.pkcogRpId = Just "localhost",
+defaultCog :: M.Challenge -> M.CredentialOptions 'M.Authentication
+defaultCog challenge =
+  M.CredentialOptionsAuthentication
+    { M.coaChallenge = challenge,
+      M.coaTimeout = Nothing,
+      M.coaRpId = Just "localhost",
       -- We currently only support client-side discoverable credentials
-      M.pkcogAllowCredentials = [],
-      M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
-      M.pkcogExtensions = Nothing
+      M.coaAllowCredentials = [],
+      M.coaUserVerification = M.UserVerificationRequirementPreferred,
+      M.coaExtensions = Nothing
     }

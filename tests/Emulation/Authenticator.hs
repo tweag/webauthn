@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Emulation.Authenticator
-  ( PublicKeyCredentialSource (..),
+  ( CredentialSource (..),
     AuthenticatorSignatureCounter (..),
     Conformance,
     AuthenticatorNonConformingBehaviour (..),
@@ -18,11 +18,10 @@ import Control.Monad (forM_, when)
 import Crypto.Hash (hash)
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.Identifier (AAGUID)
-import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
-import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Operations.Attestation.None as None
+import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as ME
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import Data.List (find)
@@ -34,12 +33,12 @@ import qualified Spec.Key as Key
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#public-key-credential-source)
 -- A stored credential.
-data PublicKeyCredentialSource = PublicKeyCredentialSource
-  { pkcsId :: M.CredentialId,
-    pkcsSignAlg :: Cose.CoseSignAlg,
-    pkcsPrivateKey :: Key.PrivateKey,
-    pkcsRpId :: M.RpId,
-    pkcsUserHandle :: Maybe M.UserHandle
+data CredentialSource = CredentialSource
+  { csId :: M.CredentialId,
+    csSignAlg :: Cose.CoseSignAlg,
+    csPrivateKey :: Key.PrivateKey,
+    csRpId :: M.RpId,
+    csUserHandle :: Maybe M.UserHandle
   }
   deriving (Eq, Show)
 
@@ -66,8 +65,8 @@ type Conformance = Set.Set AuthenticatorNonConformingBehaviour
 -- | The datatype holding all information needed for attestation and assertion
 data Authenticator = AuthenticatorNone
   -- https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map
-  { aAAGUID :: AAGUID,
-    aCredentials :: Map.Map (M.RpId, M.UserHandle) PublicKeyCredentialSource,
+  { aAAGUID :: M.AAGUID,
+    aCredentials :: Map.Map (M.RpId, M.UserHandle) CredentialSource,
     aSignatureCounter :: AuthenticatorSignatureCounter,
     aSupportedAlgorithms :: Set.Set Cose.CoseSignAlg,
     aAuthenticatorDataFlags :: M.AuthenticatorDataFlags,
@@ -82,11 +81,11 @@ authenticatorMakeCredential ::
   Authenticator ->
   -- | hash: The hash of the serialized client data, provided by the client.
   M.ClientDataHash ->
-  -- | rpEntity: The Relying Party's PublicKeyCredentialRpEntity.
-  M.PublicKeyCredentialRpEntity ->
-  -- | userEntity: The user account’s PublicKeyCredentialUserEntity, containing
+  -- | rpEntity: The Relying Party's CredentialRpEntity.
+  M.CredentialRpEntity ->
+  -- | userEntity: The user account’s CredentialUserEntity, containing
   -- the user handle given by the Relying Party.
-  M.PublicKeyCredentialUserEntity ->
+  M.CredentialUserEntity ->
   -- | requireResidentKey: The effective resident key requirement for
   -- credential creation, a Boolean value determined by the client.
   -- NOTE: We always provide resident keys
@@ -101,18 +100,18 @@ authenticatorMakeCredential ::
   -- credential creation, a Boolean value determined by the client.
   -- NOTE: We currently always verify the user
   Bool ->
-  -- | credTypesAndPubKeyAlgs: A sequence of pairs of PublicKeyCredentialType
+  -- | credTypesAndPubKeyAlgs: A sequence of pairs of CredentialType
   -- and public key algorithms (COSEAlgorithmIdentifier) requested by the
   -- Relying Party. This sequence is ordered from most preferred to least
   -- preferred. The authenticator makes a best-effort to create the most
   -- preferred credential that it can.
-  [M.PublicKeyCredentialParameters] ->
+  [M.CredentialParameters] ->
   -- | excludeCredentialDescriptorList: An OPTIONAL list of
-  -- PublicKeyCredentialDescriptor objects provided by the Relying Party with
+  -- CredentialDescriptor objects provided by the Relying Party with
   -- the intention that, if any of these are known to the authenticator, it
   -- SHOULD NOT create a new credential. excludeCredentialDescriptorList
   -- contains a list of known credentials.
-  [M.PublicKeyCredentialDescriptor] ->
+  [M.CredentialDescriptor] ->
   -- | enterpriseAttestationPossible: A Boolean value that indicates that
   -- individually-identifying attestation MAY be returned by the authenticator.
   Bool ->
@@ -139,13 +138,13 @@ authenticatorMakeCredential
       -- "UnknownError" and terminate the operation.
       -- NOTE: This step is performed during decoding
       -- NOTE: We assume the client set a rpId if it was initially Nothing.
-      let rpId = fromJust $ M.pkcreId rpEntity
+      let rpId = fromJust $ M.creId rpEntity
 
       -- 2. Check if at least one of the specified combinations of
-      -- PublicKeyCredentialType and cryptographic parameters in
+      -- CredentialType and cryptographic parameters in
       -- credTypesAndPubKeyAlgs is supported. If not, return an error code
       -- equivalent to "NotSupportedError" and terminate the operation.
-      param <- case find ((`Set.member` aSupportedAlgorithms) . M.pkcpAlg) credTypesAndPubKeyAlgs of
+      param <- case find ((`Set.member` aSupportedAlgorithms) . M.cpAlg) credTypesAndPubKeyAlgs of
         Just param -> pure param
         Nothing -> fail "NotSupportedError"
 
@@ -161,9 +160,9 @@ authenticatorMakeCredential
       --   does not consent to create a new credential:
       --       return an error code equivalent to "NotAllowedError" and terminate the operation.
       -- NOTE: We do not perform user tests, instead assuming that the user always consents.
-      forM_ excludeCredentialDescriptorList $ \descriptor -> case authenticatorLookupCredential authenticator (M.pkcdId descriptor) of
+      forM_ excludeCredentialDescriptorList $ \descriptor -> case authenticatorLookupCredential authenticator (M.cdId descriptor) of
         Just item -> do
-          when (rpId == pkcsRpId item) (fail "InvalidStateError")
+          when (rpId == csRpId item) (fail "InvalidStateError")
         Nothing -> pure ()
 
       -- 4. If requireResidentKey is true and the authenticator cannot store a
@@ -193,14 +192,14 @@ authenticatorMakeCredential
       -- 7. Once the authorization gesture has been completed and user consent
       -- has been obtained, generate a new credential object:
       -- 7.1. Let (publicKey, privateKey) be a new pair of cryptographic keys
-      -- using the combination of PublicKeyCredentialType and cryptographic
+      -- using the combination of CredentialType and cryptographic
       -- parameters represented by the first item in credTypesAndPubKeyAlgs that
       -- is supported by this authenticator.
-      let signAlg = M.pkcpAlg param
+      let signAlg = M.cpAlg param
       Key.KeyPair {..} <- Key.newKeyPair signAlg
 
       -- 7.2. Let userHandle be userEntity.id.
-      let userHandle = M.pkcueId userEntity
+      let userHandle = M.cueId userEntity
 
       -- 7.4 If requireResidentKey is true or the authenticator chooses to
       -- create a client-side discoverable public key credential source:
@@ -215,12 +214,12 @@ authenticatorMakeCredential
       -- 7.4.2. Set credentialSource.id to credentialId.
       -- 7.3.  Let credentialSource be a new public key credential source with the fields:
       let credentialSource =
-            PublicKeyCredentialSource
-              { pkcsId = credentialId,
-                pkcsSignAlg = signAlg,
-                pkcsPrivateKey = privKey,
-                pkcsRpId = rpId,
-                pkcsUserHandle = Just userHandle
+            CredentialSource
+              { csId = credentialId,
+                csSignAlg = signAlg,
+                csPrivateKey = privKey,
+                csRpId = rpId,
+                csUserHandle = Just userHandle
               }
 
       -- 7.4.3 Let credentials be this authenticator’s credentials map.
@@ -305,9 +304,9 @@ authenticatorGetAssertion ::
   -- | hash: The hash of the serialized client data, provided by the client.
   M.ClientDataHash ->
   -- | allowCredentialDescriptorList: An OPTIONAL list of
-  -- PublicKeyCredentialDescriptors describing credentials acceptable to the
+  -- CredentialDescriptors describing credentials acceptable to the
   -- Relying Party (possibly filtered by the client), if any.
-  Maybe [M.PublicKeyCredentialDescriptor] ->
+  Maybe [M.CredentialDescriptor] ->
   -- | requireUserPresence: The constant Boolean value true. It is included here as a
   -- pseudo-parameter to simplify applying this abstract authenticator model to
   -- implementations that may wish to make a test of user presence optional
@@ -317,7 +316,7 @@ authenticatorGetAssertion ::
   -- assertion, a Boolean value provided by the client.
   Bool ->
   Maybe M.AuthenticationExtensionsClientInputs ->
-  m ((M.CredentialId, M.AuthenticatorData 'M.Get 'True, BS.ByteString, Maybe M.UserHandle), Authenticator)
+  m ((M.CredentialId, M.AuthenticatorData 'M.Authentication 'True, BS.ByteString, Maybe M.UserHandle), Authenticator)
 authenticatorGetAssertion _ _ _ _ False _ _ = fail "requireUserPresence set to False"
 authenticatorGetAssertion
   authenticator@AuthenticatorNone {..}
@@ -344,9 +343,9 @@ authenticatorGetAssertion
       -- credSource to credentialOptions.
       -- 5. Remove any items from credentialOptions whose rpId is not equal to rpId.
       let credentialOptions = filter
-            (\o -> pkcsRpId o == rpId)
+            (\o -> csRpId o == rpId)
             $ case allowCredentialDescriptorList of
-              Just descriptors -> mapMaybe (authenticatorLookupCredential authenticator . M.pkcdId) descriptors
+              Just descriptors -> mapMaybe (authenticatorLookupCredential authenticator . M.cdId) descriptors
               Nothing -> Map.elems aCredentials
 
       -- 6. If credentialOptions is now empty, return an error code equivalent
@@ -382,7 +381,7 @@ authenticatorGetAssertion
       -- the authenticator, by some positive value. If the authenticator does
       -- not implement a signature counter, let the signature counter value
       -- remain constant at zero.
-      let (signatureCounter, aSignatureCounter') = incrementCounter (pkcsId selectedCredential) aSignatureCounter
+      let (signatureCounter, aSignatureCounter') = incrementCounter (csId selectedCredential) aSignatureCounter
 
       -- 10. Let authenticatorData be the byte array specified in § 6.1
       -- Authenticator Data including processedExtensions, if any, as the
@@ -408,15 +407,15 @@ authenticatorGetAssertion
       privateKey <-
         if Set.member RandomPrivateKey aConformance
           then -- Generate a new private key with the same algorithm as expected
-            Key.privKey <$> Key.newKeyPair (pkcsSignAlg selectedCredential)
-          else pure $ pkcsPrivateKey selectedCredential
+            Key.privKey <$> Key.newKeyPair (csSignAlg selectedCredential)
+          else pure $ csPrivateKey selectedCredential
       msg <-
         if Set.member RandomSignatureData aConformance
           then Random.getRandomBytes 4
           else pure $ M.unRaw (M.adRawData authenticatorData) <> BA.convert (M.unClientDataHash clientDataHash)
       signature <-
         Key.sign
-          (pkcsSignAlg selectedCredential)
+          (csSignAlg selectedCredential)
           privateKey
           msg
       -- 12. If any error occurred while generating the assertion signature,
@@ -425,7 +424,7 @@ authenticatorGetAssertion
       -- NOTE: We don't produce any error
 
       -- 13. Return
-      pure ((pkcsId selectedCredential, authenticatorData, signature, pkcsUserHandle selectedCredential), authenticator {aSignatureCounter = aSignatureCounter'})
+      pure ((csId selectedCredential, authenticatorData, signature, csUserHandle selectedCredential), authenticator {aSignatureCounter = aSignatureCounter'})
     where
       -- Increments the signature counter and results in the updated version
       incrementCounter :: M.CredentialId -> AuthenticatorSignatureCounter -> (M.SignatureCounter, AuthenticatorSignatureCounter)
@@ -448,5 +447,5 @@ authenticatorGetAssertion
             (Just c, m') = Map.updateLookupWithKey (\_ c -> Just $ increment + c) key m
          in (c, PerCredential m')
 
-authenticatorLookupCredential :: Authenticator -> M.CredentialId -> Maybe PublicKeyCredentialSource
-authenticatorLookupCredential AuthenticatorNone {..} credentialId = snd <$> Map.lookupMin (Map.filter (\PublicKeyCredentialSource {..} -> pkcsId == credentialId) aCredentials)
+authenticatorLookupCredential :: Authenticator -> M.CredentialId -> Maybe CredentialSource
+authenticatorLookupCredential AuthenticatorNone {..} credentialId = snd <$> Map.lookupMin (Map.filter (\CredentialSource {..} -> csId == credentialId) aCredentials)

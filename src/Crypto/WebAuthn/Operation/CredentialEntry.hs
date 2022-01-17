@@ -1,6 +1,7 @@
--- | This module represents all the information the Relying Party must store in
+-- | Stability: experimental
+-- This module represents all the information the Relying Party must store in
 -- the database for every credential.
-module Crypto.WebAuthn.Operations.CredentialEntry
+module Crypto.WebAuthn.Operation.CredentialEntry
   ( CredentialEntry (..),
   )
 where

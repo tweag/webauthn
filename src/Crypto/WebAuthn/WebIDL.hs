@@ -1,3 +1,4 @@
+-- | Stability: experimental
 -- | This module defines some types from the [Web IDL](https://webidl.spec.whatwg.org/) specification
 module Crypto.WebAuthn.WebIDL
   ( DOMString,

@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
--- |
+-- | Stability: experimental
 -- This module contains functions to further decode
 -- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
 -- IDL types defined in 'Crypto.WebAuthn.Metadata.Service.WebIDL' into the Haskell-specific types defined in 'Crypto.WebAuthn.Metadata.Service.Types'

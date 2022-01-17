@@ -3,26 +3,24 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | This module handles the encoding of structures passed to the
+-- | Stability: internal
+-- This module handles the encoding of structures passed to the
 -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- and [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- methods while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
-module Crypto.WebAuthn.Model.WebIDL.Encoding
-  ( encodePublicKeyCredentialCreationOptions,
-    encodePublicKeyCredentialRequestOptions,
-    encodeCreatedPublicKeyCredential,
-    encodeRequestedPublicKeyCredential,
+module Crypto.WebAuthn.Model.WebIDL.Internal.Encoding
+  ( Encode (..),
   )
 where
 
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
-import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (JS))
+import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as B
+import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (IDL))
 import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Coerce (Coercible, coerce)
@@ -30,10 +28,10 @@ import qualified Data.Map as Map
 import Data.Singletons (SingI)
 
 -- | @'Encode' hs@ indicates that the Haskell-specific type @hs@ can be
--- encoded to the more generic JavaScript type @'JS' hs@ with the 'encode' function.
+-- encoded to the more generic JavaScript type @'IDL' hs@ with the 'encode' function.
 class Convert a => Encode a where
-  encode :: a -> JS a
-  default encode :: Coercible a (JS a) => a -> JS a
+  encode :: a -> IDL a
+  default encode :: Coercible a (IDL a) => a -> IDL a
   encode = coerce
 
 instance Encode hs => Encode (Maybe hs) where
@@ -66,8 +64,8 @@ instance Encode Cose.CoseSignAlg where
   encode = Cose.fromCoseSignAlg
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
-instance Encode M.PublicKeyCredentialType where
-  encode M.PublicKeyCredentialTypePublicKey = "public-key"
+instance Encode M.CredentialType where
+  encode M.CredentialTypePublicKey = "public-key"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport>
 instance Encode [M.AuthenticatorTransport] where
@@ -102,36 +100,36 @@ instance Encode M.AttestationConveyancePreference where
   encode M.AttestationConveyancePreferenceDirect = Just "direct"
   encode M.AttestationConveyancePreferenceEnterprise = Just "enterprise"
 
-instance Encode M.PublicKeyCredentialRpEntity where
-  encode M.PublicKeyCredentialRpEntity {..} =
+instance Encode M.CredentialRpEntity where
+  encode M.CredentialRpEntity {..} =
     IDL.PublicKeyCredentialRpEntity
-      { id = encode pkcreId,
-        name = encode pkcreName
+      { id = encode creId,
+        name = encode creName
       }
 
-instance Encode M.PublicKeyCredentialUserEntity where
-  encode M.PublicKeyCredentialUserEntity {..} =
+instance Encode M.CredentialUserEntity where
+  encode M.CredentialUserEntity {..} =
     IDL.PublicKeyCredentialUserEntity
-      { id = encode pkcueId,
-        displayName = encode pkcueDisplayName,
-        name = encode pkcueName
+      { id = encode cueId,
+        displayName = encode cueDisplayName,
+        name = encode cueName
       }
 
-instance Encode [M.PublicKeyCredentialParameters] where
+instance Encode [M.CredentialParameters] where
   encode = map encodeParameters
     where
-      encodeParameters M.PublicKeyCredentialParameters {..} =
+      encodeParameters M.CredentialParameters {..} =
         IDL.PublicKeyCredentialParameters
-          { littype = encode pkcpTyp,
-            alg = encode pkcpAlg
+          { littype = encode cpTyp,
+            alg = encode cpAlg
           }
 
-instance Encode M.PublicKeyCredentialDescriptor where
-  encode M.PublicKeyCredentialDescriptor {..} =
+instance Encode M.CredentialDescriptor where
+  encode M.CredentialDescriptor {..} =
     IDL.PublicKeyCredentialDescriptor
-      { littype = encode pkcdTyp,
-        id = encode pkcdId,
-        transports = encode pkcdTransports
+      { littype = encode cdTyp,
+        id = encode cdId,
+        transports = encode cdTransports
       }
 
 instance Encode M.AuthenticatorSelectionCriteria where
@@ -145,108 +143,78 @@ instance Encode M.AuthenticatorSelectionCriteria where
         userVerification = encode ascUserVerification
       }
 
-instance Encode [M.PublicKeyCredentialDescriptor] where
+instance Encode [M.CredentialDescriptor] where
   encode = Just . map encode
 
-instance Encode (M.PublicKeyCredentialOptions 'M.Create) where
-  encode M.PublicKeyCredentialCreationOptions {..} =
+instance Encode (M.CredentialOptions 'K.Registration) where
+  encode M.CredentialOptionsRegistration {..} =
     IDL.PublicKeyCredentialCreationOptions
-      { rp = encode pkcocRp,
-        user = encode pkcocUser,
-        challenge = encode pkcocChallenge,
-        pubKeyCredParams = encode pkcocPubKeyCredParams,
-        timeout = encode pkcocTimeout,
-        excludeCredentials = encode pkcocExcludeCredentials,
-        authenticatorSelection = encode pkcocAuthenticatorSelection,
-        attestation = encode pkcocAttestation,
-        extensions = encode pkcocExtensions
+      { rp = encode corRp,
+        user = encode corUser,
+        challenge = encode corChallenge,
+        pubKeyCredParams = encode corPubKeyCredParams,
+        timeout = encode corTimeout,
+        excludeCredentials = encode corExcludeCredentials,
+        authenticatorSelection = encode corAuthenticatorSelection,
+        attestation = encode corAttestation,
+        extensions = encode corExtensions
       }
 
-instance Encode (M.PublicKeyCredentialOptions 'M.Get) where
-  encode M.PublicKeyCredentialRequestOptions {..} =
+instance Encode (M.CredentialOptions 'K.Authentication) where
+  encode M.CredentialOptionsAuthentication {..} =
     IDL.PublicKeyCredentialRequestOptions
-      { challenge = encode pkcogChallenge,
-        timeout = encode pkcogTimeout,
-        rpId = encode pkcogRpId,
-        allowCredentials = encode pkcogAllowCredentials,
-        userVerification = encode pkcogUserVerification,
-        extensions = encode pkcogExtensions
+      { challenge = encode coaChallenge,
+        timeout = encode coaTimeout,
+        rpId = encode coaRpId,
+        allowCredentials = encode coaAllowCredentials,
+        userVerification = encode coaUserVerification,
+        extensions = encode coaExtensions
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- Encodes the PublicKeyCredential for attestation, this instance is mostly used in the tests where we emulate the
 -- of the client.
-instance Encode (M.PublicKeyCredential 'M.Create 'True) where
-  encode M.PublicKeyCredential {..} =
+instance Encode (M.Credential 'K.Registration 'True) where
+  encode M.Credential {..} =
     IDL.PublicKeyCredential
-      { rawId = encode pkcIdentifier,
-        response = encode pkcResponse,
+      { rawId = encode cIdentifier,
+        response = encode cResponse,
         -- TODO: Extensions are not implemented by this library, see the TODO in the
         -- module documentation of `Crypto.WebAuthn.Model` for more information.
         clientExtensionResults = Map.empty
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
-instance SingI t => Encode (M.CollectedClientData t 'True) where
-  encode ccd = IDL.URLEncodedBase64 $ ME.encodeCollectedClientData ccd
+instance SingI c => Encode (M.CollectedClientData c 'True) where
+  encode ccd = IDL.URLEncodedBase64 $ B.encodeCollectedClientData ccd
 
-instance Encode (M.AuthenticatorResponse 'M.Get 'True) where
-  encode M.AuthenticatorAssertionResponse {..} =
+instance Encode (M.AuthenticatorResponse 'K.Authentication 'True) where
+  encode M.AuthenticatorResponseAuthentication {..} =
     IDL.AuthenticatorAssertionResponse
-      { clientDataJSON = encode argClientData,
-        authenticatorData = IDL.URLEncodedBase64 $ M.unRaw $ M.adRawData argAuthenticatorData,
-        signature = IDL.URLEncodedBase64 $ M.unAssertionSignature argSignature,
-        userHandle = IDL.URLEncodedBase64 . M.unUserHandle <$> argUserHandle
+      { clientDataJSON = encode araClientData,
+        authenticatorData = IDL.URLEncodedBase64 $ M.unRaw $ M.adRawData araAuthenticatorData,
+        signature = IDL.URLEncodedBase64 $ M.unAssertionSignature araSignature,
+        userHandle = IDL.URLEncodedBase64 . M.unUserHandle <$> araUserHandle
       }
 
-instance Encode (M.PublicKeyCredential 'M.Get 'True) where
-  encode M.PublicKeyCredential {..} =
+instance Encode (M.Credential 'K.Authentication 'True) where
+  encode M.Credential {..} =
     IDL.PublicKeyCredential
-      { rawId = encode pkcIdentifier,
-        response = encode pkcResponse,
+      { rawId = encode cIdentifier,
+        response = encode cResponse,
         -- TODO: Extensions are not implemented by this library, see the TODO in the
         -- module documentation of `Crypto.WebAuthn.Model` for more information.
         clientExtensionResults = Map.empty
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
-instance Encode (M.AuthenticatorResponse 'M.Create 'True) where
-  encode M.AuthenticatorAttestationResponse {..} =
+instance Encode (M.AuthenticatorResponse 'K.Registration 'True) where
+  encode M.AuthenticatorResponseRegistration {..} =
     IDL.AuthenticatorAttestationResponse
-      { clientDataJSON = encode arcClientData,
-        attestationObject = encode arcAttestationObject
+      { clientDataJSON = encode arrClientData,
+        attestationObject = encode arrAttestationObject
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
 instance Encode (M.AttestationObject 'True) where
-  encode ao = IDL.URLEncodedBase64 $ ME.encodeAttestationObject ao
-
--- | Encodes a @'M.PublicKeyCredentialOptions' M.Create@, corresponding to the
--- [@PublicKeyCredentialCreationOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
--- to be passed to the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
--- method while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
-encodePublicKeyCredentialCreationOptions ::
-  M.PublicKeyCredentialOptions 'M.Create ->
-  IDL.PublicKeyCredentialCreationOptions
-encodePublicKeyCredentialCreationOptions = encode
-
--- | Encodes a @'M.PublicKeyCredentialOptions' M.Get@, corresponding to the
--- [@PublicKeyCredentialRequestOptions@ dictionary](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
--- to be passed to the [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
--- method while [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
-encodePublicKeyCredentialRequestOptions ::
-  M.PublicKeyCredentialOptions 'M.Get ->
-  IDL.PublicKeyCredentialRequestOptions
-encodePublicKeyCredentialRequestOptions = encode
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
--- Encodes the PublicKeyCredential for attestation, this function is mostly used in the tests where we emulate the
--- of the client.
-encodeCreatedPublicKeyCredential :: M.PublicKeyCredential 'M.Create 'True -> IDL.CreatedPublicKeyCredential
-encodeCreatedPublicKeyCredential = encode
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
--- Encodes the PublicKeyCredential for assertion, this function is mostly used in the tests where we emulate the
--- of the client.
-encodeRequestedPublicKeyCredential :: M.PublicKeyCredential 'M.Get 'True -> IDL.RequestedPublicKeyCredential
-encodeRequestedPublicKeyCredential = encode
+  encode ao = IDL.URLEncodedBase64 $ B.encodeAttestationObject ao

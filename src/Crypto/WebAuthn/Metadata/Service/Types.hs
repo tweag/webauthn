@@ -1,10 +1,8 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
--- |
+-- | Stability: experimental
 -- This module contains additional Haskell-specific type definitions for the
 -- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
 -- specification
@@ -17,10 +15,10 @@ module Crypto.WebAuthn.Metadata.Service.Types
   )
 where
 
-import Crypto.WebAuthn.Identifier (AAGUID, AuthenticatorIdentifier, SubjectKeyIdentifier)
 import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import Crypto.WebAuthn.Metadata.Statement.Types (MetadataStatement)
-import qualified Crypto.WebAuthn.Model.Types as M
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.Identifier (AAGUID, AuthenticatorIdentifier, SubjectKeyIdentifier)
 import Data.Aeson (ToJSON)
 import Data.HashMap.Strict (HashMap)
 import Data.Hourglass (Date)
@@ -31,7 +29,12 @@ import Data.Word (Word32)
 import qualified Data.X509 as X509
 import GHC.Generics (Generic)
 
--- | A registry of 'MetadataEntry's, allowing fast lookup using 'M.AAGUID's or 'SubjectKeyIdentifier's
+-- | A registry of 'MetadataEntry's, allowing fast lookup using 'M.AAGUID's or
+-- 'SubjectKeyIdentifier's. This is used by 'Crypto.WebAuthn.Operation.Registration.verifyRegistrationResponse'
+-- as a way to look up root certificates of authenticators and return meta information.
+-- Using 'Crypto.WebAuthn.Metadata.Service.Processing.createMetadataRegistry'
+-- it's also possible to create additional custom entries, which can be merged
+-- with '<>'. Meanwhile 'mempty' can be used if no metadata is needed.
 data MetadataServiceRegistry = MetadataServiceRegistry
   { fido2Entries :: HashMap AAGUID (MetadataEntry 'M.Fido2),
     fidoU2FEntries :: HashMap SubjectKeyIdentifier (MetadataEntry 'M.FidoU2F)
@@ -49,12 +52,20 @@ instance Monoid MetadataServiceRegistry where
 -- 'StatementIDL.entries' not relevant for webauthn are discarded
 data MetadataPayload = MetadataPayload
   { -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayload-legalheader)
+    -- The legalHeader, which MUST be in each BLOB, is an indication of the
+    -- acceptance of the relevant legal agreement for using the MDS.
     mpLegalHeader :: Maybe Text,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayload-no)
+    -- The serial number of this UAF Metadata BLOB Payload. Serial numbers MUST
+    -- be consecutive and strictly monotonic, i.e. the successor BLOB will have
+    -- a no value exactly incremented by one.
     mpNo :: Int,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayload-nextupdate)
+    -- Date when the next update will be provided at latest.
     mpNextUpdate :: Date,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayload-entries)
+    -- List of zero or more entries. This can be passed to
+    -- 'Crypto.WebAuthn.Metadata.Service.Processing.createMetadataRegistry'
     mpEntries :: [SomeMetadataEntry]
   }
 

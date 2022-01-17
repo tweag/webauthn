@@ -1,7 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- | This module contain some useful orphan 'ToJSON' instances for pretty-printing values from third-party libraries
+-- | Stability: internal
+-- This module contain some useful orphan 'ToJSON' instances for pretty-printing values from third-party libraries
 module Crypto.WebAuthn.Internal.ToJSONOrphans () where
 
 import Crypto.Hash (Digest)

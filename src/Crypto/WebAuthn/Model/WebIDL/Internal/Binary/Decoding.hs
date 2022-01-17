@@ -1,20 +1,17 @@
-{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- | Certain parts of the specification require that data is decoded from a
+-- | Stability: internal
+-- Certain parts of the specification require that data is decoded from a
 -- binary form. This module holds such functions.
-module Crypto.WebAuthn.Model.Binary.Decoding
+module Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Decoding
   ( -- * Decoding from bytes
     decodeAuthenticatorData,
     decodeAttestationObject,
     decodeCollectedClientData,
-
-    -- * Stripping raw fields
-    stripRawPublicKeyCredential,
   )
 where
 
@@ -26,8 +23,9 @@ import Control.Monad (forM, unless)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (MonadState (get, put), StateT (runStateT))
 import qualified Crypto.Hash as Hash
-import Crypto.WebAuthn.Identifier (AAGUID (AAGUID))
 import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
+import Crypto.WebAuthn.Model.Identifier (AAGUID (AAGUID))
+import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
@@ -95,11 +93,11 @@ runCBOR decoder = do
 -- field in the [AuthenticatorAssertionResponse](https://www.w3.org/TR/webauthn-2/#iface-authenticatorassertionresponse)
 -- structure
 decodeAuthenticatorData ::
-  forall t.
-  SingI t =>
+  forall c.
+  SingI c =>
   BS.ByteString ->
-  Either Text (M.AuthenticatorData t 'True)
-decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
+  Either Text (M.AuthenticatorData c 'True)
+decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes $ do
   -- https://www.w3.org/TR/webauthn-2/#authenticator-data
   let adRawData = M.WithRaw strictBytes
 
@@ -120,17 +118,17 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
   adSignCount <- M.SignatureCounter <$> runBinary Binary.getWord32be
 
   -- https://www.w3.org/TR/webauthn-2/#attestedcredentialdata
-  adAttestedCredentialData <- case (sing @t, Bits.testBit bitFlags 6) of
+  adAttestedCredentialData <- case (sing @c, Bits.testBit bitFlags 6) of
     -- For [attestation signatures](https://www.w3.org/TR/webauthn-2/#attestation-signature),
     -- the authenticator MUST set the AT [flag](https://www.w3.org/TR/webauthn-2/#flags)
     -- and include the `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)`.
-    (M.SCreate, True) -> decodeAttestedCredentialData
-    (M.SCreate, False) -> throwError "Expected attested credential data, but there is none"
+    (K.SRegistration, True) -> decodeAttestedCredentialData
+    (K.SRegistration, False) -> throwError "Expected attested credential data, but there is none"
     -- For [assertion signatures](https://www.w3.org/TR/webauthn-2/#assertion-signature),
     -- the AT [flag](https://www.w3.org/TR/webauthn-2/#flags) MUST NOT be set and the
     -- `[attestedCredentialData](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)` MUST NOT be included.
-    (M.SGet, False) -> pure M.NoAttestedCredentialData
-    (M.SGet, True) -> throwError "Expected no attested credential data, but there is"
+    (K.SAuthentication, False) -> pure M.NoAttestedCredentialData
+    (K.SAuthentication, True) -> throwError "Expected no attested credential data, but there is"
 
   -- https://www.w3.org/TR/webauthn-2/#authdataextensions
   adExtensions <-
@@ -140,7 +138,7 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes do
 
   pure M.AuthenticatorData {..}
   where
-    decodeAttestedCredentialData :: PartialBinaryDecoder (M.AttestedCredentialData 'M.Create 'True)
+    decodeAttestedCredentialData :: PartialBinaryDecoder (M.AttestedCredentialData 'K.Registration 'True)
     decodeAttestedCredentialData = do
       -- https://www.w3.org/TR/webauthn-2/#aaguid
       acdAaguid <-
@@ -190,13 +188,17 @@ decodeAttestationObject supportedFormats bytes = do
     (Just (CBOR.TBytes authDataBytes), Just (CBOR.TString fmt), Just (CBOR.TMap attStmtPairs)) -> do
       aoAuthData <- decodeAuthenticatorData authDataBytes
 
-      case M.sasfLookup fmt supportedFormats of
+      case M.lookupAttestationStatementFormat fmt supportedFormats of
         Nothing -> Left $ "Unknown attestation statement format: " <> fmt
         Just (M.SomeAttestationStatementFormat aoFmt) -> do
           attStmtMap <-
-            HashMap.fromList <$> forM attStmtPairs \case
-              (CBOR.TString text, term) -> pure (text, term)
-              (nonString, _) -> Left $ "Unexpected non-string attestation statement key: " <> Text.pack (show nonString)
+            HashMap.fromList
+              <$> forM
+                attStmtPairs
+                ( \case
+                    (CBOR.TString text, term) -> pure (text, term)
+                    (nonString, _) -> Left $ "Unexpected non-string attestation statement key: " <> Text.pack (show nonString)
+                )
           aoAttStmt <- M.asfDecode aoFmt attStmtMap
           pure M.AttestationObject {..}
     _ -> Left $ "The attestation object doesn't have the expected structure of (authData: bytes, fmt: string, attStmt: map): " <> Text.pack (show result)
@@ -221,7 +223,7 @@ data ClientDataJSON = ClientDataJSON
 -- to parse the [clientDataJSON](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
 -- field in the [AuthenticatorResponse](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
 -- structure, which is used for both attestation and assertion
-decodeCollectedClientData :: forall t. SingI t => BS.ByteString -> Either Text (M.CollectedClientData t 'True)
+decodeCollectedClientData :: forall c. SingI c => BS.ByteString -> Either Text (M.CollectedClientData c 'True)
 decodeCollectedClientData bytes = do
   -- https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data
   ClientDataJSON {..} <-
@@ -240,9 +242,9 @@ decodeCollectedClientData bytes = do
   -- and "webauthn.get" when getting an assertion from an existing credential.
   -- The purpose of this member is to prevent certain types of signature confusion
   -- attacks (where an attacker substitutes one legitimate signature for another).
-  let expectedType = case sing @t of
-        M.SCreate -> "webauthn.create"
-        M.SGet -> "webauthn.get"
+  let expectedType = case sing @c of
+        K.SRegistration -> "webauthn.create"
+        K.SAuthentication -> "webauthn.get"
   unless (littype == expectedType) $
     Left $
       "Expected collected client data to have webauthn type " <> expectedType <> " but it is " <> littype
@@ -253,54 +255,3 @@ decodeCollectedClientData bytes = do
         ccdCrossOrigin = fromMaybe False crossOrigin,
         ccdRawData = M.WithRaw bytes
       }
-
--- | Removes all raw fields from a 'M.PublicKeyCredential', useful for
--- e.g. pretty-printing only the desired fields. This is the counterpart to
--- 'Crypto.WebAuthn.Model.Binary.Encoding.encodeRawPublicKeyCredential'
-stripRawPublicKeyCredential :: forall t raw. SingI t => M.PublicKeyCredential t raw -> M.PublicKeyCredential t 'False
-stripRawPublicKeyCredential M.PublicKeyCredential {..} =
-  M.PublicKeyCredential
-    { pkcResponse = case sing @t of
-        M.SCreate -> stripRawAuthenticatorAttestationResponse pkcResponse
-        M.SGet -> stripRawAuthenticatorAssertionResponse pkcResponse,
-      ..
-    }
-  where
-    stripRawAuthenticatorAssertionResponse :: M.AuthenticatorResponse 'M.Get raw -> M.AuthenticatorResponse 'M.Get 'False
-    stripRawAuthenticatorAssertionResponse M.AuthenticatorAssertionResponse {..} =
-      M.AuthenticatorAssertionResponse
-        { argClientData = stripRawCollectedClientData argClientData,
-          argAuthenticatorData = stripRawAuthenticatorData argAuthenticatorData,
-          ..
-        }
-
-    stripRawAuthenticatorAttestationResponse :: M.AuthenticatorResponse 'M.Create raw -> M.AuthenticatorResponse 'M.Create 'False
-    stripRawAuthenticatorAttestationResponse M.AuthenticatorAttestationResponse {..} =
-      M.AuthenticatorAttestationResponse
-        { arcClientData = stripRawCollectedClientData arcClientData,
-          arcAttestationObject = stripRawAttestationObject arcAttestationObject,
-          ..
-        }
-
-    stripRawAttestationObject :: M.AttestationObject raw -> M.AttestationObject 'False
-    stripRawAttestationObject M.AttestationObject {..} =
-      M.AttestationObject
-        { aoAuthData = stripRawAuthenticatorData aoAuthData,
-          ..
-        }
-
-    stripRawAuthenticatorData :: forall t raw. SingI t => M.AuthenticatorData t raw -> M.AuthenticatorData t 'False
-    stripRawAuthenticatorData M.AuthenticatorData {..} =
-      M.AuthenticatorData
-        { adRawData = M.NoRaw,
-          adAttestedCredentialData = stripRawAttestedCredentialData adAttestedCredentialData,
-          ..
-        }
-
-    stripRawAttestedCredentialData :: forall t raw. SingI t => M.AttestedCredentialData t raw -> M.AttestedCredentialData t 'False
-    stripRawAttestedCredentialData = case sing @t of
-      M.SCreate -> \M.AttestedCredentialData {..} -> M.AttestedCredentialData {acdCredentialPublicKeyBytes = M.NoRaw, ..}
-      M.SGet -> \M.NoAttestedCredentialData -> M.NoAttestedCredentialData
-
-    stripRawCollectedClientData :: forall t raw. SingI t => M.CollectedClientData t raw -> M.CollectedClientData t 'False
-    stripRawCollectedClientData M.CollectedClientData {..} = M.CollectedClientData {ccdRawData = M.NoRaw, ..}

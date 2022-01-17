@@ -6,7 +6,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- |
+-- | Stability: experimental
 -- This module contains the same top-level definitions as 'Crypto.WebAuthn.Client.JavaScript',
 -- but with the types containing a more Haskell-friendly structure.
 --
@@ -24,7 +24,7 @@
 -- [IANA](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids).
 module Crypto.WebAuthn.Model.Types
   ( -- * Enumerations
-    PublicKeyCredentialType (..),
+    CredentialType (..),
     AuthenticatorTransport (..),
     AuthenticatorAttachment (..),
     ResidentKeyRequirement (..),
@@ -60,10 +60,10 @@ module Crypto.WebAuthn.Model.Types
     AuthenticatorExtensionOutputs (..),
 
     -- * Dictionaries
-    PublicKeyCredentialRpEntity (..),
-    PublicKeyCredentialUserEntity (..),
-    PublicKeyCredentialParameters (..),
-    PublicKeyCredentialDescriptor (..),
+    CredentialRpEntity (..),
+    CredentialUserEntity (..),
+    CredentialParameters (..),
+    CredentialDescriptor (..),
     AuthenticatorSelectionCriteria (..),
     AuthenticatorDataFlags (..),
     CollectedClientData (..),
@@ -71,24 +71,22 @@ module Crypto.WebAuthn.Model.Types
     AuthenticatorData (..),
     AttestationObject (..),
     AuthenticatorResponse (..),
-    AttestationStatementFormat (..),
+
+    -- * Attestation Statement Formats
     SomeAttestationType (..),
+    AttestationStatementFormat (..),
     SomeAttestationStatementFormat (..),
     SupportedAttestationStatementFormats,
-
-    -- * Utility functions
-    sasfSingleton,
-    sasfLookup,
+    singletonAttestationStatementFormat,
+    lookupAttestationStatementFormat,
 
     -- * Raw fields
     RawField (..),
 
     -- * Top-level types
-    PublicKeyCredentialOptions (..),
-    PublicKeyCredential (..),
-
-    -- * Reexports
-    module Crypto.WebAuthn.Model.Kinds,
+    CredentialOptions (..),
+    Credential (..),
+    stripRawCredential,
   )
 where
 
@@ -97,16 +95,15 @@ import Control.Exception (Exception)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import Crypto.Random (MonadRandom, getRandomBytes)
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.Identifier (AAGUID)
 import Crypto.WebAuthn.Internal.ToJSONOrphans ()
+import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
+    CeremonyKind (Authentication, Registration),
     ProtocolKind (Fido2, FidoU2F),
-    SProtocolKind (SFido2, SFidoU2F),
-    SWebauthnKind (SCreate, SGet),
-    WebauthnKind (Create, Get),
+    SCeremonyKind (SAuthentication, SRegistration),
   )
 import Data.Aeson (ToJSON, Value (Null, String), object, (.=))
 import Data.Aeson.Types (toJSON)
@@ -144,11 +141,11 @@ instance ToJSON (RawField raw) where
 -- values can be added to it in the future, as more credential types are defined.
 -- The values of this enumeration are used for versioning the Authentication Assertion
 -- and attestation structures according to the type of the authenticator.
-data PublicKeyCredentialType = PublicKeyCredentialTypePublicKey
+data CredentialType = CredentialTypePublicKey
   deriving (Eq, Show, Bounded, Enum, Ord, Generic)
 
-instance ToJSON PublicKeyCredentialType where
-  toJSON PublicKeyCredentialTypePublicKey = "PublicKeyCredentialTypePublicKey"
+instance ToJSON CredentialType where
+  toJSON CredentialTypePublicKey = "CredentialTypePublicKey"
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
 -- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) may implement
@@ -214,7 +211,7 @@ data ResidentKeyRequirement
     -- but will accept a [server-side credential](https://www.w3.org/TR/webauthn-2/#server-side-credential).
     -- For example, user agents SHOULD guide the user through setting up [user verification](https://www.w3.org/TR/webauthn-2/#user-verification)
     -- if needed to create a [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential)
-    -- in this case. This takes precedence over the setting of 'pkcogUserVerification'.
+    -- in this case. This takes precedence over the setting of 'coaUserVerification'.
     ResidentKeyRequirementPreferred
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-required)
     -- This value indicates the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -488,7 +485,7 @@ generateUserHandle = UserHandle <$> getRandomBytes 16
 -- - [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform
 -- enforcement, as prescribed in Section 2.3 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266)
 -- for the Nickname Profile of the PRECIS FreeformClass [RFC8264](https://www.w3.org/TR/webauthn-2/#biblio-rfc8264),
--- when setting 'pkcueDisplayName's value, or displaying the value to the user.
+-- when setting 'cueDisplayName's value, or displaying the value to the user.
 -- - This string MAY contain language and direction metadata. [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
 -- SHOULD consider providing this information. See [§ 6.4.2 Language and Direction Encoding](https://www.w3.org/TR/webauthn-2/#sctn-strings-langdir)
 -- about how this metadata is encoded.
@@ -499,7 +496,7 @@ newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayNam
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) identifier for a user account.
 -- It is intended only for display, i.e., aiding the user in determining the difference between user accounts with
--- similar 'pkcueDisplayName's. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
+-- similar 'cueDisplayName's. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
 --
 -- - The [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) MAY let the user choose this value.
 --   The [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) SHOULD perform enforcement,
@@ -638,29 +635,29 @@ instance ToJSON AuthenticatorExtensionOutputs where
   toJSON _ = object []
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-rp-credential-params)
--- The 'PublicKeyCredentialRpEntity' dictionary is used to supply additional
+-- The 'CredentialRpEntity' dictionary is used to supply additional
 -- [Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) attributes when creating a new credential.
-data PublicKeyCredentialRpEntity = PublicKeyCredentialRpEntity
+data CredentialRpEntity = CredentialRpEntity
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrpentity-id)
     -- A unique identifier for the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- entity, which sets the 'RpId'.
-    pkcreId :: Maybe RpId,
+    creId :: Maybe RpId,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
     -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability)
     -- identifier for the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party),
     -- intended only for display. For example, "ACME Corporation", "Wonderful Widgets, Inc." or "ОАО Примертех".
-    pkcreName :: RelyingPartyName
+    creName :: RelyingPartyName
   }
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-user-credential-params)
--- The 'PublicKeyCredentialUserEntity' dictionary is used to supply additional
+-- The 'CredentialUserEntity' dictionary is used to supply additional
 -- user account attributes when creating a new credential.
-data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
+data CredentialUserEntity = CredentialUserEntity
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-id)
     -- The 'UserHandle' of the user account entity.
     -- To ensure secure operation, authentication and authorization decisions MUST
-    -- be made on the basis of this 'pkcueId' member, not the 'pkcueDisplayName' nor 'pkcueName' members.
+    -- be made on the basis of this 'cueId' member, not the 'cueDisplayName' nor 'cueName' members.
     -- See Section 6.1 of [RFC8266](https://www.w3.org/TR/webauthn-2/#biblio-rfc8266).
     -- The 'UserHandle' MUST NOT contain personally identifying information about the user, such as a username
     -- or e-mail address; see [§ 14.6.1 User Handle Contents](https://www.w3.org/TR/webauthn-2/#sctn-user-handle-privacy)
@@ -668,30 +665,30 @@ data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
     -- NOTE: We don't allow encoding it as null here, because it isn't an
     -- allowed value in the client, see <https://www.w3.org/TR/webauthn-2/#sctn-createCredential>
     -- This was confirmed and a fix was merged: <https://github.com/w3c/webauthn/pull/1600>
-    pkcueId :: UserHandle,
+    cueId :: UserHandle,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
     -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) name for the user account,
     -- intended only for display. For example, "Alex Müller" or "田中倫".
-    pkcueDisplayName :: UserAccountDisplayName,
+    cueDisplayName :: UserAccountDisplayName,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
     -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) identifier for a user account.
     -- It is intended only for display, i.e., aiding the user in determining the difference between user
-    -- accounts with similar 'pkcueDisplayName's. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
-    pkcueName :: UserAccountName
+    -- accounts with similar 'cueDisplayName's. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
+    cueName :: UserAccountName
   }
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-params)
 -- This dictionary is used to supply additional parameters when creating a new credential.
-data PublicKeyCredentialParameters = PublicKeyCredentialParameters
+data CredentialParameters = CredentialParameters
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialparameters-type)
     -- This member specifies the type of credential to be created.
-    pkcpTyp :: PublicKeyCredentialType,
+    cpTyp :: CredentialType,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialparameters-alg)
     -- This member specifies the cryptographic signature algorithm with which the newly
     -- generated credential will be used, and thus also the type of asymmetric
     -- key pair to be generated, e.g., RSA or Elliptic Curve.
-    pkcpAlg :: Cose.CoseSignAlg
+    cpAlg :: Cose.CoseSignAlg
   }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -700,21 +697,21 @@ data PublicKeyCredentialParameters = PublicKeyCredentialParameters
 -- [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) as an input parameter to the
 -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) or
 -- [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get) methods.
--- It mirrors the fields of the 'PublicKeyCredential' object returned by the latter methods.
-data PublicKeyCredentialDescriptor = PublicKeyCredentialDescriptor
+-- It mirrors the fields of the 'Credential' object returned by the latter methods.
+data CredentialDescriptor = CredentialDescriptor
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-type)
     -- This member contains the type of the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) the caller is referring to.
-    pkcdTyp :: PublicKeyCredentialType,
+    cdTyp :: CredentialType,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-id)
     -- This member contains the [credential ID](https://www.w3.org/TR/webauthn-2/#credential-id) of the
     -- [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) the caller is referring to.
-    pkcdId :: CredentialId,
+    cdId :: CredentialId,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-transports)
     -- This OPTIONAL member contains a hint as to how the [client](https://www.w3.org/TR/webauthn-2/#client)
     -- might communicate with the [managing authenticator](https://www.w3.org/TR/webauthn-2/#public-key-credential-source-managing-authenticator)
     -- of the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) the caller is referring to.
     -- The values SHOULD be members of 'AuthenticatorTransport' but [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values.
-    pkcdTransports :: Maybe [AuthenticatorTransport]
+    cdTransports :: Maybe [AuthenticatorTransport]
   }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -762,48 +759,48 @@ data AuthenticatorDataFlags = AuthenticatorDataFlags
 -- [creation](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 -- and
 -- [requesting](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options).
--- The WebauthnKind argument specifies which.
-data PublicKeyCredentialOptions (t :: WebauthnKind) where
+-- The CeremonyKind araument specifies which.
+data CredentialOptions (c :: CeremonyKind) where
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
-  PublicKeyCredentialCreationOptions ::
+  CredentialOptionsRegistration ::
     { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-rp)
       -- This member contains data about the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- responsible for the request.
-      pkcocRp :: PublicKeyCredentialRpEntity,
+      corRp :: CredentialRpEntity,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-user)
       -- This member contains data about the user account for which the
       -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) is requesting attestation.
-      pkcocUser :: PublicKeyCredentialUserEntity,
+      corUser :: CredentialUserEntity,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-challenge)
       -- This member contains a challenge intended to be used for generating the newly created
       -- credential’s attestation object. See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
       -- security consideration.
-      pkcocChallenge :: Challenge,
+      corChallenge :: Challenge,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-pubkeycredparams)
       -- This member contains information about the desired properties of the credential to be created.
       -- The sequence is ordered from most preferred to least preferred.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) makes a best-effort
       -- to create the most preferred credential that it can.
-      pkcocPubKeyCredParams :: [PublicKeyCredentialParameters],
+      corPubKeyCredParams :: [CredentialParameters],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
       -- This member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
       -- This is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
-      pkcocTimeout :: Maybe Timeout,
+      corTimeout :: Maybe Timeout,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-excludecredentials)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
       -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
-      pkcocExcludeCredentials :: [PublicKeyCredentialDescriptor],
+      corExcludeCredentials :: [CredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to select the appropriate authenticators to participate in the
       -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
-      pkcocAuthenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
+      corAuthenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
-      pkcocAttestation :: AttestationConveyancePreference,
+      corAttestation :: AttestationConveyancePreference,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
       -- This member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, the caller may request that only authenticators with certain capabilities be used to create the credential,
@@ -813,80 +810,80 @@ data PublicKeyCredentialOptions (t :: WebauthnKind) where
       -- established by [RFC8809](https://www.w3.org/TR/webauthn-2/#biblio-rfc8809) for an up-to-date
       -- list of registered [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
       -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
-      pkcocExtensions :: Maybe AuthenticationExtensionsClientInputs
+      corExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
-    PublicKeyCredentialOptions 'Create
+    CredentialOptions 'Registration
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
-  -- The 'PublicKeyCredentialRequestOptions' dictionary supplies `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`
+  -- The 'CredentialOptionsAuthentication' dictionary supplies `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`
   -- with the data it needs to generate an assertion.
-  PublicKeyCredentialRequestOptions ::
+  CredentialOptionsAuthentication ::
     { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-challenge)
       -- This member represents a challenge that the selected [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) signs,
       -- along with other data, when producing an [authentication assertion](https://www.w3.org/TR/webauthn-2/#authentication-assertion).
       -- See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges) security consideration.
-      pkcogChallenge :: Challenge,
+      coaChallenge :: Challenge,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-timeout)
       -- This OPTIONAL member specifies a time, in milliseconds, that the caller is willing to wait for the call to complete.
       -- The value is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
-      pkcogTimeout :: Maybe Timeout,
+      coaTimeout :: Maybe Timeout,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-rpid)
       -- This OPTIONAL member specifies the [relying party identifier](https://www.w3.org/TR/webauthn-2/#relying-party-identifier) claimed by the caller.
       -- If omitted, its value will be the `[CredentialsContainer](https://w3c.github.io/webappsec-credential-management/#credentialscontainer)`
       -- object’s [relevant settings object](https://html.spec.whatwg.org/multipage/webappapis.html#relevant-settings-object)'s
       -- [origin](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-origin)'s
       -- [effective domain](https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain).
-      pkcogRpId :: Maybe RpId,
+      coaRpId :: Maybe RpId,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-allowcredentials)
-      -- This OPTIONAL member contains a list of 'PublicKeyCredentialDescriptor'
+      -- This OPTIONAL member contains a list of 'CredentialDescriptor'
       -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
       -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
-      pkcogAllowCredentials :: [PublicKeyCredentialDescriptor],
+      coaAllowCredentials :: [CredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
       -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
       -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
       -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
-      pkcogUserVerification :: UserVerificationRequirement,
+      coaUserVerification :: UserVerificationRequirement,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
-      pkcogExtensions :: Maybe AuthenticationExtensionsClientInputs
+      coaExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
-    PublicKeyCredentialOptions 'Get
+    CredentialOptions 'Authentication
 
-deriving instance Eq (PublicKeyCredentialOptions t)
+deriving instance Eq (CredentialOptions c)
 
-deriving instance Show (PublicKeyCredentialOptions t)
+deriving instance Show (CredentialOptions c)
 
-instance ToJSON (PublicKeyCredentialOptions t) where
-  toJSON PublicKeyCredentialCreationOptions {..} =
+instance ToJSON (CredentialOptions c) where
+  toJSON CredentialOptionsRegistration {..} =
     object
-      [ "tag" .= String "PublicKeyCredentialCreationOptions",
-        "pkcocRp" .= pkcocRp,
-        "pkcocUser" .= pkcocUser,
-        "pkcocChallenge" .= pkcocChallenge,
-        "pkcocPubKeyCredParams" .= pkcocPubKeyCredParams,
-        "pkcocTimeout" .= pkcocTimeout,
-        "pkcocExcludeCredentials" .= pkcocExcludeCredentials,
-        "pkcocAuthenticatorSelection" .= pkcocAuthenticatorSelection,
-        "pkcocAttestation" .= pkcocAttestation,
-        "pkcocExtensions" .= pkcocExtensions
+      [ "tag" .= String "CredentialOptionsRegistration",
+        "corRp" .= corRp,
+        "corUser" .= corUser,
+        "corChallenge" .= corChallenge,
+        "corPubKeyCredParams" .= corPubKeyCredParams,
+        "corTimeout" .= corTimeout,
+        "corExcludeCredentials" .= corExcludeCredentials,
+        "corAuthenticatorSelection" .= corAuthenticatorSelection,
+        "corAttestation" .= corAttestation,
+        "corExtensions" .= corExtensions
       ]
-  toJSON PublicKeyCredentialRequestOptions {..} =
+  toJSON CredentialOptionsAuthentication {..} =
     object
-      [ "tag" .= String "PublicKeyCredentialRequestOptions",
-        "pkcogChallenge" .= pkcogChallenge,
-        "pkcogTimeout" .= pkcogTimeout,
-        "pkcogRpId" .= pkcogRpId,
-        "pkcogAllowCredentials" .= pkcogAllowCredentials,
-        "pkcogUserVerification" .= pkcogUserVerification,
-        "pkcogExtensions" .= pkcogExtensions
+      [ "tag" .= String "CredentialOptionsAuthentication",
+        "coaChallenge" .= coaChallenge,
+        "coaTimeout" .= coaTimeout,
+        "coaRpId" .= coaRpId,
+        "coaAllowCredentials" .= coaAllowCredentials,
+        "coaUserVerification" .= coaUserVerification,
+        "coaExtensions" .= coaExtensions
       ]
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-client-data)
 -- The client data represents the contextual bindings of both the
 -- [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)
 -- and the [client](https://www.w3.org/TR/webauthn-2/#client).
-data CollectedClientData (t :: WebauthnKind) raw = CollectedClientData
+data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
     -- This member contains the challenge provided by the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
     -- See the [§ 13.4.3 Cryptographic Challenges](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges) security consideration.
@@ -897,7 +894,7 @@ data CollectedClientData (t :: WebauthnKind) raw = CollectedClientData
     -- defined by [RFC6454](https://www.w3.org/TR/webauthn-2/#biblio-rfc6454).
     ccdOrigin :: Origin,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-crossorigin)
-    -- This member contains the inverse of the @sameOriginWithAncestors@ argument value
+    -- This member contains the inverse of the @sameOriginWithAncestors@ araument value
     -- that was passed into the [internal method](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots).
     ccdCrossOrigin :: Bool,
     -- | Raw data of the client data, for verification purposes
@@ -913,10 +910,10 @@ data CollectedClientData (t :: WebauthnKind) raw = CollectedClientData
   }
   deriving (Eq, Show)
 
-instance SingI t => ToJSON (CollectedClientData t raw) where
+instance SingI c => ToJSON (CollectedClientData c raw) where
   toJSON CollectedClientData {..} =
     object
-      [ "webauthnKind" .= sing @t,
+      [ "webauthnKind" .= sing @c,
         "ccdChallenge" .= ccdChallenge,
         "ccdOrigin" .= ccdOrigin,
         "ccdCrossOrigin" .= ccdCrossOrigin,
@@ -928,7 +925,7 @@ instance SingI t => ToJSON (CollectedClientData t raw) where
 -- [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- when generating an [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object)
 -- for a given credential.
-data AttestedCredentialData (t :: WebauthnKind) raw where
+data AttestedCredentialData (c :: CeremonyKind) raw where
   AttestedCredentialData ::
     { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
       acdAaguid :: AAGUID,
@@ -939,15 +936,15 @@ data AttestedCredentialData (t :: WebauthnKind) raw where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
       acdCredentialPublicKeyBytes :: RawField raw
     } ->
-    AttestedCredentialData 'Create raw
+    AttestedCredentialData 'Registration raw
   NoAttestedCredentialData ::
-    AttestedCredentialData 'Get raw
+    AttestedCredentialData 'Authentication raw
 
-deriving instance Eq (AttestedCredentialData t raw)
+deriving instance Eq (AttestedCredentialData c raw)
 
-deriving instance Show (AttestedCredentialData t raw)
+deriving instance Show (AttestedCredentialData c raw)
 
-instance ToJSON (AttestedCredentialData t raw) where
+instance ToJSON (AttestedCredentialData c raw) where
   toJSON AttestedCredentialData {..} =
     object
       [ "acdAaguid" .= acdAaguid,
@@ -970,7 +967,7 @@ instance ToJSON (AttestedCredentialData t raw) where
 -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
 -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
-data AuthenticatorData (t :: WebauthnKind) raw = AuthenticatorData
+data AuthenticatorData (c :: CeremonyKind) raw = AuthenticatorData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rpidhash)
     -- SHA-256 hash of the [RP ID](https://www.w3.org/TR/webauthn-2/#rp-id) the
     -- [credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) is
@@ -983,7 +980,7 @@ data AuthenticatorData (t :: WebauthnKind) raw = AuthenticatorData
     adSignCount :: SignatureCounter,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestedcredentialdata)
     -- [attested credential data](https://www.w3.org/TR/webauthn-2/#attested-credential-data) (if present)
-    adAttestedCredentialData :: AttestedCredentialData t raw,
+    adAttestedCredentialData :: AttestedCredentialData c raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authdataextensions)
     -- Extension-defined [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     adExtensions :: Maybe AuthenticatorExtensionOutputs,
@@ -1054,7 +1051,7 @@ class
     a ->
     HG.DateTime ->
     AttStmt a ->
-    AuthenticatorData 'Create 'True ->
+    AuthenticatorData 'Registration 'True ->
     ClientDataHash ->
     Validation (NonEmpty (AttStmtVerificationError a)) SomeAttestationType
 
@@ -1093,7 +1090,7 @@ class
 
 -- | An arbitrary [attestation statement format](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
 -- In contrast to 'AttestationStatementFormat', this type can be put into a list.
--- This is used for 'sasfSingleton'
+-- This is used for 'singletonAttestationStatementFormat'
 data SomeAttestationStatementFormat
   = forall a.
     AttestationStatementFormat a =>
@@ -1101,9 +1098,9 @@ data SomeAttestationStatementFormat
 
 -- | A type representing the set of supported attestation statement formats.
 -- The constructor is intentionally not exported, use
--- 'sasfSingleton' instead to construct it and
--- 'sasfLookup' to look up formats. This types 'Semigroup'
--- instance can be used to combine multiple formats
+-- 'singletonAttestationStatementFormat' instead to construct it and
+-- 'lookupAttestationStatementFormat' to look up formats. '<>' can be used to
+-- combine multiple formats. 'mempty' can be used for not supporting any formats.
 newtype SupportedAttestationStatementFormats
   = -- HashMap invariant: asfIdentifier (hm ! k) == k
     SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
@@ -1111,14 +1108,14 @@ newtype SupportedAttestationStatementFormats
 
 -- | Creates a `SupportedAttestationStatementFormats`-Map containing a single
 -- supported format.
-sasfSingleton :: SomeAttestationStatementFormat -> SupportedAttestationStatementFormats
-sasfSingleton someFormat@(SomeAttestationStatementFormat format) =
+singletonAttestationStatementFormat :: SomeAttestationStatementFormat -> SupportedAttestationStatementFormats
+singletonAttestationStatementFormat someFormat@(SomeAttestationStatementFormat format) =
   SupportedAttestationStatementFormats $ HashMap.singleton (asfIdentifier format) someFormat
 
 -- | Attempt to find the desired attestation statement format in a map of
 -- supported formats. Can then be used to perform attestation.
-sasfLookup :: Text -> SupportedAttestationStatementFormats -> Maybe SomeAttestationStatementFormat
-sasfLookup id (SupportedAttestationStatementFormats sasf) = sasf !? id
+lookupAttestationStatementFormat :: Text -> SupportedAttestationStatementFormats -> Maybe SomeAttestationStatementFormat
+lookupAttestationStatementFormat id (SupportedAttestationStatementFormats sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
 data AttestationObject raw = forall a.
@@ -1137,7 +1134,7 @@ data AttestationObject raw = forall a.
     -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
     -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
-    aoAuthData :: AuthenticatorData 'Create raw,
+    aoAuthData :: AuthenticatorData 'Registration raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)
     aoFmt :: a,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement)
@@ -1167,17 +1164,17 @@ instance ToJSON (AttestationObject raw) where
 -- [Authenticators](https://www.w3.org/TR/webauthn-2/#authenticator) respond to
 -- [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) requests by
 -- returning an object derived from the `[AuthenticatorResponse](https://www.w3.org/TR/webauthn-2/#authenticatorresponse)` interface
-data AuthenticatorResponse (t :: WebauthnKind) raw where
+data AuthenticatorResponse (c :: CeremonyKind) raw where
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
-  -- The 'AuthenticatorAttestationResponse' interface represents the
-  -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)'s response
+  -- The [AuthenticatorAttestationResponse](https://www.w3.org/TR/webauthn-2/#authenticatorattestationresponse)
+  -- interface represents the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)'s response
   -- to a client’s request for the creation of a new
   -- [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential).
   -- It contains information about the new credential that can be used to identify
   -- it for later use, and metadata that can be used by the
   -- [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)
   -- to assess the characteristics of the credential during registration.
-  AuthenticatorAttestationResponse ::
+  AuthenticatorResponseRegistration ::
     { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
       -- This attribute, inherited from `[AuthenticatorResponse](https://www.w3.org/TR/webauthn-2/#authenticatorresponse)`,
       -- contains the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data)
@@ -1185,7 +1182,7 @@ data AuthenticatorResponse (t :: WebauthnKind) raw where
       -- passed to the authenticator by the client in order to generate this credential.
       -- The exact JSON serialization MUST be preserved, as the
       -- [hash of the serialized client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data) has been computed over it.
-      arcClientData :: CollectedClientData 'Create raw,
+      arrClientData :: CollectedClientData 'Registration raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
       -- This attribute contains an [attestation object](https://www.w3.org/TR/webauthn-2/#attestation-object),
       -- which is opaque to, and cryptographically protected against tampering by, the client.
@@ -1204,20 +1201,20 @@ data AuthenticatorResponse (t :: WebauthnKind) raw where
       -- For more details, see [§ 6.5 Attestation](https://www.w3.org/TR/webauthn-2/#sctn-attestation),
       -- [§ 6.5.4 Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object),
       -- and [Figure 6](https://www.w3.org/TR/webauthn-2/#fig-attStructs).
-      arcAttestationObject :: AttestationObject raw
+      arrAttestationObject :: AttestationObject raw
       -- TODO: This property is currently not propagated by webauthn-json. See:
       -- <https://github.com/github/webauthn-json/pull/44>
       -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports)
       -- This [internal slot](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots)
       -- contains a sequence of zero or more unique `[DOMString](https://heycam.github.io/webidl/#idl-DOMString)`s
-      -- in lexicographical order. These values are the transports that the
+      -- in lexicoaraphical order. These values are the transports that the
       -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) is believed to support,
       -- or an empty sequence if the information is unavailable.
-      -- arcTransports :: Set AuthenticatorTransport
+      -- arrTransports :: Set AuthenticatorTransport
     } ->
-    AuthenticatorResponse 'Create raw
+    AuthenticatorResponse 'Registration raw
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse)
-  -- The 'AuthenticatorAssertionResponse' interface represents an
+  -- The [AuthenticatorAssertionResponse](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse) interface represents an
   -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)'s response
   -- to a client’s request for generation of a new
   -- [authentication assertion](https://www.w3.org/TR/webauthn-2/#authentication-assertion)
@@ -1227,7 +1224,7 @@ data AuthenticatorResponse (t :: WebauthnKind) raw where
   -- [credential private key](https://www.w3.org/TR/webauthn-2/#credential-private-key),
   -- and optionally evidence of [user consent](https://www.w3.org/TR/webauthn-2/#user-consent)
   -- to a specific transaction.
-  AuthenticatorAssertionResponse ::
+  AuthenticatorResponseAuthentication ::
     { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
       -- This attribute, inherited from `[AuthenticatorResponse](https://www.w3.org/TR/webauthn-2/#authenticatorresponse)`,
       -- contains the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data)
@@ -1235,51 +1232,51 @@ data AuthenticatorResponse (t :: WebauthnKind) raw where
       -- passed to the authenticator by the client in order to generate this credential.
       -- The exact JSON serialization MUST be preserved, as the
       -- [hash of the serialized client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data) has been computed over it.
-      argClientData :: CollectedClientData 'Get raw,
+      araClientData :: CollectedClientData 'Authentication raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-authenticatordata)
       -- This attribute contains the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
       -- returned by the authenticator. See [§ 6.1 Authenticator Data](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data).
-      argAuthenticatorData :: AuthenticatorData 'Get raw,
+      araAuthenticatorData :: AuthenticatorData 'Authentication raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-signature)
       -- This attribute contains the raw signature returned from the authenticator.
       -- See [§ 6.3.3 The authenticatorGetAssertion Operation](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion).
-      argSignature :: AssertionSignature,
+      araSignature :: AssertionSignature,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-userhandle)
       -- This attribute contains the [user handle](https://www.w3.org/TR/webauthn-2/#user-handle)
       -- returned from the authenticator, or null if the authenticator did not return a
       -- [user handle](https://www.w3.org/TR/webauthn-2/#user-handle). See
       -- [§ 6.3.3 The authenticatorGetAssertion Operation](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion).
-      argUserHandle :: Maybe UserHandle
+      araUserHandle :: Maybe UserHandle
     } ->
-    AuthenticatorResponse 'Get raw
+    AuthenticatorResponse 'Authentication raw
 
-deriving instance Eq (AuthenticatorResponse t raw)
+deriving instance Eq (AuthenticatorResponse c raw)
 
-deriving instance Show (AuthenticatorResponse t raw)
+deriving instance Show (AuthenticatorResponse c raw)
 
-instance ToJSON (AuthenticatorResponse t raw) where
-  toJSON AuthenticatorAttestationResponse {..} =
+instance ToJSON (AuthenticatorResponse c raw) where
+  toJSON AuthenticatorResponseRegistration {..} =
     object
-      [ "arcClientData" .= arcClientData,
-        "arcAttestationObject" .= arcAttestationObject
+      [ "arrClientData" .= arrClientData,
+        "arrAttestationObject" .= arrAttestationObject
       ]
-  toJSON AuthenticatorAssertionResponse {..} =
+  toJSON AuthenticatorResponseAuthentication {..} =
     object
-      [ "argClientData" .= argClientData,
-        "argAuthenticatorData" .= argAuthenticatorData,
-        "argSignature" .= argSignature,
-        "argUserHandle" .= argUserHandle
+      [ "araClientData" .= araClientData,
+        "araAuthenticatorData" .= araAuthenticatorData,
+        "araSignature" .= araSignature,
+        "araUserHandle" .= araUserHandle
       ]
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
--- The 'PublicKeyCredential' interface contains the attributes that are returned to the caller when a new credential is created, or a new assertion is requested.
-data PublicKeyCredential (t :: WebauthnKind) raw = PublicKeyCredential
+-- The 'Credential' interface contains the attributes that are returned to the caller when a new credential is created, or a new assertion is requested.
+data Credential (c :: CeremonyKind) raw = Credential
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-identifier-slot)
     -- Contains the [credential ID](https://www.w3.org/TR/webauthn-2/#credential-id),
     -- chosen by the authenticator. The [credential ID](https://www.w3.org/TR/webauthn-2/#credential-id)
     -- is used to look up credentials for use, and is therefore expected to be globally
     -- unique with high probability across all credentials of the same type, across all authenticators.
-    pkcIdentifier :: CredentialId,
+    cIdentifier :: CredentialId,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-response)
     -- This attribute contains the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)'s
     -- response to the client’s request to either create a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential),
@@ -1290,13 +1287,64 @@ data PublicKeyCredential (t :: WebauthnKind) raw = PublicKeyCredential
     -- otherwise, the `[PublicKeyCredential](https://www.w3.org/TR/webauthn-2/#publickeycredential)`
     -- was created in response to `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`,
     -- and this attribute’s value will be an `[AuthenticatorAssertionResponse](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse)`.
-    pkcResponse :: AuthenticatorResponse t raw,
+    cResponse :: AuthenticatorResponse c raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
     -- This operation returns the value of `[[[clientExtensionsResults]]](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-clientextensionsresults-slot)`,
     -- which is a [map](https://infra.spec.whatwg.org/#ordered-map) containing
     -- [extension identifier](https://www.w3.org/TR/webauthn-2/#extension-identifier) →
     -- [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output) entries produced
     -- by the extension’s [client extension processing](https://www.w3.org/TR/webauthn-2/#client-extension-processing).
-    pkcClientExtensionResults :: AuthenticationExtensionsClientOutputs
+    cClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
   deriving (Eq, Show, Generic, ToJSON)
+
+-- | Removes all raw fields from a 'Credential', useful for
+-- e.g. pretty-printing only the desired fields. This is the counterpart to
+-- 'Crypto.WebAuthn.Model.Binary.Encoding.encodeRawCredential'
+stripRawCredential :: forall c raw. SingI c => Credential c raw -> Credential c 'False
+stripRawCredential Credential {..} =
+  Credential
+    { cResponse = case sing @c of
+        SRegistration -> stripRawAuthenticatorResponseRegistration cResponse
+        SAuthentication -> stripRawAuthenticatorResponseAuthentication cResponse,
+      ..
+    }
+  where
+    stripRawAuthenticatorResponseAuthentication :: AuthenticatorResponse 'Authentication raw -> AuthenticatorResponse 'Authentication 'False
+    stripRawAuthenticatorResponseAuthentication AuthenticatorResponseAuthentication {..} =
+      AuthenticatorResponseAuthentication
+        { araClientData = stripRawCollectedClientData araClientData,
+          araAuthenticatorData = stripRawAuthenticatorData araAuthenticatorData,
+          ..
+        }
+
+    stripRawAuthenticatorResponseRegistration :: AuthenticatorResponse 'Registration raw -> AuthenticatorResponse 'Registration 'False
+    stripRawAuthenticatorResponseRegistration AuthenticatorResponseRegistration {..} =
+      AuthenticatorResponseRegistration
+        { arrClientData = stripRawCollectedClientData arrClientData,
+          arrAttestationObject = stripRawAttestationObject arrAttestationObject,
+          ..
+        }
+
+    stripRawAttestationObject :: AttestationObject raw -> AttestationObject 'False
+    stripRawAttestationObject AttestationObject {..} =
+      AttestationObject
+        { aoAuthData = stripRawAuthenticatorData aoAuthData,
+          ..
+        }
+
+    stripRawAuthenticatorData :: forall c raw. SingI c => AuthenticatorData c raw -> AuthenticatorData c 'False
+    stripRawAuthenticatorData AuthenticatorData {..} =
+      AuthenticatorData
+        { adRawData = NoRaw,
+          adAttestedCredentialData = stripRawAttestedCredentialData adAttestedCredentialData,
+          ..
+        }
+
+    stripRawAttestedCredentialData :: forall c raw. SingI c => AttestedCredentialData c raw -> AttestedCredentialData c 'False
+    stripRawAttestedCredentialData = case sing @c of
+      SRegistration -> \AttestedCredentialData {..} -> AttestedCredentialData {acdCredentialPublicKeyBytes = NoRaw, ..}
+      SAuthentication -> \NoAttestedCredentialData -> NoAttestedCredentialData
+
+    stripRawCollectedClientData :: forall c raw. SingI c => CollectedClientData c raw -> CollectedClientData c 'False
+    stripRawCollectedClientData CollectedClientData {..} = CollectedClientData {ccdRawData = NoRaw, ..}

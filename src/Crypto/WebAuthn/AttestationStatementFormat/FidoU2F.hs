@@ -1,12 +1,11 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | This module implements
--- [Fido U2F attestation](https://www.w3.org/TR/webauthn-2/#sctn-fido-u2f-attestation).
-module Crypto.WebAuthn.Operations.Attestation.FidoU2F
+-- | Stability: experimental
+-- This module implements the
+-- [FIDO U2F Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-fido-u2f-attestation).
+module Crypto.WebAuthn.AttestationStatementFormat.FidoU2F
   ( format,
     Format (..),
     VerificationError (..),
@@ -17,9 +16,9 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
+import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
@@ -54,7 +53,7 @@ data VerificationError
   = -- | The public key in the certificate was not an EC Key or the curve was not the p256 curve
     InvalidCertificatePublicKey X509.PubKey
   | -- | The credential public key is not an ECDSA key
-    NonECDSACredentialPublicKey PublicKey.PublicKey
+    NonECDSACredentialPublicKey Cose.PublicKey
   | -- | The x and/or y coordinates of the credential public key don't have a length of 32 bytes
     WrongCoordinateSize Int Int
   | -- | The provided public key cannot validate the signature over the verification data
@@ -85,7 +84,7 @@ instance M.AttestationStatementFormat Format where
       pure $ Statement sig attCert
     _ -> Left $ "CBOR map didn't have expected value types (sig: bytes, x5c: one-element list): " <> Text.pack (show xs)
 
-  asfEncode _ Statement {sig, attCert} =
+  asfEncode _ Statement {..} =
     CBOR.TMap
       [ (CBOR.TString "sig", CBOR.TBytes sig),
         (CBOR.TString "x5c", CBOR.TList [CBOR.TBytes $ X509.encodeSignedObject attCert])
@@ -96,10 +95,10 @@ instance M.AttestationStatementFormat Format where
   asfVerify
     _
     _
-    Statement {attCert, sig}
+    Statement {..}
     M.AuthenticatorData
-      { M.adRpIdHash,
-        M.adAttestedCredentialData = M.AttestedCredentialData {M.acdCredentialId, M.acdCredentialPublicKey}
+      { M.adAttestedCredentialData = M.AttestedCredentialData {..},
+        ..
       }
     clientDataHash = do
       -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above
@@ -137,8 +136,8 @@ instance M.AttestationStatementFormat Format where
       -- If size differs or "-3" key is not found, terminate this algorithm and
       -- return an appropriate error.
       -- NOTE: Already done during decoding of the COSE public key
-      case PublicKey.fromCose acdCredentialPublicKey of
-        PublicKey.PublicKeyECDSA {ecdsaX = xb, ecdsaY = yb} -> do
+      case Cose.fromCose acdCredentialPublicKey of
+        Cose.PublicKeyECDSA {ecdsaX = xb, ecdsaY = yb} -> do
           let xlen = BS.length xb
               ylen = BS.length yb
           unless (xlen == 32 && ylen == 32) $ failure $ WrongCoordinateSize xlen ylen

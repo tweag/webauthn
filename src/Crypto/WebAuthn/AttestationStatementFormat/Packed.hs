@@ -1,11 +1,11 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | This module implements
--- [Packed attestation](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation).
-module Crypto.WebAuthn.Operations.Attestation.Packed
+-- | Stability: experimental
+-- This module implements the
+-- [Packed Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation).
+module Crypto.WebAuthn.AttestationStatementFormat.Packed
   ( format,
     Format (..),
     VerificationError (..),
@@ -15,12 +15,11 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.Identifier (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
-import Crypto.WebAuthn.Internal.Utils (failure)
+import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import qualified Data.ASN1.OID as OID
 import Data.Aeson (ToJSON, object, toJSON, (.=))
@@ -112,7 +111,7 @@ instance M.AttestationStatementFormat Format where
         pure $ Statement {..}
       _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, x5c: list): " <> Text.pack (show xs)
 
-  asfEncode _ Statement {alg, sig, x5c} =
+  asfEncode _ Statement {..} =
     let encodedx5c = case x5c of
           Nothing -> []
           Just (certChain, _) -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
@@ -141,7 +140,7 @@ instance M.AttestationStatementFormat Format where
 
           -- Verify that sig is a valid signature over the concatenation of
           -- authenticatorData and clientDataHash using the credential public key with alg.
-          case PublicKey.verify signAlg (PublicKey.fromCose key) signedData stmtSig of
+          case Cose.verify signAlg (Cose.fromCose key) signedData stmtSig of
             Right () -> pure ()
             Left err -> failure $ VerificationErrorInvalidSignature err
 

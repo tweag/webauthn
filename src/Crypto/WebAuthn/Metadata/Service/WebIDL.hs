@@ -1,6 +1,9 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
--- | <https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html>
+-- | Stability: experimental
+-- Type definitions directly corresponding to the
+-- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html)
+-- specification.
 module Crypto.WebAuthn.Metadata.Service.WebIDL
   ( MetadataBLOBPayloadEntry (..),
     BiometricStatusReport (..),

@@ -17,8 +17,8 @@ where
 
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
-import qualified Crypto.WebAuthn.Model.Binary.Encoding as ME
-import qualified Crypto.WebAuthn.Model.Types as M
+import qualified Crypto.WebAuthn.Model as M
+import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as ME
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Emulation.Authenticator
@@ -49,16 +49,16 @@ type UserAgentConformance = Set.Set UserAgentNonConformingBehaviour
 -- some non-conforming behaviour. MonadFail is used to fail when an error occurred
 clientAttestation ::
   (Random.MonadRandom m, MonadFail m) =>
-  M.PublicKeyCredentialOptions 'M.Create ->
+  M.CredentialOptions 'M.Registration ->
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  m (M.PublicKeyCredential 'M.Create 'True, Authenticator)
-clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..} conformance authenticator = do
+  m (M.Credential 'M.Registration 'True, Authenticator)
+clientAttestation M.CredentialOptionsRegistration {..} AnnotatedOrigin {..} conformance authenticator = do
   challenge <-
     if Set.member RandomChallenge conformance
       then M.Challenge <$> Random.getRandomBytes 16
-      else pure pkcocChallenge
+      else pure corChallenge
   let clientData =
         ME.encodeRawCollectedClientData
           M.CollectedClientData
@@ -74,24 +74,24 @@ clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..}
       authenticator
       clientDataHash
       -- Ensure the RpId is set by defaulting to the Client configured default if Nothing
-      (pkcocRp {M.pkcreId = Just . fromMaybe aoRpId $ M.pkcreId pkcocRp})
-      pkcocUser
+      (corRp {M.creId = Just . fromMaybe aoRpId $ M.creId corRp})
+      corUser
       True
       True
       True
-      pkcocPubKeyCredParams
-      pkcocExcludeCredentials
+      corPubKeyCredParams
+      corExcludeCredentials
       False
-      pkcocExtensions
+      corExtensions
   let response =
-        M.PublicKeyCredential
-          { M.pkcIdentifier = M.acdCredentialId . M.adAttestedCredentialData $ M.aoAuthData attestationObject,
-            M.pkcResponse =
-              M.AuthenticatorAttestationResponse
-                { M.arcClientData = clientData,
-                  M.arcAttestationObject = attestationObject
+        M.Credential
+          { M.cIdentifier = M.acdCredentialId . M.adAttestedCredentialData $ M.aoAuthData attestationObject,
+            M.cResponse =
+              M.AuthenticatorResponseRegistration
+                { M.arrClientData = clientData,
+                  M.arrAttestationObject = attestationObject
                 },
-            M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+            M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
           }
   pure (response, authenticator')
 
@@ -102,19 +102,19 @@ clientAttestation M.PublicKeyCredentialCreationOptions {..} AnnotatedOrigin {..}
 -- in the cryptonite library we rely on.
 clientAssertion ::
   (MonadFail m, Random.MonadRandom m) =>
-  M.PublicKeyCredentialOptions 'M.Get ->
+  M.CredentialOptions 'M.Authentication ->
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
-  m (M.PublicKeyCredential 'M.Get 'True, Authenticator)
-clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} conformance authenticator = do
-  let allowCredentialDescriptorList = case pkcogAllowCredentials of
+  m (M.Credential 'M.Authentication 'True, Authenticator)
+clientAssertion M.CredentialOptionsAuthentication {..} AnnotatedOrigin {..} conformance authenticator = do
+  let allowCredentialDescriptorList = case coaAllowCredentials of
         [] -> Nothing
         xs -> Just xs
   challenge <-
     if Set.member RandomChallenge conformance
       then M.Challenge <$> Random.getRandomBytes 16
-      else pure pkcogChallenge
+      else pure coaChallenge
   let clientData =
         ME.encodeRawCollectedClientData
           M.CollectedClientData
@@ -128,22 +128,22 @@ clientAssertion M.PublicKeyCredentialRequestOptions {..} AnnotatedOrigin {..} co
     authenticatorGetAssertion
       authenticator
       -- Ensure the RpId is set by defaulting to the Client configured default if Nothing
-      (fromMaybe aoRpId pkcogRpId)
+      (fromMaybe aoRpId coaRpId)
       clientDataHash
       allowCredentialDescriptorList
       True
       True
-      pkcogExtensions
+      coaExtensions
   let response =
-        M.PublicKeyCredential
-          { M.pkcIdentifier = credentialId,
-            M.pkcResponse =
-              M.AuthenticatorAssertionResponse
-                { M.argClientData = clientData,
-                  M.argAuthenticatorData = authenticatorData,
-                  M.argSignature = M.AssertionSignature signature,
-                  M.argUserHandle = userHandle
+        M.Credential
+          { M.cIdentifier = credentialId,
+            M.cResponse =
+              M.AuthenticatorResponseAuthentication
+                { M.araClientData = clientData,
+                  M.araAuthenticatorData = authenticatorData,
+                  M.araSignature = M.AssertionSignature signature,
+                  M.araUserHandle = userHandle
                 },
-            M.pkcClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+            M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
           }
   pure (response, authenticator')
