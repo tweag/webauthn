@@ -11,11 +11,8 @@
 module Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet
   ( format,
     Format (..),
-    Statement (..),
-    Response (..),
     VerificationError (..),
     Integrity (..),
-    Milliseconds (..),
   )
 where
 
