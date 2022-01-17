@@ -8,7 +8,6 @@
 module Crypto.WebAuthn.Operations.Attestation.Packed
   ( format,
     Format (..),
-    Statement (..),
     VerificationError (..),
   )
 where

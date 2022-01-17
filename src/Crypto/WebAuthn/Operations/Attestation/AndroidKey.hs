@@ -10,10 +10,7 @@ module Crypto.WebAuthn.Operations.Attestation.AndroidKey
   ( format,
     TrustLevel (..),
     Format (..),
-    Statement (..),
     VerificationError (..),
-    ExtAttestation (..),
-    AuthorizationList (..),
   )
 where
 

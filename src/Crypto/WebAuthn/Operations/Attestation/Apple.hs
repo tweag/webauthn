@@ -13,7 +13,6 @@
 module Crypto.WebAuthn.Operations.Attestation.Apple
   ( format,
     Format (..),
-    Statement (..),
     VerificationError (..),
   )
 where

@@ -10,17 +10,7 @@
 module Crypto.WebAuthn.Operations.Attestation.TPM
   ( format,
     Format (..),
-    Statement (..),
     VerificationError (..),
-    SubjectAlternativeName (..),
-    TPMSAttest (..),
-    TPMTPublic (..),
-    TPMSClockInfo (..),
-    TPMSCertifyInfo (..),
-    TPMAlgId (..),
-    TPMAObject,
-    TPMUPublicParms (..),
-    TPMUPublicId (..),
   )
 where
 

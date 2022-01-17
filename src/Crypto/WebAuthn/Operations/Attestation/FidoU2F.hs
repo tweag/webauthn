@@ -9,7 +9,6 @@
 module Crypto.WebAuthn.Operations.Attestation.FidoU2F
   ( format,
     Format (..),
-    Statement (..),
     VerificationError (..),
   )
 where
