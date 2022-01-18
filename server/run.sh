@@ -8,7 +8,7 @@ trap "exit" INT TERM
 trap "kill 0" EXIT
 
 if port=$(jq -e '."\($ENV.USER)"' "$SCRIPT_DIR"/../infra/subdomains.json); then
-  echo "Forwarding $USER.webauthn.dev.tweag.io to localhost:$localPort"
+  echo "Forwarding https://$USER.webauthn.dev.tweag.io to localhost:$localPort"
   ssh -o ControlMaster=no -N -R "$port":localhost:"$localPort" webauthn.dev.tweag.io &
   origin=https://$USER.webauthn.dev.tweag.io
   domain=$USER.webauthn.dev.tweag.io
