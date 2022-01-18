@@ -14,7 +14,19 @@ let
 
   src = gitignoreSource ./.;
 
+  # Keep this in sync with the `tested-with` field in `webauthn.cabal`
+  expectedGhcVersion = "8.10.7";
+
   hpkgs = pkgs.haskellPackages.extend (hself: hsuper: {
+    ghc =
+      if hsuper.ghc.version != expectedGhcVersion then
+      throw
+        ( "We expect the default nixpkgs GHC version to be ${expectedGhcVersion}, "
+        + "but it is ${hsuper.ghc.version} instead. Update the `expectedGhcVersion` "
+        + "variable in `default.nix` and update the `tested-with` field in "
+        + "`webauthn.cabal` at the same time.")
+      else hsuper.ghc;
+
     webauthn = hself.callCabal2nix "webauthn" src {};
 
     jose = hself.callHackage "jose" "0.8.5" {};
