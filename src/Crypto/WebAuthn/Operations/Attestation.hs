@@ -34,7 +34,6 @@ import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import Crypto.WebAuthn.Identifier (AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F), certificateSubjectKeyIdentifier)
 import Crypto.WebAuthn.Internal.Utils (failure)
-import qualified Crypto.WebAuthn.Internal.X509Validation as X509
 import Crypto.WebAuthn.Metadata.Service.Processing (queryMetadata)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as Meta
