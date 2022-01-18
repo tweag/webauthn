@@ -53,7 +53,6 @@ import Crypto.WebAuthn.Identifier
     SubjectKeyIdentifier,
   )
 import Crypto.WebAuthn.Internal.DateOrphans ()
-import qualified Crypto.WebAuthn.Internal.X509Validation as X509
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model.Types as M

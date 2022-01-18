@@ -64,7 +64,8 @@ library
     validation,
     x509,
     x509-store,
-    x509-validation
+    -- https://github.com/vincenthz/hs-certificate/pull/126
+    x509-validation >= 1.6.12
   exposed-modules:
     Crypto.WebAuthn.Cose.Key,
     Crypto.WebAuthn.Cose.Registry,
@@ -73,7 +74,6 @@ library
     Crypto.WebAuthn.Internal.DateOrphans,
     Crypto.WebAuthn.Internal.ToJSONOrphans,
     Crypto.WebAuthn.Internal.Utils,
-    Crypto.WebAuthn.Internal.X509Validation,
     Crypto.WebAuthn.Metadata.Service.Decode,
     Crypto.WebAuthn.Metadata.Service.Processing,
     Crypto.WebAuthn.Metadata.Service.Types,

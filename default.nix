@@ -20,6 +20,12 @@ let
     jose = hself.callHackage "jose" "0.8.5" {};
 
     base64-bytestring = hself.base64-bytestring_1_2_1_0;
+
+    x509-validation = hself.callHackageDirect {
+      pkg = "x509-validation";
+      ver = "1.6.12";
+      sha256 = "1jrsryn6hfdmr1b1alpj5zxvw26dw8y7kqpq555q2njm3kvwmxap";
+    } {};
   });
 
   deploy = pkgs.writeShellScriptBin "deploy" ''
