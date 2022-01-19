@@ -34,11 +34,12 @@ tpm() (
     (
       cd "$vendor/RootCA"
       for cert in *; do
+        name=${cert%.*}
         # There's one certificate not in DER format..
-        if openssl x509 -in "$cert" -inform PEM -out "$rootCertDir/tpm/$vendor/$cert" -outform DER 2>/dev/null; then
+        if openssl x509 -in "$cert" -inform PEM -out "$rootCertDir/tpm/$vendor/$name.crt" -outform DER 2>/dev/null; then
           echo "Converted tpm certificate \"$cert\" from Vendor \"$vendor\" from PEM to DER format"
         else
-          openssl x509 -in "$cert" -inform DER -out "$rootCertDir/tpm/$vendor/$cert" -outform DER
+          openssl x509 -in "$cert" -inform DER -out "$rootCertDir/tpm/$vendor/$name.crt" -outform DER
         fi
       done
     )

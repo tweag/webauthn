@@ -1,10 +1,18 @@
 # Haskell WebAuthn Library
 
-This library implements the
+This library implements the server-side
 [Web Authentication Relying Party specification Level 2][spec]. The goal of Web
 Authentication (WebAuthn) is to bring passwordless login/second factor
 authentication to the web, logging in using a FIDO U2F Security Key, finger
 print scanner and some other authenticator.
+
+This project was originally developed in 2020 as a Zurihac project by
+[@arianvp](https://github.com/arianvp/) and [@duijf](https://github.com/duijf).
+Starting September 2021 a team at [Tweag](https://www.tweag.io/) was sponsored
+by [Mercury](https://mercury.com/) to create a production-ready open-source
+implementation of this standard, which was done by
+[@infinisil](https://github.com/infinisil/) and
+[@ErinvanderVeen](https://github.com/ErinvanderVeen/).
 
 ## Setting up the environment
 We assume Nix is used for the development of this library. If not using Nix,
