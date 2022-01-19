@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
--- | This module contains a partial implementation of the
+-- | Stability: experimental
+-- This module contains a partial implementation of the
 -- [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7) format,
 -- limited to what is needed for Webauthn, and in a structured way.
 module Crypto.WebAuthn.Cose.Key
@@ -19,7 +20,8 @@ import Codec.CBOR.Encoding (Encoding, encodeBytes, encodeMapLen)
 import Codec.Serialise (Serialise (decode, encode))
 import Control.Monad (unless)
 import Crypto.Number.Serialize (i2osp, os2ip)
-import qualified Crypto.WebAuthn.Cose.Registry as R
+import qualified Crypto.WebAuthn.Cose.Algorithm as A
+import qualified Crypto.WebAuthn.Cose.Internal.Registry as R
 import Crypto.WebAuthn.Internal.ToJSONOrphans ()
 import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
@@ -71,7 +73,7 @@ data CosePublicKey
     -- Security considerations are [here](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1.1)
     CosePublicKeyECDSA
       { -- | The hash function to use
-        ecdsaHash :: R.CoseHashAlgECDSA,
+        ecdsaHash :: A.CoseHashAlgECDSA,
         -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
         -- The elliptic curve to use
         ecdsaCurve :: CoseCurveECDSA,
@@ -96,7 +98,7 @@ data CosePublicKey
     -- Security considerations are [here](https://www.rfc-editor.org/rfc/rfc8812.html#section-5)
     CosePublicKeyRSA
       { -- | The hash function to use
-        rsaHash :: R.CoseHashAlgRSA,
+        rsaHash :: A.CoseHashAlgRSA,
         -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8230.html#section-4)
         -- The RSA modulus n is a product of u distinct odd primes
         -- r_i, i = 1, 2, ..., u, where u >= 2
@@ -172,11 +174,11 @@ instance Serialise CosePublicKey where
 
     decodeKey n kty alg
     where
-      decodeKey :: Word -> R.CoseKeyType -> R.CoseSignAlg -> Decoder s CosePublicKey
+      decodeKey :: Word -> R.CoseKeyType -> A.CoseSignAlg -> Decoder s CosePublicKey
       decodeKey n kty alg = case alg of
-        R.CoseSignAlgEdDSA -> decodeEdDSAKey
-        R.CoseSignAlgECDSA hash -> decodeECDSAKey hash
-        R.CoseSignAlgRSA hash -> decodeRSAKey hash
+        A.CoseSignAlgEdDSA -> decodeEdDSAKey
+        A.CoseSignAlgECDSA hash -> decodeECDSAKey hash
+        A.CoseSignAlgRSA hash -> decodeRSAKey hash
         where
           -- [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-struct-15#section-7.1)
           -- Implementations MUST verify that the key type is appropriate for
@@ -214,7 +216,7 @@ instance Serialise CosePublicKey where
             eddsaX <- decodeBytesCanonical
             pure $ CosePublicKeyEdDSA {..}
 
-          decodeECDSAKey :: R.CoseHashAlgECDSA -> Decoder s CosePublicKey
+          decodeECDSAKey :: A.CoseHashAlgECDSA -> Decoder s CosePublicKey
           decodeECDSAKey ecdsaHash = do
             -- https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1
             -- > The 'kty' field MUST be present, and it MUST be 'EC2'.
@@ -233,7 +235,7 @@ instance Serialise CosePublicKey where
                 typ -> fail $ "Unexpected type in EC2 y parameter: " <> show typ
             pure $ CosePublicKeyECDSA {..}
 
-          decodeRSAKey :: R.CoseHashAlgRSA -> Decoder s CosePublicKey
+          decodeRSAKey :: A.CoseHashAlgRSA -> Decoder s CosePublicKey
           decodeRSAKey rsaHash = do
             -- https://www.rfc-editor.org/rfc/rfc8812.html#section-2
             -- > Implementations need to check that the key type is 'RSA' when creating or verifying a signature.
@@ -253,10 +255,10 @@ decodeExpected expected = do
     fail $ "Expected " <> show expected <> " but got " <> show actual
 
 -- | The COSE signing algorithm corresponding to a COSE public key
-keySignAlg :: CosePublicKey -> R.CoseSignAlg
-keySignAlg CosePublicKeyEdDSA {} = R.CoseSignAlgEdDSA
-keySignAlg CosePublicKeyECDSA {..} = R.CoseSignAlgECDSA ecdsaHash
-keySignAlg CosePublicKeyRSA {..} = R.CoseSignAlgRSA rsaHash
+keySignAlg :: CosePublicKey -> A.CoseSignAlg
+keySignAlg CosePublicKeyEdDSA {} = A.CoseSignAlgEdDSA
+keySignAlg CosePublicKeyECDSA {..} = A.CoseSignAlgECDSA ecdsaHash
+keySignAlg CosePublicKeyRSA {..} = A.CoseSignAlgRSA rsaHash
 
 -- | COSE elliptic curves that can be used with EdDSA
 data CoseCurveEdDSA

@@ -1,10 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- |
+-- | Stability: experimental
 -- This module contains functions to further decode
 -- [FIDO Metadata Statement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html)
 -- IDL types defined in 'Crypto.WebAuthn.Metadata.Statement.IDL' into the Haskell-specific types defined in 'Crypto.WebAuthn.Metadata.Statement.Types'
@@ -18,17 +17,13 @@ where
 
 import Control.Monad (unless)
 import Crypto.Hash (SHA1, digestFromByteString)
-import qualified Crypto.WebAuthn.FidoRegistry as Registry
-import Crypto.WebAuthn.Identifier
-  ( AAGUID (AAGUID),
-    AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F),
-    SubjectKeyIdentifier (SubjectKeyIdentifier),
-  )
+import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import Crypto.WebAuthn.Metadata.Statement.Types (WebauthnAttestationType (WebauthnAttestationAttCA, WebauthnAttestationBasic))
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as StatementTypes
 import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
-import qualified Crypto.WebAuthn.Model.Types as M
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.Identifier (AAGUID (AAGUID), AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F), SubjectKeyIdentifier (SubjectKeyIdentifier))
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Bifunctor (first)
 import qualified Data.ByteString as BS

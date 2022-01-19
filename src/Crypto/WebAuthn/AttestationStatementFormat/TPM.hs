@@ -1,13 +1,13 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
--- | This module implements
--- [TPM attestation](https://www.w3.org/TR/webauthn-2/#sctn-tpm-attestation).
-module Crypto.WebAuthn.Operations.Attestation.TPM
+-- | Stability: experimental
+-- This module implements the
+-- [TPM Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-tpm-attestation).
+module Crypto.WebAuthn.AttestationStatementFormat.TPM
   ( format,
     Format (..),
     VerificationError (..),
@@ -20,12 +20,11 @@ import Control.Monad (forM, unless, when)
 import Crypto.Hash (SHA1 (SHA1), SHA256 (SHA256), hashWith)
 import qualified Crypto.Hash as Hash
 import Crypto.Number.Serialize (os2ip)
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.Identifier (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID))
-import Crypto.WebAuthn.Internal.Utils (failure)
+import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Error (ASN1Error)
 import Data.ASN1.OID (OID)
 import Data.ASN1.Parse (ParseASN1, getNext, hasNext, runParseASN1)
@@ -215,7 +214,7 @@ data Statement = Statement
     certInfoRaw :: BS.ByteString,
     pubArea :: TPMTPublic,
     pubAreaRaw :: BS.ByteString,
-    pubAreaKey :: PublicKey.PublicKey
+    pubAreaKey :: Cose.PublicKey
   }
   deriving (Eq, Show)
 
@@ -446,7 +445,7 @@ instance M.AttestationStatementFormat Format where
         tpmseY <- getTPMByteString
         pure TPMSECCPoint {..}
 
-      extractPublicKey :: TPMTPublic -> Either Text PublicKey.PublicKey
+      extractPublicKey :: TPMTPublic -> Either Text Cose.PublicKey
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgRSA,
@@ -454,7 +453,7 @@ instance M.AttestationStatementFormat Format where
             tpmtpUnique = TPM2BPublicKeyRSA nb
           } =
           pure
-            PublicKey.PublicKeyRSA
+            Cose.PublicKeyRSA
               { rsaN = os2ip nb,
                 rsaE = toInteger tpmsrpExponent
               }
@@ -465,7 +464,7 @@ instance M.AttestationStatementFormat Format where
             tpmtpUnique = TPMSECCPoint {..}
           } =
           pure
-            PublicKey.PublicKeyECDSA
+            Cose.PublicKeyECDSA
               { ecdsaCurve = tpmsepCurveId,
                 ecdsaX = tpmseX,
                 ecdsaY = tpmseY
@@ -499,7 +498,7 @@ instance M.AttestationStatementFormat Format where
       -- 2. Verify that the public key specified by the parameters and unique
       -- fields of pubArea is identical to the credentialPublicKey in the
       -- attestedCredentialData in authenticatorData.
-      let pubKey = PublicKey.fromCose $ M.acdCredentialPublicKey adAttestedCredentialData
+      let pubKey = Cose.fromCose $ M.acdCredentialPublicKey adAttestedCredentialData
       unless (pubKey == pubAreaKey) $ failure VerificationErrorCredentialKeyMismatch
 
       -- 3. Concatenate authenticatorData and clientDataHash to form attToBeSigned.
@@ -558,8 +557,8 @@ instance M.AttestationStatementFormat Format where
       -- 4.8 Verify the sig is a valid signature over certInfo using the
       -- attestation public key in aikCert with the algorithm specified in alg.
       let unsignedAikCert = X509.getCertificate aikCert
-      case PublicKey.fromX509 $ X509.certPubKey unsignedAikCert of
-        Right certPubKey -> case PublicKey.verify alg certPubKey certInfoRaw sig of
+      case Cose.fromX509 $ X509.certPubKey unsignedAikCert of
+        Right certPubKey -> case Cose.verify alg certPubKey certInfoRaw sig of
           Right () -> pure ()
           Left err -> failure $ VerificationErrorVerificationFailure err
         Left err -> failure $ VerificationErrorInvalidPublicKey err

@@ -5,7 +5,7 @@ module MetadataSpec (spec) where
 
 import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
 import Crypto.WebAuthn.Metadata.Service.WebIDL (MetadataBLOBPayload)
-import Data.Aeson (Result (Success), ToJSON (toJSON), decodeFileStrict, fromJSON)
+import Data.Aeson (Result (Success), ToJSON (toJSON), Value (Object), decodeFileStrict, fromJSON)
 import Data.Aeson.Types (Result (Error))
 import qualified Data.ByteString as BS
 import Data.Either (isRight)
@@ -34,7 +34,7 @@ golden subdir = describe subdir $ do
 
     Just expectedPayload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"
 
-    result `shouldBeUnorderedJson` expectedPayload
+    Object result `shouldBeUnorderedJson` expectedPayload
 
   it "can decode and reencode the payload to the partially parsed JSON" $ do
     Just payload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"

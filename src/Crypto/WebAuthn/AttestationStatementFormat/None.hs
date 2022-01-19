@@ -1,7 +1,11 @@
 {-# LANGUAGE TypeFamilies #-}
 
--- | Implements None attestation
-module Crypto.WebAuthn.Operations.Attestation.None
+-- | Stability: experimental
+-- This module implements the
+-- [None Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-none-attestation).
+-- Note that this attestation statement format is currently not registered in the
+-- [WebAuthn Attestation Statement Format Identifiers IANA registry](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-attestation-statement-format-ids).
+module Crypto.WebAuthn.AttestationStatementFormat.None
   ( format,
     Format (..),
   )

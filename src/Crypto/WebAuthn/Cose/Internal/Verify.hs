@@ -2,7 +2,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 
--- | public keys and signature algorithms are represented with three
+-- | Stability: internal
+-- public keys and signature algorithms are represented with three
 -- different types:
 --
 -- * 'Cose.CoseSignAlg', which is the signature algorithm used, equivalent to a
@@ -19,7 +20,7 @@
 -- * A 'PublicKey' can be created from an X.509 public key with 'fromX509'
 -- * A 'Cose.CoseSignAlg' and a 'PublicKey' can be used to verify a signature
 --   with 'verify'
-module Crypto.WebAuthn.PublicKey
+module Crypto.WebAuthn.Cose.Internal.Verify
   ( -- * Public Key
     PublicKey (..),
     fromCose,
@@ -48,8 +49,8 @@ import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import qualified Crypto.WebAuthn.Cose.Algorithm as A
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
 import Crypto.WebAuthn.Internal.ToJSONOrphans ()
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
@@ -151,8 +152,8 @@ fromX509 key = Left $ "X509 public key algorithm is not supported: " <> Text.pac
 -- and a 'PublicKey'. Returns an error if the signature algorithm doesn't
 -- match. Also returns an error if the signature wasn't valid or for other
 -- errors.
-verify :: Cose.CoseSignAlg -> PublicKey -> BS.ByteString -> BS.ByteString -> Either Text ()
-verify Cose.CoseSignAlgEdDSA PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} msg sig = do
+verify :: A.CoseSignAlg -> PublicKey -> BS.ByteString -> BS.ByteString -> Either Text ()
+verify A.CoseSignAlgEdDSA PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} msg sig = do
   key <- case Ed25519.publicKey eddsaX of
     CryptoFailed err -> Left $ "Failed to create Ed25519 public key: " <> Text.pack (show err)
     CryptoPassed res -> pure res
@@ -162,7 +163,7 @@ verify Cose.CoseSignAlgEdDSA PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519,
   if Ed25519.verify key msg sig
     then Right ()
     else Left "EdDSA Signature invalid"
-verify (Cose.CoseSignAlgECDSA (toCryptHashECDSA -> SomeHashAlgorithm hash)) PublicKeyECDSA {..} msg sig = do
+verify (A.CoseSignAlgECDSA (toCryptHashECDSA -> SomeHashAlgorithm hash)) PublicKeyECDSA {..} msg sig = do
   let key =
         ECDSA.PublicKey
           { public_curve = ECC.getCurveByName $ toCryptCurveECDSA ecdsaCurve,
@@ -183,7 +184,7 @@ verify (Cose.CoseSignAlgECDSA (toCryptHashECDSA -> SomeHashAlgorithm hash)) Publ
   if ECDSA.verify hash key sig msg
     then Right ()
     else Left "ECDSA Signature invalid"
-verify (Cose.CoseSignAlgRSA (toCryptHashRSA -> SomeHashAlgorithmASN1 hash)) PublicKeyRSA {..} msg sig = do
+verify (A.CoseSignAlgRSA (toCryptHashRSA -> SomeHashAlgorithmASN1 hash)) PublicKeyRSA {..} msg sig = do
   let key =
         RSA.PublicKey
           { -- https://www.rfc-editor.org/rfc/rfc8017#section-8.2.2
@@ -206,20 +207,20 @@ verify sigAlg pubKey _ _ =
 data SomeHashAlgorithm = forall a. Hash.HashAlgorithm a => SomeHashAlgorithm a
 
 -- | Returns the cryptonite 'SomeHashAlgorithm' corresponding to this hash algorithm
-toCryptHashECDSA :: Cose.CoseHashAlgECDSA -> SomeHashAlgorithm
-toCryptHashECDSA Cose.CoseHashAlgECDSASHA256 = SomeHashAlgorithm Hash.SHA256
-toCryptHashECDSA Cose.CoseHashAlgECDSASHA384 = SomeHashAlgorithm Hash.SHA384
-toCryptHashECDSA Cose.CoseHashAlgECDSASHA512 = SomeHashAlgorithm Hash.SHA512
+toCryptHashECDSA :: A.CoseHashAlgECDSA -> SomeHashAlgorithm
+toCryptHashECDSA A.CoseHashAlgECDSASHA256 = SomeHashAlgorithm Hash.SHA256
+toCryptHashECDSA A.CoseHashAlgECDSASHA384 = SomeHashAlgorithm Hash.SHA384
+toCryptHashECDSA A.CoseHashAlgECDSASHA512 = SomeHashAlgorithm Hash.SHA512
 
 -- | Some cryptonite 'RSA.HashAlgorithmASN1' type, used as a return value of 'toCryptHashRSA'
 data SomeHashAlgorithmASN1 = forall a. RSA.HashAlgorithmASN1 a => SomeHashAlgorithmASN1 a
 
 -- | Returns the cryptonite 'SomeHashAlgorithmASN1' corresponding to this hash algorithm
-toCryptHashRSA :: Cose.CoseHashAlgRSA -> SomeHashAlgorithmASN1
-toCryptHashRSA Cose.CoseHashAlgRSASHA1 = SomeHashAlgorithmASN1 Hash.SHA1
-toCryptHashRSA Cose.CoseHashAlgRSASHA256 = SomeHashAlgorithmASN1 Hash.SHA256
-toCryptHashRSA Cose.CoseHashAlgRSASHA384 = SomeHashAlgorithmASN1 Hash.SHA384
-toCryptHashRSA Cose.CoseHashAlgRSASHA512 = SomeHashAlgorithmASN1 Hash.SHA512
+toCryptHashRSA :: A.CoseHashAlgRSA -> SomeHashAlgorithmASN1
+toCryptHashRSA A.CoseHashAlgRSASHA1 = SomeHashAlgorithmASN1 Hash.SHA1
+toCryptHashRSA A.CoseHashAlgRSASHA256 = SomeHashAlgorithmASN1 Hash.SHA256
+toCryptHashRSA A.CoseHashAlgRSASHA384 = SomeHashAlgorithmASN1 Hash.SHA384
+toCryptHashRSA A.CoseHashAlgRSASHA512 = SomeHashAlgorithmASN1 Hash.SHA512
 
 -- | Converts a 'Cose.CoseCurveECDSA' to an 'ECC.CurveName'. The inverse
 -- function is 'fromCryptCurveECDSA'

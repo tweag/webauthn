@@ -1,8 +1,6 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- |
--- /Warning/: this is an internal module, and does not have a stable
--- API or name. Use at your own risk!
+-- | Stability: internal
 --
 -- This module contains orphan instances connecting different date libraries together:
 --

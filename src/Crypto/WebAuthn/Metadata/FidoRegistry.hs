@@ -1,9 +1,9 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE KindSignatures #-}
 
--- | [Fido Registry of Predefined Values](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#authenticator-attestation-types)
+-- | Stability: experimental
+-- [Fido Registry of Predefined Values](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#authenticator-attestation-types)
 -- FIDO Alliance Proposed Standard 17 December 2019
-module Crypto.WebAuthn.FidoRegistry
+module Crypto.WebAuthn.Metadata.FidoRegistry
   ( UserVerificationMethod (..),
     KeyProtectionType (..),
     MatcherProtectionType (..),

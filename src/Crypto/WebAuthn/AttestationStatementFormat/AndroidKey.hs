@@ -1,15 +1,15 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
--- | This module implements
--- [Android Key attestation](https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation).
-module Crypto.WebAuthn.Operations.Attestation.AndroidKey
+-- | Stability: experimental
+-- This module implements the
+-- [Android Key Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation).
+module Crypto.WebAuthn.AttestationStatementFormat.AndroidKey
   ( format,
-    TrustLevel (..),
     Format (..),
+    TrustLevel (..),
     VerificationError (..),
   )
 where
@@ -18,10 +18,10 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, void, when)
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
 import Data.ASN1.Types (ASN1 (IntVal, OctetString), ASN1Class (Context), ASN1ConstructionType (Container, Sequence, Set))
 import Data.Aeson (ToJSON, object, toJSON, (.=))
@@ -158,7 +158,7 @@ data Statement = Statement
     alg :: Cose.CoseSignAlg,
     -- | Holds the parsed attestation extension of the above X509 certificate
     -- Not part of the spec, but prevents parsing in the AndroidKey.verify function
-    pubKey :: PublicKey.PublicKey,
+    pubKey :: Cose.PublicKey,
     attExt :: ExtAttestation
   }
   deriving (Eq, Show)
@@ -220,12 +220,12 @@ instance M.AttestationStatementFormat Format where
           Just (Left err) -> Left $ "Failed to decode certificate attestation extension: " <> Text.pack err
           Nothing -> Left "Certificate attestation extension is missing"
 
-        pubKey <- PublicKey.fromX509 $ X509.certPubKey cert
+        pubKey <- Cose.fromX509 $ X509.certPubKey cert
 
         pure Statement {..}
       _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, x5c: nonempty list): " <> Text.pack (show xs)
 
-  asfEncode _ Statement {sig, x5c, alg} =
+  asfEncode _ Statement {..} =
     CBOR.TMap
       [ (CBOR.TString "sig", CBOR.TBytes sig),
         (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
@@ -237,7 +237,7 @@ instance M.AttestationStatementFormat Format where
 
   type AttStmtVerificationError Format = VerificationError
 
-  asfVerify Format {..} _ Statement {sig, x5c, alg, attExt, pubKey} M.AuthenticatorData {adRawData = M.WithRaw rawData, adAttestedCredentialData} clientDataHash = do
+  asfVerify Format {..} _ Statement {..} M.AuthenticatorData {adRawData = M.WithRaw rawData, ..} clientDataHash = do
     -- 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to
     -- extract the contained fields.
     -- NOTE: The validity of the data is already checked during decoding.
@@ -245,13 +245,13 @@ instance M.AttestationStatementFormat Format where
     -- 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the
     -- public key in the first certificate in x5c with the algorithm specified in alg.
     let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
-    case PublicKey.verify alg pubKey signedData sig of
+    case Cose.verify alg pubKey signedData sig of
       Right () -> pure ()
       Left err -> failure $ VerificationErrorVerificationFailure err
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the
     -- attestedCredentialData in authenticatorData.
-    unless (PublicKey.fromCose (M.acdCredentialPublicKey adAttestedCredentialData) == pubKey) $ failure VerificationErrorCredentialKeyMismatch
+    unless (Cose.fromCose (M.acdCredentialPublicKey adAttestedCredentialData) == pubKey) $ failure VerificationErrorCredentialKeyMismatch
 
     -- 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to
     -- clientDataHash.

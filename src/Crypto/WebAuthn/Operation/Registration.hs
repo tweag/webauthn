@@ -1,12 +1,12 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
--- | This module implements attestation of the received authenticator response.
+-- | Stability: experimental
+-- This module implements attestation of the received authenticator response.
 -- See the WebAuthn
 -- [specification](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- for the algorithm implemented in this module.
@@ -17,35 +17,27 @@
 -- section is
 -- [Section 1.3.1](https://www.w3.org/TR/webauthn-2/#sctn-sample-registration)
 -- which is a high level overview of the registration procedure.
-module Crypto.WebAuthn.Operations.Attestation
-  ( AttestationError (..),
-    AttestationResult (..),
+module Crypto.WebAuthn.Operation.Registration
+  ( verifyRegistrationResponse,
+    RegistrationError (..),
+    RegistrationResult (..),
     AuthenticatorModel (..),
     SomeAttestationStatement (..),
-    verifyAttestationResponse,
-    allSupportedFormats,
   )
 where
 
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.Identifier (AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F), certificateSubjectKeyIdentifier)
-import Crypto.WebAuthn.Internal.Utils (failure)
+import Crypto.WebAuthn.Internal.Utils (certificateSubjectKeyIdentifier, failure)
 import Crypto.WebAuthn.Metadata.Service.Processing (queryMetadata)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as Meta
-import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Operations.Attestation.AndroidKey as AndroidKey
-import qualified Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet as AndroidSafetyNet
-import qualified Crypto.WebAuthn.Operations.Attestation.Apple as Apple
-import qualified Crypto.WebAuthn.Operations.Attestation.FidoU2F as FidoU2F
-import qualified Crypto.WebAuthn.Operations.Attestation.None as None
-import qualified Crypto.WebAuthn.Operations.Attestation.Packed as Packed
-import qualified Crypto.WebAuthn.Operations.Attestation.TPM as TPM
-import Crypto.WebAuthn.Operations.CredentialEntry
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.Identifier (AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F))
+import Crypto.WebAuthn.Operation.CredentialEntry
   ( CredentialEntry
       ( CredentialEntry,
         ceCredentialId,
@@ -64,44 +56,29 @@ import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import GHC.Generics (Generic)
 
--- | All supported [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
--- of this library. This value can be passed to 'Crypto.WebAuthn.Model.WebIDL.Decoding.decodeCreatedPublicKeyCredential'
-allSupportedFormats :: M.SupportedAttestationStatementFormats
-allSupportedFormats =
-  foldMap
-    M.sasfSingleton
-    [ None.format,
-      Packed.format,
-      AndroidKey.format,
-      AndroidSafetyNet.format,
-      FidoU2F.format,
-      Apple.format,
-      TPM.format
-    ]
-
--- | All the errors that can result from a call to 'verifyAttestationResponse'
-data AttestationError
+-- | All the errors that can result from a call to 'verifyRegistrationResponse'
+data RegistrationError
   = -- | The returned challenge does not match the desired one
-    AttestationChallengeMismatch M.Challenge M.Challenge
+    RegistrationChallengeMismatch M.Challenge M.Challenge
   | -- | The returned origin does not match the relying party's origin
-    AttestationOriginMismatch M.Origin M.Origin
+    RegistrationOriginMismatch M.Origin M.Origin
   | -- | The hash of the relying party id does not match the has in the returned authentication data
-    AttestationRpIdHashMismatch M.RpIdHash M.RpIdHash
+    RegistrationRpIdHashMismatch M.RpIdHash M.RpIdHash
   | -- | The userpresent bit in the authdata was not set
-    AttestationUserNotPresent
+    RegistrationUserNotPresent
   | -- | The userverified bit in the authdata was not set
-    AttestationUserNotVerified
+    RegistrationUserNotVerified
   | -- | The algorithm received from the client was not one of the algorithms
     -- we (the relying party) requested from the client.
     -- first: The received algorithm
     -- second: The list of requested algorithm
-    AttestationUndesiredPublicKeyAlgorithm Cose.CoseSignAlg [Cose.CoseSignAlg]
+    RegistrationUndesiredPublicKeyAlgorithm Cose.CoseSignAlg [Cose.CoseSignAlg]
   | -- | There was some exception in the statement format specific section
-    forall a. M.AttestationStatementFormat a => AttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
+    forall a. M.AttestationStatementFormat a => RegistrationAttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
 
-deriving instance Show AttestationError
+deriving instance Show RegistrationError
 
-deriving instance Exception AttestationError
+deriving instance Exception RegistrationError
 
 -- | Information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
 -- model that created the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential).
@@ -205,14 +182,28 @@ instance ToJSON (AuthenticatorModel k) where
 
 -- | Some attestation statement that represents both the [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
 -- that was returned along with information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
--- model that created it.
+-- model that created it. This result may be inspected to enforce relying party
+-- policy, see the individual fields for more information.
 data SomeAttestationStatement = forall k.
   SomeAttestationStatement
   { -- | The [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
-    -- of the attestation statement
+    -- of the attestation statement. This could be used to only allow specific
+    -- attestation types. E.g. disallowing [Basic](https://www.w3.org/TR/webauthn-2/#basic-attestation)
+    -- and [Self](https://www.w3.org/TR/webauthn-2/#self-attestation) attestation,
+    -- or marking those specially in the database.
     asType :: M.AttestationType k,
     -- | The [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
-    -- model that produced the attestation statement
+    -- model that produced the attestation statement. Relying Party policy could
+    -- accept this credential based on properties of this field:
+    --
+    -- * Disallowing unverified authenticators by checking whether
+    --   it is an 'UnverifiedAuthenticator'
+    --
+    -- * Disallowing authenticators that don't meet the required security level by
+    --   inspecting the 'vaMetadata' of a 'VerifiedAuthenticator'
+    --
+    -- * Only allowing a very specific authenticator to be used by looking at
+    --   'vaIdentifier' of a 'VerifiedAuthenticator'
     asModel :: AuthenticatorModel k
   }
 
@@ -225,30 +216,23 @@ instance ToJSON SomeAttestationStatement where
         "asModel" .= asModel
       ]
 
--- | The result returned from 'verifyAttestationResponse'. It indicates that
+-- | The result returned from 'verifyRegistrationResponse'. It indicates that
 -- the operation of [registering a new credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
--- didn't fail. This result may be inspected to enforce relying party policy,
--- such as
---
--- * Disallowing [Basic](https://www.w3.org/TR/webauthn-2/#basic-attestation)
---   and [Self](https://www.w3.org/TR/webauthn-2/#self-attestation) attestation
---   by inspecting 'rAttestationStatement's 'asType'
---
--- * Disallowing unverified authenticators by checking whether
---   'rAttestationStatement's 'asModel' is an 'UnverifiedAuthenticator'
---
--- * Disallowing authenticators that don't meet the required security level by
---   inspecting the 'rAttestationStatement's 'asModel's 'vaMetadata'
-data AttestationResult = AttestationResult
+-- didn't fail.
+data RegistrationResult = RegistrationResult
   { -- | The entry to insert into the database
-    rEntry :: CredentialEntry,
+    rrEntry :: CredentialEntry,
     -- | Information about the attestation statement
-    rAttestationStatement :: SomeAttestationStatement
+    rrAttestationStatement :: SomeAttestationStatement
   }
   deriving (Show, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
-verifyAttestationResponse ::
+-- The resulting 'rrEntry' of this call should be stored in a database by the
+-- Relying Party. The 'rrAttestationStatement' contains the result of the
+-- attempted attestation, allowing the Relying Party to reject certain
+-- authenticators/attempted entry creations based on policy.
+verifyRegistrationResponse ::
   -- | The origin of the server
   M.Origin ->
   -- | The relying party id
@@ -256,181 +240,182 @@ verifyAttestationResponse ::
   -- | The metadata registry, used for verifying the validity of the
   -- attestation by looking up root certificates
   Meta.MetadataServiceRegistry ->
-  -- | The options passed to the create() method
-  M.PublicKeyCredentialOptions 'M.Create ->
-  -- | The response from the authenticator
-  M.PublicKeyCredential 'M.Create 'True ->
   -- | The current time, used for verifying the validity of the attestation
   -- statement certificate chain
   DateTime ->
+  -- | The options passed to the create() method
+  M.CredentialOptions 'M.Registration ->
+  -- | The response from the authenticator
+  M.Credential 'M.Registration 'True ->
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
   -- Or () in case of a result.
-  Validation (NonEmpty AttestationError) AttestationResult
-verifyAttestationResponse
+  Validation (NonEmpty RegistrationError) RegistrationResult
+verifyRegistrationResponse
   rpOrigin
   rpIdHash
   registry
-  options@M.PublicKeyCredentialCreationOptions {pkcocChallenge, pkcocPubKeyCredParams}
-  credential@M.PublicKeyCredential
-    { M.pkcResponse =
-        M.AuthenticatorAttestationResponse
-          { arcClientData = c,
-            arcAttestationObject =
+  currentTime
+  options@M.CredentialOptionsRegistration {..}
+  credential@M.Credential
+    { M.cResponse =
+        M.AuthenticatorResponseRegistration
+          { arrClientData = c,
+            arrAttestationObject =
               M.AttestationObject
                 { aoAuthData = authData@M.AuthenticatorData {adAttestedCredentialData = M.AttestedCredentialData {..}},
                   ..
                 }
           }
-    }
-  currentTime = do
-    -- 1. Let options be a new PublicKeyCredentialCreationOptions structure
-    -- configured to the Relying Party's needs for the ceremony.
-    -- NOTE: Implemented by caller
+    } =
+    do
+      -- 1. Let options be a new PublicKeyCredentialCreationOptions structure
+      -- configured to the Relying Party's needs for the ceremony.
+      -- NOTE: Implemented by caller
 
-    -- 2. Call navigator.credentials.create() and pass options as the publicKey
-    -- option. Let credential be the result of the successfully resolved
-    -- promise. If the promise is rejected, abort the ceremony with a
-    -- user-visible error, or otherwise guide the user experience as might be
-    -- determinable from the context available in the rejected promise. For
-    -- example if the promise is rejected with an error code equivalent to
-    -- "InvalidStateError", the user might be instructed to use a different
-    -- authenticator. For information on different error contexts and the
-    -- circumstances leading to them, see § 6.3.2 The
-    -- authenticatorMakeCredential Operation.
-    -- NOTE: Implemented by caller
+      -- 2. Call navigator.credentials.create() and pass options as the publicKey
+      -- option. Let credential be the result of the successfully resolved
+      -- promise. If the promise is rejected, abort the ceremony with a
+      -- user-visible error, or otherwise guide the user experience as might be
+      -- determinable from the context available in the rejected promise. For
+      -- example if the promise is rejected with an error code equivalent to
+      -- "InvalidStateError", the user might be instructed to use a different
+      -- authenticator. For information on different error contexts and the
+      -- circumstances leading to them, see § 6.3.2 The
+      -- authenticatorMakeCredential Operation.
+      -- NOTE: Implemented by caller
 
-    -- 3. Let response be credential.response. If response is not an instance
-    -- of AuthenticatorAttestationResponse, abort the ceremony with a
-    -- user-visible error.
-    -- NOTE: Already done as part of decoding
+      -- 3. Let response be credential.response. If response is not an instance
+      -- of AuthenticatorAttestationResponse, abort the ceremony with a
+      -- user-visible error.
+      -- NOTE: Already done as part of decoding
 
-    -- 4. Let clientExtensionResults be the result of calling
-    -- credential.getClientExtensionResults().
-    -- TODO: Extensions are not implemented by this library, see the TODO in the
-    -- module documentation of `Crypto.WebAuthn.Model` for more information.
+      -- 4. Let clientExtensionResults be the result of calling
+      -- credential.getClientExtensionResults().
+      -- TODO: Extensions are not implemented by this library, see the TODO in the
+      -- module documentation of `Crypto.WebAuthn.Model` for more information.
 
-    -- 5. Let JSONtext be the result of running UTF-8 decode on the value of
-    -- response.clientDataJSON.
-    -- NOTE: Done as part of decoding
+      -- 5. Let JSONtext be the result of running UTF-8 decode on the value of
+      -- response.clientDataJSON.
+      -- NOTE: Done as part of decoding
 
-    -- 6. Let C, the client data claimed as collected during the credential
-    -- creation, be the result of running an implementation-specific JSON
-    -- parser on JSONtext.
-    -- NOTE: Done as part of decoding
+      -- 6. Let C, the client data claimed as collected during the credential
+      -- creation, be the result of running an implementation-specific JSON
+      -- parser on JSONtext.
+      -- NOTE: Done as part of decoding
 
-    -- 7. Verify that the value of C.type is webauthn.create.
-    -- NOTE: Done as part of decoding
+      -- 7. Verify that the value of C.type is webauthn.create.
+      -- NOTE: Done as part of decoding
 
-    -- 8. Verify that the value of C.challenge equals the base64url encoding of
-    -- options.challenge.
-    unless (M.ccdChallenge c == pkcocChallenge) $
-      failure $ AttestationChallengeMismatch (M.ccdChallenge c) pkcocChallenge
+      -- 8. Verify that the value of C.challenge equals the base64url encoding of
+      -- options.challenge.
+      unless (M.ccdChallenge c == corChallenge) $
+        failure $ RegistrationChallengeMismatch (M.ccdChallenge c) corChallenge
 
-    -- 9. Verify that the value of C.origin matches the Relying Party's origin.
-    unless (M.ccdOrigin c == rpOrigin) $
-      failure $ AttestationOriginMismatch (M.ccdOrigin c) rpOrigin
+      -- 9. Verify that the value of C.origin matches the Relying Party's origin.
+      unless (M.ccdOrigin c == rpOrigin) $
+        failure $ RegistrationOriginMismatch (M.ccdOrigin c) rpOrigin
 
-    -- 10. Verify that the value of C.tokenBinding.status matches the state of
-    -- Token Binding for the TLS connection over which the assertion was
-    -- obtained. If Token Binding was used on that TLS connection, also verify
-    -- that C.tokenBinding.id matches the base64url encoding of the Token
-    -- Binding ID for the connection.
-    -- TODO: We do not implement TokenBinding, see the documentation of
-    -- `CollectedClientData` for more information.
+      -- 10. Verify that the value of C.tokenBinding.status matches the state of
+      -- Token Binding for the TLS connection over which the assertion was
+      -- obtained. If Token Binding was used on that TLS connection, also verify
+      -- that C.tokenBinding.id matches the base64url encoding of the Token
+      -- Binding ID for the connection.
+      -- TODO: We do not implement TokenBinding, see the documentation of
+      -- `CollectedClientData` for more information.
 
-    -- 11. Let hash be the result of computing a hash over
-    -- response.clientDataJSON using SHA-256.
-    -- NOTE: Done on raw data from decoding so that we don't need to encode again
-    -- here and so that we use the exact some serialization
-    let hash = M.ClientDataHash $ Hash.hash $ M.unRaw $ M.ccdRawData c
+      -- 11. Let hash be the result of computing a hash over
+      -- response.clientDataJSON using SHA-256.
+      -- NOTE: Done on raw data from decoding so that we don't need to encode again
+      -- here and so that we use the exact some serialization
+      let hash = M.ClientDataHash $ Hash.hash $ M.unRaw $ M.ccdRawData c
 
-    -- 12. Perform CBOR decoding on the attestationObject field of the
-    -- AuthenticatorAttestationResponse structure to obtain the attestation
-    -- statement format fmt, the authenticator data authData, and the attestation
-    -- statement attStmt.
-    -- NOTE: Already done as part of decoding
+      -- 12. Perform CBOR decoding on the attestationObject field of the
+      -- AuthenticatorAttestationResponse structure to obtain the attestation
+      -- statement format fmt, the authenticator data authData, and the attestation
+      -- statement attStmt.
+      -- NOTE: Already done as part of decoding
 
-    -- 13. Verify that the rpIdHash in authData is the SHA-256 hash of the RP
-    -- ID expected by the Relying Party.
-    unless (M.adRpIdHash authData == rpIdHash) $
-      failure $ AttestationRpIdHashMismatch (M.adRpIdHash authData) rpIdHash
+      -- 13. Verify that the rpIdHash in authData is the SHA-256 hash of the RP
+      -- ID expected by the Relying Party.
+      unless (M.adRpIdHash authData == rpIdHash) $
+        failure $ RegistrationRpIdHashMismatch (M.adRpIdHash authData) rpIdHash
 
-    -- 14. Verify that the User Present bit of the flags in authData is set.
-    unless (M.adfUserPresent (M.adFlags authData)) $
-      failure AttestationUserNotPresent
+      -- 14. Verify that the User Present bit of the flags in authData is set.
+      unless (M.adfUserPresent (M.adFlags authData)) $
+        failure RegistrationUserNotPresent
 
-    -- 15. If user verification is required for this registration, verify that
-    -- the User Verified bit of the flags in authData is set.
-    -- NOTE: The spec is interpreted to mean that the userVerification option
-    -- from authenticatorSelection being set to "required" is what is meant by
-    -- whether user verification is required
-    case ( M.ascUserVerification <$> M.pkcocAuthenticatorSelection options,
-           M.adfUserVerified (M.adFlags authData)
-         ) of
-      (Nothing, _) -> pure ()
-      (Just M.UserVerificationRequirementRequired, True) -> pure ()
-      (Just M.UserVerificationRequirementRequired, False) -> failure AttestationUserNotVerified
-      (Just M.UserVerificationRequirementPreferred, True) -> pure ()
-      (Just M.UserVerificationRequirementPreferred, False) -> pure ()
-      (Just M.UserVerificationRequirementDiscouraged, True) -> pure ()
-      (Just M.UserVerificationRequirementDiscouraged, False) -> pure ()
+      -- 15. If user verification is required for this registration, verify that
+      -- the User Verified bit of the flags in authData is set.
+      -- NOTE: The spec is interpreted to mean that the userVerification option
+      -- from authenticatorSelection being set to "required" is what is meant by
+      -- whether user verification is required
+      case ( M.ascUserVerification <$> M.corAuthenticatorSelection options,
+             M.adfUserVerified (M.adFlags authData)
+           ) of
+        (Nothing, _) -> pure ()
+        (Just M.UserVerificationRequirementRequired, True) -> pure ()
+        (Just M.UserVerificationRequirementRequired, False) -> failure RegistrationUserNotVerified
+        (Just M.UserVerificationRequirementPreferred, True) -> pure ()
+        (Just M.UserVerificationRequirementPreferred, False) -> pure ()
+        (Just M.UserVerificationRequirementDiscouraged, True) -> pure ()
+        (Just M.UserVerificationRequirementDiscouraged, False) -> pure ()
 
-    -- 16. Verify that the "alg" parameter in the credential public key in
-    -- authData matches the alg attribute of one of the items in
-    -- options.pubKeyCredParams.
-    let acdAlg = Cose.keySignAlg acdCredentialPublicKey
-        desiredAlgs = map M.pkcpAlg pkcocPubKeyCredParams
-    unless (acdAlg `elem` desiredAlgs) $
-      failure $ AttestationUndesiredPublicKeyAlgorithm acdAlg desiredAlgs
+      -- 16. Verify that the "alg" parameter in the credential public key in
+      -- authData matches the alg attribute of one of the items in
+      -- options.pubKeyCredParams.
+      let acdAlg = Cose.keySignAlg acdCredentialPublicKey
+          desiredAlgs = map M.cpAlg corPubKeyCredParams
+      unless (acdAlg `elem` desiredAlgs) $
+        failure $ RegistrationUndesiredPublicKeyAlgorithm acdAlg desiredAlgs
 
-    -- 17. Verify that the values of the client extension outputs in
-    -- clientExtensionResults and the authenticator extension outputs in the
-    -- extensions in authData are as expected, considering the client extension
-    -- input values that were given in options.extensions and any specific
-    -- policy of the Relying Party regarding unsolicited extensions, i.e.,
-    -- those that were not specified as part of options.extensions. In the
-    -- general case, the meaning of "are as expected" is specific to the
-    -- Relying Party and which extensions are in use.
-    -- TODO: Extensions are not implemented by this library, see the TODO in the
-    -- module documentation of `Crypto.WebAuthn.Model` for more information.
+      -- 17. Verify that the values of the client extension outputs in
+      -- clientExtensionResults and the authenticator extension outputs in the
+      -- extensions in authData are as expected, considering the client extension
+      -- input values that were given in options.extensions and any specific
+      -- policy of the Relying Party regarding unsolicited extensions, i.e.,
+      -- those that were not specified as part of options.extensions. In the
+      -- general case, the meaning of "are as expected" is specific to the
+      -- Relying Party and which extensions are in use.
+      -- TODO: Extensions are not implemented by this library, see the TODO in the
+      -- module documentation of `Crypto.WebAuthn.Model` for more information.
 
-    -- 18. Determine the attestation statement format by performing a USASCII
-    -- case-sensitive match on fmt against the set of supported WebAuthn
-    -- Attestation Statement Format Identifier values. An up-to-date list of
-    -- registered WebAuthn Attestation Statement Format Identifier values is
-    -- maintained in the IANA "WebAuthn Attestation Statement Format Identifiers"
-    -- registry [IANA-WebAuthn-Registries] established by [RFC8809].
-    -- NOTE: This check is done during decoding and enforced by the type-system
+      -- 18. Determine the attestation statement format by performing a USASCII
+      -- case-sensitive match on fmt against the set of supported WebAuthn
+      -- Attestation Statement Format Identifier values. An up-to-date list of
+      -- registered WebAuthn Attestation Statement Format Identifier values is
+      -- maintained in the IANA "WebAuthn Attestation Statement Format Identifiers"
+      -- registry [IANA-WebAuthn-Registries] established by [RFC8809].
+      -- NOTE: This check is done during decoding and enforced by the type-system
 
-    -- 19. Verify that attStmt is a correct attestation statement, conveying a
-    -- valid attestation signature, by using the attestation statement format
-    -- fmt’s verification procedure given attStmt, authData and hash.
-    attStmt <- case M.asfVerify aoFmt currentTime aoAttStmt authData hash of
-      Failure err -> failure $ AttestationFormatError aoFmt err
-      Success (M.SomeAttestationType M.AttestationTypeNone) ->
-        pure $ SomeAttestationStatement M.AttestationTypeNone UnknownAuthenticator
-      Success (M.SomeAttestationType M.AttestationTypeSelf) ->
-        pure $ SomeAttestationStatement M.AttestationTypeSelf UnknownAuthenticator
-      Success (M.SomeAttestationType attType@M.AttestationTypeVerifiable {}) ->
-        pure $ validateAttestationChain credential aoFmt attType registry currentTime
-    pure $
-      AttestationResult
-        { rEntry =
-            CredentialEntry
-              { ceUserHandle = M.pkcueId $ M.pkcocUser options,
-                ceCredentialId = M.pkcIdentifier credential,
-                cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
-                ceSignCounter = M.adSignCount authData
-              },
-          rAttestationStatement = attStmt
-        }
+      -- 19. Verify that attStmt is a correct attestation statement, conveying a
+      -- valid attestation signature, by using the attestation statement format
+      -- fmt’s verification procedure given attStmt, authData and hash.
+      attStmt <- case M.asfVerify aoFmt currentTime aoAttStmt authData hash of
+        Failure err -> failure $ RegistrationAttestationFormatError aoFmt err
+        Success (M.SomeAttestationType M.AttestationTypeNone) ->
+          pure $ SomeAttestationStatement M.AttestationTypeNone UnknownAuthenticator
+        Success (M.SomeAttestationType M.AttestationTypeSelf) ->
+          pure $ SomeAttestationStatement M.AttestationTypeSelf UnknownAuthenticator
+        Success (M.SomeAttestationType attType@M.AttestationTypeVerifiable {}) ->
+          pure $ validateAttestationChain credential aoFmt attType registry currentTime
+      pure $
+        RegistrationResult
+          { rrEntry =
+              CredentialEntry
+                { ceUserHandle = M.cueId $ M.corUser options,
+                  ceCredentialId = M.cIdentifier credential,
+                  cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
+                  ceSignCounter = M.adSignCount authData
+                },
+            rrAttestationStatement = attStmt
+          }
 
 -- | Performs step 20 and 21 of attestation for verifieable attestation types.
 -- Results in the type of attestation and the model.
 validateAttestationChain ::
   forall raw p a.
   M.AttestationStatementFormat a =>
-  M.PublicKeyCredential 'M.Create raw ->
+  M.Credential 'M.Registration raw ->
   a ->
   M.AttestationType ('M.Verifiable p) ->
   Meta.MetadataServiceRegistry ->
@@ -439,7 +424,7 @@ validateAttestationChain ::
 validateAttestationChain
   credential
   fmt
-  M.AttestationTypeVerifiable {atvType, atvChain}
+  M.AttestationTypeVerifiable {..}
   registry
   currentTime =
     SomeAttestationStatement attestationType authenticator
@@ -471,8 +456,8 @@ validateAttestationChain
               . M.acdAaguid
               . M.adAttestedCredentialData
               . M.aoAuthData
-              . M.arcAttestationObject
-              . M.pkcResponse
+              . M.arrAttestationObject
+              . M.cResponse
               $ credential
           )
         M.FidoU2FCert c ->

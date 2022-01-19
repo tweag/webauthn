@@ -2,17 +2,17 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | This module implements
--- [Android SafetyNet attestation](https://www.w3.org/TR/webauthn-2/#sctn-android-safetynet-attestation).
-module Crypto.WebAuthn.Operations.Attestation.AndroidSafetyNet
+-- | Stability: experimental
+-- This module implements the
+-- [Android SafetyNet Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-android-safetynet-attestation).
+module Crypto.WebAuthn.AttestationStatementFormat.AndroidSafetyNet
   ( format,
     Format (..),
-    VerificationError (..),
     Integrity (..),
+    VerificationError (..),
   )
 where
 
@@ -193,7 +193,7 @@ instance M.AttestationStatementFormat Format where
           Just res -> pure res
         pure x5c
 
-  asfEncode _ Statement {ver, responseRaw} =
+  asfEncode _ Statement {..} =
     CBOR.TMap
       [ (TString "ver", TString ver),
         (TString "response", TBytes responseRaw)

@@ -11,13 +11,11 @@ module Spec.Types () where
 
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import Crypto.WebAuthn.Identifier (AAGUID (AAGUID))
-import Crypto.WebAuthn.Model.Kinds (SWebauthnKind (SCreate, SGet))
-import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Operations.Attestation.None as None
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
+import qualified Crypto.WebAuthn.Model as M
 import qualified Data.ByteString.Lazy as LBS
 import Data.Maybe (fromJust)
 import Data.Set (Set)
@@ -55,8 +53,8 @@ instance Arbitrary Cose.CoseSignAlg where
         Cose.CoseSignAlgRSA <$> arbitrary
       ]
 
-instance Arbitrary PublicKey.PublicKey where
-  arbitrary = PublicKey.fromCose <$> arbitrary
+instance Arbitrary Cose.PublicKey where
+  arbitrary = Cose.fromCose <$> arbitrary
 
 instance Arbitrary Cose.CosePublicKey where
   arbitrary = Key.pubKey <$> arbitrary
@@ -73,7 +71,7 @@ instance Arbitrary Cose.CoseHashAlgECDSA where
 instance Arbitrary Cose.CoseHashAlgRSA where
   arbitrary = arbitraryBoundedEnum
 
-instance Arbitrary M.PublicKeyCredentialType where
+instance Arbitrary M.CredentialType where
   arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary M.AuthenticatorTransport where
@@ -91,15 +89,15 @@ instance Arbitrary M.UserVerificationRequirement where
 instance Arbitrary M.AttestationConveyancePreference where
   arbitrary = arbitraryBoundedEnum
 
-instance Arbitrary (M.AuthenticatorResponse 'M.Create 'False) where
-  arbitrary = M.AuthenticatorAttestationResponse <$> arbitrary <*> arbitrary
+instance Arbitrary (M.AuthenticatorResponse 'M.Registration 'False) where
+  arbitrary = M.AuthenticatorResponseRegistration <$> arbitrary <*> arbitrary
 
 instance Arbitrary M.AssertionSignature where
   arbitrary = M.AssertionSignature <$> arbitrary
 
-instance Arbitrary (M.AuthenticatorResponse 'M.Get 'False) where
+instance Arbitrary (M.AuthenticatorResponse 'M.Authentication 'False) where
   arbitrary =
-    M.AuthenticatorAssertionResponse
+    M.AuthenticatorResponseAuthentication
       <$> arbitrary
       <*> arbitrary
       <*> arbitrary
@@ -108,7 +106,7 @@ instance Arbitrary (M.AuthenticatorResponse 'M.Get 'False) where
 instance Arbitrary (M.RawField 'False) where
   arbitrary = pure M.NoRaw
 
-instance Arbitrary (M.CollectedClientData t 'False) where
+instance Arbitrary (M.CollectedClientData c 'False) where
   arbitrary = M.CollectedClientData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary (M.AttestationObject 'False) where
@@ -136,7 +134,7 @@ instance Arbitrary ArbitraryAttestationStatementFormat where
 instance Arbitrary M.SignatureCounter where
   arbitrary = M.SignatureCounter <$> arbitrary
 
-instance SingI t => Arbitrary (M.AuthenticatorData t 'False) where
+instance SingI c => Arbitrary (M.AuthenticatorData c 'False) where
   arbitrary = M.AuthenticatorData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary M.Challenge where
@@ -153,14 +151,14 @@ instance Arbitrary M.RpIdHash where
 instance Arbitrary M.AuthenticatorDataFlags where
   arbitrary = M.AuthenticatorDataFlags <$> arbitrary <*> arbitrary
 
-instance SingI t => Arbitrary (M.AttestedCredentialData t 'False) where
-  arbitrary = case sing @t of
-    SCreate -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-    SGet -> pure M.NoAttestedCredentialData
+instance SingI c => Arbitrary (M.AttestedCredentialData c 'False) where
+  arbitrary = case sing @c of
+    M.SRegistration -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+    M.SAuthentication -> pure M.NoAttestedCredentialData
 
-instance Arbitrary AAGUID where
+instance Arbitrary M.AAGUID where
   arbitrary =
-    AAGUID
+    M.AAGUID
       <$> frequency
         [ (1, pure UUID.nil),
           (10, randomUUID <$> arbitrary)
@@ -184,9 +182,9 @@ instance Arbitrary M.RpId where
 instance Arbitrary M.RelyingPartyName where
   arbitrary = M.RelyingPartyName <$> arbitrary
 
-instance Arbitrary M.PublicKeyCredentialRpEntity where
+instance Arbitrary M.CredentialRpEntity where
   arbitrary =
-    M.PublicKeyCredentialRpEntity
+    M.CredentialRpEntity
       <$> arbitrary
       <*> arbitrary
 
@@ -199,9 +197,9 @@ instance Arbitrary M.UserAccountDisplayName where
 instance Arbitrary M.UserAccountName where
   arbitrary = M.UserAccountName <$> arbitrary
 
-instance Arbitrary M.PublicKeyCredentialUserEntity where
+instance Arbitrary M.CredentialUserEntity where
   arbitrary =
-    M.PublicKeyCredentialUserEntity
+    M.CredentialUserEntity
       <$> arbitrary
       <*> arbitrary
       <*> arbitrary
@@ -209,9 +207,9 @@ instance Arbitrary M.PublicKeyCredentialUserEntity where
 instance Arbitrary M.Timeout where
   arbitrary = M.Timeout <$> arbitrary
 
-instance Arbitrary M.PublicKeyCredentialDescriptor where
+instance Arbitrary M.CredentialDescriptor where
   arbitrary =
-    M.PublicKeyCredentialDescriptor M.PublicKeyCredentialTypePublicKey
+    M.CredentialDescriptor M.CredentialTypePublicKey
       <$> arbitrary
       <*> liftArbitrary shuffledSubset
 
@@ -225,9 +223,9 @@ instance Arbitrary M.AuthenticatorSelectionCriteria where
 instance Arbitrary M.AuthenticationExtensionsClientInputs where
   arbitrary = pure M.AuthenticationExtensionsClientInputs
 
-instance Arbitrary (M.PublicKeyCredentialOptions 'M.Create) where
+instance Arbitrary (M.CredentialOptions 'M.Registration) where
   arbitrary =
-    M.PublicKeyCredentialCreationOptions
+    M.CredentialOptionsRegistration
       <$> arbitrary
       <*> arbitrary
       <*> arbitrary
@@ -238,9 +236,9 @@ instance Arbitrary (M.PublicKeyCredentialOptions 'M.Create) where
       <*> arbitrary
       <*> arbitrary
 
-instance Arbitrary (M.PublicKeyCredentialOptions 'M.Get) where
+instance Arbitrary (M.CredentialOptions 'M.Authentication) where
   arbitrary =
-    M.PublicKeyCredentialRequestOptions
+    M.CredentialOptionsAuthentication
       <$> arbitrary
       <*> arbitrary
       <*> arbitrary
@@ -251,16 +249,16 @@ instance Arbitrary (M.PublicKeyCredentialOptions 'M.Get) where
 instance Arbitrary M.AuthenticationExtensionsClientOutputs where
   arbitrary = pure M.AuthenticationExtensionsClientOutputs
 
-instance Arbitrary (M.PublicKeyCredential 'M.Create 'False) where
+instance Arbitrary (M.Credential 'M.Registration 'False) where
   arbitrary =
-    M.PublicKeyCredential
+    M.Credential
       <$> arbitrary
       <*> arbitrary
       <*> arbitrary
 
-instance Arbitrary (M.PublicKeyCredential 'M.Get 'False) where
+instance Arbitrary (M.Credential 'M.Authentication 'False) where
   arbitrary =
-    M.PublicKeyCredential
+    M.Credential
       <$> arbitrary
       <*> arbitrary
       <*> arbitrary
@@ -277,10 +275,10 @@ subset = Set.fromList <$> sublistOf (Set.toList completeSet)
 subsetWith :: Ord a => Set a -> Gen (Set a)
 subsetWith set = Set.fromList <$> sublistOf (Set.toList set)
 
-parameters :: Gen [M.PublicKeyCredentialParameters]
+parameters :: Gen [M.CredentialParameters]
 parameters = do
   algs <- shuffledSubsetWith $ Set.fromList allCoseAlgs
-  pure $ M.PublicKeyCredentialParameters M.PublicKeyCredentialTypePublicKey <$> algs
+  pure $ M.CredentialParameters M.CredentialTypePublicKey <$> algs
 
 completeSet :: (Ord a, Bounded a, Enum a) => Set a
 completeSet = Set.fromList [minBound .. maxBound]

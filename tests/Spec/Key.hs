@@ -19,9 +19,9 @@ import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 import Crypto.Random (MonadRandom)
+import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1
@@ -72,7 +72,7 @@ newKeyPair (Cose.CoseSignAlgECDSA hash) = do
         Cose.CoseHashAlgECDSASHA256 -> Cose.CoseCurveP256
         Cose.CoseHashAlgECDSASHA384 -> Cose.CoseCurveP384
         Cose.CoseHashAlgECDSASHA512 -> Cose.CoseCurveP521
-      curveName = PublicKey.toCryptCurveECDSA coseCurve
+      curveName = Cose.toCryptCurveECDSA coseCurve
       curve = ECC.getCurveByName curveName
       byteSize = (ECC.curveSizeBits curve + 7) `div` 8
   (ECDSA.PublicKey {public_q = point}, ECDSA.PrivateKey {private_d = d}) <- ECC.generate curve
@@ -119,15 +119,15 @@ sign Cose.CoseSignAlgEdDSA PrivateKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, 
         CryptoPassed res -> res
       pubKey = Ed25519.toPublic privKey
   pure $ convert $ Ed25519.sign privKey pubKey msg
-sign (Cose.CoseSignAlgECDSA (PublicKey.toCryptHashECDSA -> PublicKey.SomeHashAlgorithm hash)) PrivateKeyECDSA {..} msg = do
+sign (Cose.CoseSignAlgECDSA (Cose.toCryptHashECDSA -> Cose.SomeHashAlgorithm hash)) PrivateKeyECDSA {..} msg = do
   let privKey =
         ECDSA.PrivateKey
-          { private_curve = ECC.getCurveByName $ PublicKey.toCryptCurveECDSA ecdsaCurve,
+          { private_curve = ECC.getCurveByName $ Cose.toCryptCurveECDSA ecdsaCurve,
             private_d = ecdsaD
           }
   ECDSA.Signature {..} <- ECDSA.sign privKey hash msg
   pure $ ASN1.encodeASN1' ASN1.DER [ASN1.Start ASN1.Sequence, ASN1.IntVal sign_r, ASN1.IntVal sign_s, ASN1.End ASN1.Sequence]
-sign (Cose.CoseSignAlgRSA (PublicKey.toCryptHashRSA -> PublicKey.SomeHashAlgorithmASN1 hash)) PrivateKeyRSA {..} msg = do
+sign (Cose.CoseSignAlgRSA (Cose.toCryptHashRSA -> Cose.SomeHashAlgorithmASN1 hash)) PrivateKeyRSA {..} msg = do
   let privKey =
         RSA.PrivateKey
           { private_pub =
@@ -149,18 +149,18 @@ sign (Cose.CoseSignAlgRSA (PublicKey.toCryptHashRSA -> PublicKey.SomeHashAlgorit
     Right res -> pure res
 sign signAlg privKey _ = error $ "sign: Combination of signature algorithm " <> show signAlg <> " and private key " <> show privKey <> " is not valid or supported"
 
-toX509 :: PublicKey.PublicKey -> X509.PubKey
-toX509 PublicKey.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
+toX509 :: Cose.PublicKey -> X509.PubKey
+toX509 Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
   let key = case Ed25519.publicKey eddsaX of
         CryptoFailed err -> error $ "Failed to create a cryptonite Ed25519 public key of a bytestring with size " <> show (BS.length eddsaX) <> ": " <> show err
         CryptoPassed res -> res
    in X509.PubKeyEd25519 key
-toX509 PublicKey.PublicKeyECDSA {..} =
-  let curveName = PublicKey.toCryptCurveECDSA ecdsaCurve
+toX509 Cose.PublicKeyECDSA {..} =
+  let curveName = Cose.toCryptCurveECDSA ecdsaCurve
       serialisedPoint = X509.SerializedPoint $ BS.singleton 0x04 <> ecdsaX <> ecdsaY
       key = X509.PubKeyEC_Named curveName serialisedPoint
    in X509.PubKeyEC key
-toX509 PublicKey.PublicKeyRSA {..} =
+toX509 Cose.PublicKeyRSA {..} =
   let key =
         RSA.PublicKey
           { public_size = BS.length (i2osp rsaN),

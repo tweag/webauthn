@@ -1,10 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
 
--- | <https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html>
+-- | Stability: experimental
+-- Type definitions directly corresponding to the
+-- [FIDO Metadata Service](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html)
+-- specification.
 module Crypto.WebAuthn.Metadata.Statement.WebIDL
   ( -- * Types
     AAGUID (..),
@@ -26,8 +26,8 @@ module Crypto.WebAuthn.Metadata.Statement.WebIDL
   )
 where
 
-import qualified Crypto.WebAuthn.FidoRegistry as Registry
 import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), EnumJSONEncoding, JSONEncoding)
+import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson

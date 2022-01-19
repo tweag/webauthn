@@ -1,16 +1,15 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
--- | This module implements
--- [Apple attestation](https://www.w3.org/TR/webauthn-2/#sctn-apple-anonymous-attestation).
--- Note that the Apple attestation format is the only one not tracked by
--- [IANA](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids).
-module Crypto.WebAuthn.Operations.Attestation.Apple
+-- | Stability: experimental
+-- This module implements the
+-- [Apple Anonymous Attestation Statement Format](https://www.w3.org/TR/webauthn-2/#sctn-apple-anonymous-attestation).
+-- Note that this attestation statement format is currently not registered in the
+-- [WebAuthn Attestation Statement Format Identifiers IANA registry](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-attestation-statement-format-ids).
+module Crypto.WebAuthn.AttestationStatementFormat.Apple
   ( format,
     Format (..),
     VerificationError (..),
@@ -22,9 +21,9 @@ import Control.Exception (Exception)
 import Control.Monad (forM)
 import Control.Monad.Cont (unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
+import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.PublicKey as PublicKey
 import qualified Data.ASN1.Parse as ASN1
 import qualified Data.ASN1.Types as ASN1
 import Data.Aeson (ToJSON, object, toJSON, (.=))
@@ -54,7 +53,7 @@ data VerificationError
   | -- | The public Key found in the certificate does not match the
     -- credential's public key.
     -- (first: credential, second: certificate)
-    PublickeyMismatch PublicKey.PublicKey PublicKey.PublicKey
+    PublickeyMismatch Cose.PublicKey Cose.PublicKey
   deriving (Show, Exception)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-apple-anonymous-attestation)
@@ -63,7 +62,7 @@ data VerificationError
 data Statement = Statement
   { x5c :: NE.NonEmpty X509.SignedCertificate,
     sNonce :: Digest SHA256,
-    pubKey :: PublicKey.PublicKey
+    pubKey :: Cose.PublicKey
   }
   deriving (Eq, Show)
 
@@ -109,7 +108,7 @@ instance M.AttestationStatementFormat Format where
 
       let cert = X509.getCertificate credCert
 
-      pubKey <- PublicKey.fromX509 $ X509.certPubKey cert
+      pubKey <- Cose.fromX509 $ X509.certPubKey cert
 
       AppleNonceExtension {..} <- case X509.extensionGetE $ X509.certExtensions cert of
         Just (Right ext) -> pure ext
@@ -119,7 +118,7 @@ instance M.AttestationStatementFormat Format where
       pure $ Statement x5c nonce pubKey
     _ -> Left $ "CBOR map didn't have expected value types (x5c: nonempty list): " <> Text.pack (show xs)
 
-  asfEncode _ Statement {x5c} =
+  asfEncode _ Statement {..} =
     let encodedx5c = map (CBOR.TBytes . X509.encodeSignedObject) $ toList x5c
      in CBOR.TMap
           [ (CBOR.TString "x5c", CBOR.TList encodedx5c)
@@ -132,7 +131,7 @@ instance M.AttestationStatementFormat Format where
     _
     _
     Statement {..}
-    M.AuthenticatorData {M.adRawData, M.adAttestedCredentialData = credData}
+    M.AuthenticatorData {adAttestedCredentialData = credData, ..}
     clientDataHash = do
       -- 1. Let authenticatorData denote the authenticator data for the
       -- attestation, and let clientDataHash denote the hash of the serialized
@@ -144,7 +143,7 @@ instance M.AttestationStatementFormat Format where
       let nonceToHash = M.unRaw adRawData <> BA.convert (M.unClientDataHash clientDataHash)
 
       -- 3. Perform SHA-256 hash of nonceToHash to produce nonce.
-      let nonce :: Digest SHA256 = hash nonceToHash
+      let nonce = hash nonceToHash
 
       -- 4. Verify that nonce equals the value of the extension with OID
       -- 1.2.840.113635.100.8.2 in credCert.
@@ -152,7 +151,7 @@ instance M.AttestationStatementFormat Format where
 
       -- 5. Verify that the credential public key equals the Subject Public Key
       -- of credCert.
-      let credentialPublicKey = PublicKey.fromCose $ M.acdCredentialPublicKey credData
+      let credentialPublicKey = Cose.fromCose $ M.acdCredentialPublicKey credData
       unless (credentialPublicKey == pubKey) . failure $ PublickeyMismatch credentialPublicKey pubKey
 
       -- 6. If successful, return implementation-specific values representing

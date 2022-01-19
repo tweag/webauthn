@@ -3,7 +3,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
--- |
+-- | Stability: experimental
 -- This module contains additional Haskell-specific type definitions for the
 -- [FIDO Metadata Statement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html)
 -- specification
@@ -14,9 +14,9 @@ module Crypto.WebAuthn.Metadata.Statement.Types
   )
 where
 
-import qualified Crypto.WebAuthn.FidoRegistry as Registry
+import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
-import qualified Crypto.WebAuthn.Model.Types as M
+import qualified Crypto.WebAuthn.Model as M
 import Data.Aeson (ToJSON, toJSON)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (NonEmpty)

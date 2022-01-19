@@ -2,21 +2,11 @@
 
 module Encoding (spec) where
 
-import Crypto.WebAuthn.Model.Binary.Encoding (encodeRawPublicKeyCredential)
-import qualified Crypto.WebAuthn.Model.Types as M
-import Crypto.WebAuthn.Model.WebIDL.Decoding
-  ( decodeCreatedPublicKeyCredential,
-    decodePublicKeyCredentialCreationOptions,
-    decodePublicKeyCredentialRequestOptions,
-    decodeRequestedPublicKeyCredential,
-  )
-import Crypto.WebAuthn.Model.WebIDL.Encoding
-  ( encodeCreatedPublicKeyCredential,
-    encodePublicKeyCredentialCreationOptions,
-    encodePublicKeyCredentialRequestOptions,
-    encodeRequestedPublicKeyCredential,
-  )
-import Crypto.WebAuthn.Operations.Attestation (allSupportedFormats)
+import Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats)
+import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding (encodeRawCredential)
+import Crypto.WebAuthn.Model.WebIDL.Internal.Decoding (Decode (decode), DecodeCreated (decodeCreated))
+import Crypto.WebAuthn.Model.WebIDL.Internal.Encoding (Encode (encode))
 import Spec.Types ()
 import Test.Hspec (Expectation, SpecWith, describe, expectationFailure, shouldBe)
 import Test.Hspec.QuickCheck (prop)
@@ -32,34 +22,34 @@ spec = do
   describe "RequestedPublicKeyCredential" $
     prop "can be roundtripped" prop_requestedCredentialRoundtrip
 
-prop_creationOptionsRoundtrip :: M.PublicKeyCredentialOptions 'M.Create -> Expectation
+prop_creationOptionsRoundtrip :: M.CredentialOptions 'M.Registration -> Expectation
 prop_creationOptionsRoundtrip options = do
-  let encoded = encodePublicKeyCredentialCreationOptions options
-  case decodePublicKeyCredentialCreationOptions encoded of
+  let encoded = encode options
+  case decode encoded of
     Right decoded -> decoded `shouldBe` options
     Left err -> expectationFailure $ show err
 
-prop_requestOptionsRoundtrip :: M.PublicKeyCredentialOptions 'M.Get -> Expectation
+prop_requestOptionsRoundtrip :: M.CredentialOptions 'M.Authentication -> Expectation
 prop_requestOptionsRoundtrip options = do
-  let encoded = encodePublicKeyCredentialRequestOptions options
-  case decodePublicKeyCredentialRequestOptions encoded of
+  let encoded = encode options
+  case decode encoded of
     Right decoded -> decoded `shouldBe` options
     Left err -> expectationFailure $ show err
 
-prop_createdCredentialRoundtrip :: M.PublicKeyCredential 'M.Create 'False -> Expectation
+prop_createdCredentialRoundtrip :: M.Credential 'M.Registration 'False -> Expectation
 prop_createdCredentialRoundtrip options = do
-  let withRaw = encodeRawPublicKeyCredential options
-      encoded = encodeCreatedPublicKeyCredential withRaw
-  case decodeCreatedPublicKeyCredential allSupportedFormats encoded of
+  let withRaw = encodeRawCredential options
+      encoded = encode withRaw
+  case decodeCreated allSupportedFormats encoded of
     Right decoded -> do
       decoded `shouldBe` withRaw
     Left err -> expectationFailure $ show err
 
-prop_requestedCredentialRoundtrip :: M.PublicKeyCredential 'M.Get 'False -> Expectation
+prop_requestedCredentialRoundtrip :: M.Credential 'M.Authentication 'False -> Expectation
 prop_requestedCredentialRoundtrip options = do
-  let withRaw = encodeRawPublicKeyCredential options
-      encoded = encodeRequestedPublicKeyCredential withRaw
-  case decodeRequestedPublicKeyCredential encoded of
+  let withRaw = encodeRawCredential options
+      encoded = encode withRaw
+  case decode encoded of
     Right decoded -> do
       decoded `shouldBe` withRaw
     Left err -> expectationFailure $ show err

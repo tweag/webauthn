@@ -1,9 +1,7 @@
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
--- |
+-- | Stability: experimental
 -- This module models direct representations of JavaScript objects interacting with the
 -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- and [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get) methods, as used by [Webauthn2](https://www.w3.org/TR/webauthn-2).
@@ -30,11 +28,9 @@ module Crypto.WebAuthn.Model.WebIDL.Types
   ( -- * Top-level types
     PublicKeyCredentialCreationOptions (..),
     PublicKeyCredentialRequestOptions (..),
-    CreatedPublicKeyCredential,
-    RequestedPublicKeyCredential,
+    PublicKeyCredential (..),
 
     -- * Nested types
-    PublicKeyCredential (..),
     AuthenticatorAttestationResponse (..),
     AuthenticatorAssertionResponse (..),
     PublicKeyCredentialRpEntity (..),
@@ -178,16 +174,6 @@ deriving via
   instance
     Aeson.ToJSON response =>
     Aeson.ToJSON (PublicKeyCredential response)
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
--- The PublicKey Credential with the response being an
--- [attestation response](https://www.w3.org/TR/webauthn-2/#authenticatorattestationresponse).
-type CreatedPublicKeyCredential = PublicKeyCredential AuthenticatorAttestationResponse
-
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
--- The PublicKey Credential with the response being an
--- [assertion response](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse).
-type RequestedPublicKeyCredential = PublicKeyCredential AuthenticatorAssertionResponse
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
 data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse

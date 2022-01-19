@@ -12,16 +12,7 @@ import Control.Monad (when)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT))
 import Crypto.Hash (hash)
-import qualified Crypto.WebAuthn.Cose.Registry as Cose
-import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Model.Binary.Decoding as MD
-import qualified Crypto.WebAuthn.Model.Types as M
-import Crypto.WebAuthn.Model.WebIDL.Decoding (decodeCreatedPublicKeyCredential, decodeRequestedPublicKeyCredential)
-import Crypto.WebAuthn.Model.WebIDL.Encoding (encodePublicKeyCredentialCreationOptions, encodePublicKeyCredentialRequestOptions)
-import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
-import Crypto.WebAuthn.Operations.Assertion (SignatureCounterResult (SignatureCounterPotentiallyCloned, SignatureCounterUpdated, SignatureCounterZero), verifyAssertionResponse)
-import Crypto.WebAuthn.Operations.Attestation (AttestationResult (rEntry), allSupportedFormats, verifyAttestationResponse)
-import Crypto.WebAuthn.Operations.CredentialEntry (CredentialEntry (CredentialEntry, ceCredentialId, ceUserHandle))
+import qualified Crypto.WebAuthn as WA
 import Data.Aeson (FromJSON, ToJSON, Value (String))
 import qualified Data.Aeson.Encode.Pretty as AP
 import qualified Data.ByteString.Base64.URL as Base64
@@ -56,7 +47,7 @@ data RegisterBeginReq = RegisterBeginReq
   deriving (Show, FromJSON, ToJSON)
   deriving stock (Generic)
 
-setAuthenticatedAs :: Database.Connection -> M.UserHandle -> Scotty.ActionM ()
+setAuthenticatedAs :: Database.Connection -> WA.UserHandle -> Scotty.ActionM ()
 setAuthenticatedAs db userHandle = do
   token <- Scotty.liftAndCatchIO Database.generateAuthToken
   Scotty.liftAndCatchIO $
@@ -88,7 +79,7 @@ getAuthToken = do
   sessionCookie <- MaybeT . pure $ lookup "auth-token" cookies
   MaybeT . pure $ either (const Nothing) (Just . Database.AuthToken) $ Base64.decodeUnpadded sessionCookie
 
-getAuthenticatedUser :: Database.Connection -> Scotty.ActionM (Maybe M.UserAccountName)
+getAuthenticatedUser :: Database.Connection -> Scotty.ActionM (Maybe WA.UserAccountName)
 getAuthenticatedUser db = runMaybeT $ do
   token <- getAuthToken
   user <- MaybeT $
@@ -130,11 +121,11 @@ logout db = do
     (LText.decodeUtf8 (Builder.toLazyByteString (Cookie.renderSetCookie setCookie)))
 
 app ::
-  M.Origin ->
-  M.RpIdHash ->
+  WA.Origin ->
+  WA.RpIdHash ->
   Database.Connection ->
   PendingOps ->
-  TVar Service.MetadataServiceRegistry ->
+  TVar WA.MetadataServiceRegistry ->
   ScottyM ()
 app origin rpIdHash db pending registryVar = do
   Scotty.middleware (staticPolicy (addBase "dist"))
@@ -149,20 +140,20 @@ app origin rpIdHash db pending registryVar = do
   Scotty.get "/requires-auth" $ do
     getAuthenticatedUser db >>= \case
       Nothing -> Scotty.raiseStatus HTTP.status401 "Please authenticate first"
-      Just name -> Scotty.json $ String $ M.unUserAccountName name
+      Just name -> Scotty.json $ String $ WA.unUserAccountName name
   Scotty.get "/logout" $ logout db
 
-mkCredentialDescriptor :: CredentialEntry -> M.PublicKeyCredentialDescriptor
-mkCredentialDescriptor CredentialEntry {ceCredentialId} =
-  M.PublicKeyCredentialDescriptor
-    { M.pkcdTyp = M.PublicKeyCredentialTypePublicKey,
-      M.pkcdId = ceCredentialId,
-      M.pkcdTransports = Nothing
+mkCredentialDescriptor :: WA.CredentialEntry -> WA.CredentialDescriptor
+mkCredentialDescriptor WA.CredentialEntry {WA.ceCredentialId} =
+  WA.CredentialDescriptor
+    { WA.cdTyp = WA.CredentialTypePublicKey,
+      WA.cdId = ceCredentialId,
+      WA.cdTransports = Nothing
     }
 
 beginLogin :: Database.Connection -> PendingOps -> Scotty.ActionM ()
 beginLogin db pending = do
-  accountName <- M.UserAccountName <$> Scotty.jsonData @Text
+  accountName <- WA.UserAccountName <$> Scotty.jsonData @Text
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login begin <= " <> jsonText accountName
 
   credentials <- Scotty.liftAndCatchIO $
@@ -173,28 +164,28 @@ beginLogin db pending = do
     Scotty.raiseStatus HTTP.status404 "User not found"
   options <- Scotty.liftAndCatchIO $
     insertPendingOptions pending $ \challenge -> do
-      M.PublicKeyCredentialRequestOptions
-        { M.pkcogRpId = Nothing,
-          M.pkcogTimeout = Nothing,
-          M.pkcogChallenge = challenge,
-          M.pkcogAllowCredentials = map mkCredentialDescriptor credentials,
-          M.pkcogUserVerification = M.UserVerificationRequirementPreferred,
-          M.pkcogExtensions = Nothing
+      WA.CredentialOptionsAuthentication
+        { WA.coaRpId = Nothing,
+          WA.coaTimeout = Nothing,
+          WA.coaChallenge = challenge,
+          WA.coaAllowCredentials = map mkCredentialDescriptor credentials,
+          WA.coaUserVerification = WA.UserVerificationRequirementPreferred,
+          WA.coaExtensions = Nothing
         }
 
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login begin => " <> jsonText options
-  Scotty.json $ encodePublicKeyCredentialRequestOptions options
+  Scotty.json $ WA.encodeCredentialOptionsAuthentication options
 
-completeLogin :: M.Origin -> M.RpIdHash -> Database.Connection -> PendingOps -> Scotty.ActionM ()
+completeLogin :: WA.Origin -> WA.RpIdHash -> Database.Connection -> PendingOps -> Scotty.ActionM ()
 completeLogin origin rpIdHash db pending = do
-  credential <- Scotty.jsonData @IDL.RequestedPublicKeyCredential
+  credential <- Scotty.jsonData
 
-  cred <- case decodeRequestedPublicKeyCredential credential of
+  cred <- case WA.decodeCredentialAuthentication credential of
     Left err -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete failed to decode request: " <> jsonText credential <> ": " <> Text.pack (show err)
       fail $ show err
     Right result -> pure result
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete <= " <> jsonText (MD.stripRawPublicKeyCredential cred)
+  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete <= " <> jsonText (WA.stripRawCredential cred)
 
   options <-
     Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
@@ -205,31 +196,31 @@ completeLogin origin rpIdHash db pending = do
 
   mentry <- Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx ->
-      Database.queryCredentialEntryByCredential tx (M.pkcIdentifier cred)
+      Database.queryCredentialEntryByCredential tx (WA.cIdentifier cred)
   entry <- case mentry of
     Nothing -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn "Login complete credential entry doesn't exist"
       fail "Credential not found"
     Just entry -> pure entry
 
-  newSigCount <- case verifyAssertionResponse origin rpIdHash (Just (ceUserHandle entry)) entry options cred of
+  WA.AuthenticationResult newSigCount <- case WA.verifyAuthenticationResponse origin rpIdHash (Just (WA.ceUserHandle entry)) entry options cred of
     Failure errs@(err :| _) -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete had errors: " <> Text.pack (show errs)
       fail $ show err
     Success result -> pure result
 
   case newSigCount of
-    SignatureCounterZero ->
+    WA.SignatureCounterZero ->
       Scotty.liftAndCatchIO $
         TIO.putStrLn "SignatureCounter is Zero"
-    (SignatureCounterUpdated counter) ->
+    (WA.SignatureCounterUpdated counter) ->
       Scotty.liftAndCatchIO $ do
         TIO.putStrLn $ "Updating SignatureCounter to: " <> Text.pack (show counter)
         Database.withTransaction db $
-          \tx -> Database.updateSignatureCounter tx (M.pkcIdentifier cred) counter
-    SignatureCounterPotentiallyCloned -> Scotty.raiseStatus HTTP.status401 "Signature Counter Cloned"
+          \tx -> Database.updateSignatureCounter tx (WA.cIdentifier cred) counter
+    WA.SignatureCounterPotentiallyCloned -> Scotty.raiseStatus HTTP.status401 "Signature Counter Cloned"
 
-  setAuthenticatedAs db (ceUserHandle entry)
+  setAuthenticatedAs db (WA.ceUserHandle entry)
   let result = String "success"
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete => " <> jsonText result
   Scotty.json result
@@ -251,34 +242,34 @@ beginRegistration db pending = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin <= " <> jsonText req
   exists <- Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx -> do
-      Database.userExists tx (M.UserAccountName accountName)
+      Database.userExists tx (WA.UserAccountName accountName)
   when exists $ Scotty.raiseStatus HTTP.status409 "Account name already taken"
-  userId <- Scotty.liftAndCatchIO M.generateUserHandle
+  userId <- Scotty.liftAndCatchIO WA.generateUserHandle
   let user =
-        M.PublicKeyCredentialUserEntity
-          { M.pkcueId = userId,
-            M.pkcueDisplayName = M.UserAccountDisplayName accountDisplayName,
-            M.pkcueName = M.UserAccountName accountName
+        WA.CredentialUserEntity
+          { WA.cueId = userId,
+            WA.cueDisplayName = WA.UserAccountDisplayName accountDisplayName,
+            WA.cueName = WA.UserAccountName accountName
           }
   options <- Scotty.liftAndCatchIO $ insertPendingOptions pending $ defaultPkcco user
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin => " <> jsonText options
-  Scotty.json $ encodePublicKeyCredentialCreationOptions options
+  Scotty.json $ WA.encodeCredentialOptionsRegistration options
 
 completeRegistration ::
-  M.Origin ->
-  M.RpIdHash ->
+  WA.Origin ->
+  WA.RpIdHash ->
   Database.Connection ->
   PendingOps ->
-  TVar Service.MetadataServiceRegistry ->
+  TVar WA.MetadataServiceRegistry ->
   Scotty.ActionM ()
 completeRegistration origin rpIdHash db pending registryVar = do
-  credential <- Scotty.jsonData @IDL.CreatedPublicKeyCredential
-  cred <- case decodeCreatedPublicKeyCredential allSupportedFormats credential of
+  credential <- Scotty.jsonData
+  cred <- case WA.decodeCredentialRegistration WA.allSupportedFormats credential of
     Left err -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete failed to decode request: " <> jsonText credential <> ": " <> Text.pack (show err)
       fail $ show err
     Right result -> pure result
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete <= " <> jsonText (MD.stripRawPublicKeyCredential cred)
+  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete <= " <> jsonText (WA.stripRawCredential cred)
 
   options <-
     Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
@@ -287,13 +278,13 @@ completeRegistration origin rpIdHash db pending registryVar = do
         Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
       Right result -> pure result
 
-  let userHandle = M.pkcueId $ M.pkcocUser options
+  let userHandle = WA.cueId $ WA.corUser options
   -- step 1 to 17
   -- We abort if we couldn't attest the credential
   -- FIXME
   registry <- Scotty.liftAndCatchIO $ readTVarIO registryVar
   now <- Scotty.liftAndCatchIO dateCurrent
-  result <- case verifyAttestationResponse origin rpIdHash registry options cred now of
+  result <- case WA.verifyRegistrationResponse origin rpIdHash registry now options cred of
     Failure errs@(err :| _) -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete had errors: " <> Text.pack (show errs)
       fail $ show err
@@ -306,13 +297,13 @@ completeRegistration origin rpIdHash db pending registryVar = do
       -- If a credential with this id existed already, it must belong to the
       -- current user, otherwise it's an error. The spec allows removing the
       -- credential from the old user instead, but we don't do that.
-      mexistingEntry <- Database.queryCredentialEntryByCredential tx (ceCredentialId $ rEntry result)
+      mexistingEntry <- Database.queryCredentialEntryByCredential tx (WA.ceCredentialId $ WA.rrEntry result)
       case mexistingEntry of
         Nothing -> do
-          Database.insertUser tx $ M.pkcocUser options
-          Database.insertCredentialEntry tx $ rEntry result
+          Database.insertUser tx $ WA.corUser options
+          Database.insertCredentialEntry tx $ WA.rrEntry result
           pure ()
-        Just existingEntry | userHandle == ceUserHandle existingEntry -> pure ()
+        Just existingEntry | userHandle == WA.ceUserHandle existingEntry -> pure ()
         Just differentEntry -> do
           TIO.putStrLn $ "Register complete credential already belongs to the user credential entry: " <> jsonText differentEntry
           fail "This credential is already registered"
@@ -321,30 +312,33 @@ completeRegistration origin rpIdHash db pending registryVar = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete => " <> jsonText result
   Scotty.json result
 
-defaultPkcco :: M.PublicKeyCredentialUserEntity -> M.Challenge -> M.PublicKeyCredentialOptions 'M.Create
+defaultPkcco :: WA.CredentialUserEntity -> WA.Challenge -> WA.CredentialOptions 'WA.Registration
 defaultPkcco userEntity challenge =
-  M.PublicKeyCredentialCreationOptions
-    { M.pkcocRp = M.PublicKeyCredentialRpEntity {M.pkcreId = Nothing, M.pkcreName = "ACME"},
-      M.pkcocUser = userEntity,
-      M.pkcocChallenge = challenge,
-      -- Empty credentialparameters are not supported.
-      M.pkcocPubKeyCredParams =
-        [ M.PublicKeyCredentialParameters
-            { M.pkcpTyp = M.PublicKeyCredentialTypePublicKey,
-              M.pkcpAlg = Cose.CoseSignAlgECDSA Cose.CoseHashAlgECDSASHA256
+  WA.CredentialOptionsRegistration
+    { WA.corRp = WA.CredentialRpEntity {WA.creId = Nothing, WA.creName = "ACME"},
+      WA.corUser = userEntity,
+      WA.corChallenge = challenge,
+      WA.corPubKeyCredParams =
+        [ WA.CredentialParameters
+            { WA.cpTyp = WA.CredentialTypePublicKey,
+              WA.cpAlg = WA.CoseAlgorithmES256
+            },
+          WA.CredentialParameters
+            { WA.cpTyp = WA.CredentialTypePublicKey,
+              WA.cpAlg = WA.CoseAlgorithmRS256
             }
         ],
-      M.pkcocTimeout = Nothing,
-      M.pkcocExcludeCredentials = [],
-      M.pkcocAuthenticatorSelection =
+      WA.corTimeout = Nothing,
+      WA.corExcludeCredentials = [],
+      WA.corAuthenticatorSelection =
         Just
-          M.AuthenticatorSelectionCriteria
-            { M.ascAuthenticatorAttachment = Nothing,
-              M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
-              M.ascUserVerification = M.UserVerificationRequirementPreferred
+          WA.AuthenticatorSelectionCriteria
+            { WA.ascAuthenticatorAttachment = Nothing,
+              WA.ascResidentKey = WA.ResidentKeyRequirementDiscouraged,
+              WA.ascUserVerification = WA.UserVerificationRequirementPreferred
             },
-      M.pkcocAttestation = M.AttestationConveyancePreferenceDirect,
-      M.pkcocExtensions = Nothing
+      WA.corAttestation = WA.AttestationConveyancePreferenceDirect,
+      WA.corExtensions = Nothing
     }
 
 main :: IO ()
@@ -360,5 +354,5 @@ main = do
   registryVar <- newTVarIO registry
   _ <- continuousFetch registryVar
   Text.putStrLn $ "You can view the web-app at: " <> origin
-  let rpIdHash = M.RpIdHash $ hash $ Text.encodeUtf8 domain
-  Scotty.scotty port $ app (M.Origin origin) rpIdHash db pending registryVar
+  let rpIdHash = WA.RpIdHash $ hash $ Text.encodeUtf8 domain
+  Scotty.scotty port $ app (WA.Origin origin) rpIdHash db pending registryVar
