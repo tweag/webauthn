@@ -27,7 +27,10 @@ let
         + "`webauthn.cabal` at the same time.")
       else hsuper.ghc;
 
-    webauthn = hself.callCabal2nix "webauthn" src {};
+    webauthn = pkgs.haskell.lib.disableLibraryProfiling
+      (hself.callCabal2nix "webauthn" src {});
+
+    server = hself.callCabal2nix "server" (src + "/server") {};
 
     jose = hself.callHackage "jose" "0.8.5" {};
 
@@ -48,7 +51,7 @@ let
   '';
 
   shell = hpkgs.shellFor {
-    packages = p: [ p.webauthn ];
+    packages = p: [ p.webauthn p.server ];
     withHoogle = true;
     nativeBuildInputs = [
       pkgs.haskellPackages.cabal-install
@@ -73,6 +76,6 @@ let
 
 in
   if isShell then shell else {
-    inherit (hpkgs) webauthn;
+    inherit (hpkgs) webauthn server;
     inherit pkgs hpkgs;
   }
