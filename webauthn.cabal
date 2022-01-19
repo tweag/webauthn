@@ -197,12 +197,14 @@ test-suite tests
     Emulation.Client,
     Emulation.Client.Arbitrary,
     Emulation.Authenticator,
+    Emulation.Authenticator.AttestationStatementFormat.Apple,
     Emulation.Authenticator.Arbitrary
   build-depends:
     base,
     QuickCheck,
     aeson,
     asn1-encoding,
+    asn1-types,
     base64-bytestring,
     binary,
     bytestring,

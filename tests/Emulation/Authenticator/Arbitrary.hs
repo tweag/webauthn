@@ -2,10 +2,12 @@
 
 module Emulation.Authenticator.Arbitrary () where
 
+import qualified Crypto.WebAuthn.AttestationStatementFormat.Apple as Apple
+import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Emulation.Authenticator
-  ( Authenticator (AuthenticatorNone),
+  ( Authenticator (Authenticator),
     AuthenticatorNonConformingBehaviour,
     AuthenticatorSignatureCounter (Global, PerCredential, Unsupported),
   )
@@ -34,7 +36,7 @@ instance Arbitrary AuthenticatorSignatureCounter where
 
 instance Arbitrary Authenticator where
   arbitrary =
-    AuthenticatorNone
+    Authenticator
       <$> arbitrary
       <*> pure Map.empty
       <*> arbitrary
@@ -42,3 +44,4 @@ instance Arbitrary Authenticator where
       <*> (Set.fromList . getNonEmpty <$> arbitrary)
       <*> arbitrary
       <*> arbitrary
+      <*> pure Apple.Format

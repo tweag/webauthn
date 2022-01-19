@@ -1096,6 +1096,8 @@ data SomeAttestationStatementFormat
     AttestationStatementFormat a =>
     SomeAttestationStatementFormat a
 
+deriving instance Show SomeAttestationStatementFormat
+
 -- | A type representing the set of supported attestation statement formats.
 -- The constructor is intentionally not exported, use
 -- 'singletonAttestationStatementFormat' instead to construct it and

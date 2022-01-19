@@ -12,6 +12,7 @@
 module Crypto.WebAuthn.AttestationStatementFormat.Apple
   ( format,
     Format (..),
+    Statement (..),
     VerificationError (..),
   )
 where
@@ -20,12 +21,10 @@ import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM)
 import Control.Monad.Cont (unless)
-import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
+import Crypto.Hash (Digest, SHA256, hash)
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import Crypto.WebAuthn.Internal.Utils (failure)
+import Crypto.WebAuthn.Internal.Utils (AppleNonceExtension (AppleNonceExtension, nonce), failure)
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Data.ASN1.Parse as ASN1
-import qualified Data.ASN1.Types as ASN1
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
@@ -71,28 +70,6 @@ instance ToJSON Statement where
     object
       [ "x5c" .= x5c
       ]
-
--- | Undocumented, but the Apple Nonce Extension should only contain the nonce
-newtype AppleNonceExtension = AppleNonceExtension
-  { nonce :: Digest SHA256
-  }
-  deriving (Eq, Show)
-
-instance X509.Extension AppleNonceExtension where
-  extOID = const [1, 2, 840, 113635, 100, 8, 2]
-  extHasNestedASN1 = const False
-  extEncode = error "extEncode for AppleNonceExtension is unimplemented"
-  extDecode = ASN1.runParseASN1 decode
-    where
-      decode :: ASN1.ParseASN1 AppleNonceExtension
-      decode = do
-        ASN1.OctetString nonce <-
-          ASN1.onNextContainer ASN1.Sequence $
-            ASN1.onNextContainer (ASN1.Container ASN1.Context 1) ASN1.getNext
-        maybe
-          (fail "The nonce in the Extention was not a valid SHA256 hash")
-          (pure . AppleNonceExtension)
-          (digestFromByteString nonce)
 
 instance M.AttestationStatementFormat Format where
   type AttStmt Format = Statement

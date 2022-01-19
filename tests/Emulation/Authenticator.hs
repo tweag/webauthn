@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Emulation.Authenticator
   ( CredentialSource (..),
@@ -16,11 +17,15 @@ where
 
 import Control.Monad (forM_, when)
 import Crypto.Hash (hash)
+import qualified Crypto.Hash as Hash
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.AttestationStatementFormat.Apple as Apple
 import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
 import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Model as M
+import Crypto.WebAuthn.Model.Kinds (CeremonyKind (Registration))
+import Crypto.WebAuthn.Model.Types (AttestationStatementFormat)
 import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as ME
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
@@ -29,6 +34,8 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust, mapMaybe)
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
+import Data.Typeable (typeOf)
+import qualified Emulation.Authenticator.AttestationStatementFormat.Apple as Apple
 import qualified Spec.Key as Key
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#public-key-credential-source)
@@ -63,16 +70,18 @@ data AuthenticatorNonConformingBehaviour
 type Conformance = Set.Set AuthenticatorNonConformingBehaviour
 
 -- | The datatype holding all information needed for attestation and assertion
-data Authenticator = AuthenticatorNone
+data Authenticator = Authenticator
   -- https://www.w3.org/TR/webauthn-2/#authenticator-credentials-map
   { aAAGUID :: M.AAGUID,
     aCredentials :: Map.Map (M.RpId, M.UserHandle) CredentialSource,
     aSignatureCounter :: AuthenticatorSignatureCounter,
     aSupportedAlgorithms :: Set.Set Cose.CoseSignAlg,
     aAuthenticatorDataFlags :: M.AuthenticatorDataFlags,
-    aConformance :: Conformance
+    aConformance :: Conformance,
+    aAttestationFormat :: SomeTestableAttestationStatementFormat
   }
-  deriving (Show)
+
+deriving instance Show Authenticator
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-make-cred)
 authenticatorMakeCredential ::
@@ -121,8 +130,8 @@ authenticatorMakeCredential ::
   Maybe M.AuthenticationExtensionsClientInputs ->
   m (M.AttestationObject 'True, Authenticator)
 authenticatorMakeCredential
-  authenticator@AuthenticatorNone {..}
-  _hash
+  authenticator@Authenticator {..}
+  hash
   rpEntity
   userEntity
   _requireResidentKey
@@ -260,7 +269,7 @@ authenticatorMakeCredential
       -- Authenticator Data, including attestedCredentialData as the
       -- attestedCredentialData and processedExtensions, if any, as the
       -- extensions.
-      let rpIdHash = hash . encodeUtf8 . M.unRpId $ rpId
+      let rpIdHash = Hash.hash . encodeUtf8 . M.unRpId $ rpId
       let authenticatorData =
             ME.encodeRawAuthenticatorData
               M.AuthenticatorData
@@ -271,14 +280,11 @@ authenticatorMakeCredential
                   M.adExtensions = Nothing,
                   M.adRawData = M.NoRaw
                 }
+
       -- On successful completion of this operation, the authenticator returns
       -- the attestation object to the client.
-      let attestationObject =
-            M.AttestationObject
-              { aoAuthData = authenticatorData,
-                aoFmt = None.Format,
-                aoAttStmt = ()
-              }
+      attestationObject <- createAttestationObject aAttestationFormat authenticatorData privKey
+
       pure (attestationObject, authenticator {aCredentials = credentials, aSignatureCounter = aSignatureCounter'})
     where
       initialiseCounter :: M.CredentialId -> AuthenticatorSignatureCounter -> (M.SignatureCounter, AuthenticatorSignatureCounter)
@@ -293,6 +299,24 @@ authenticatorMakeCredential
       initialiseCounter key (PerCredential m) = do
         let m' = Map.insert key 1 m
         (1, PerCredential m')
+
+      createAttestationObject :: (MonadRandom m, AttestationStatementFormat fmt) => fmt -> M.AuthenticatorData 'Registration 'True -> Key.PrivateKey -> m (M.AttestationObject 'True)
+      createAttestationObject fmt authenticatorData privKey
+        | typeOf fmt == typeOf None.Format =
+          pure $
+            M.AttestationObject
+              { aoAuthData = authenticatorData,
+                aoFmt = None.Format,
+                aoAttStmt = ()
+              }
+        | typeOf fmt == typeOf Apple.Format = Apple.signAuthenticatorData authenticatorData privKey hash
+        | otherwise =
+          pure $
+            M.AttestationObject
+              { aoAuthData = authenticatorData,
+                aoFmt = None.Format,
+                aoAttStmt = ()
+              }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion)
 authenticatorGetAssertion ::
@@ -319,7 +343,7 @@ authenticatorGetAssertion ::
   m ((M.CredentialId, M.AuthenticatorData 'M.Authentication 'True, BS.ByteString, Maybe M.UserHandle), Authenticator)
 authenticatorGetAssertion _ _ _ _ False _ _ = fail "requireUserPresence set to False"
 authenticatorGetAssertion
-  authenticator@AuthenticatorNone {..}
+  authenticator@Authenticator {..}
   rpId
   clientDataHash
   allowCredentialDescriptorList
@@ -448,4 +472,6 @@ authenticatorGetAssertion
          in (c, PerCredential m')
 
 authenticatorLookupCredential :: Authenticator -> M.CredentialId -> Maybe CredentialSource
-authenticatorLookupCredential AuthenticatorNone {..} credentialId = snd <$> Map.lookupMin (Map.filter (\CredentialSource {..} -> csId == credentialId) aCredentials)
+authenticatorLookupCredential Authenticator {..} credentialId =
+  snd
+    <$> Map.lookupMin (Map.filter (\CredentialSource {..} -> csId == credentialId) aCredentials)

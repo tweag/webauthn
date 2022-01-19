@@ -48,7 +48,7 @@ predeterminedDateTime = HG.DateTime {dtDate = HG.Date {dateYear = 2021, dateMont
 
 -- | For most uses of DateTime in these tests, the time of day isn't relevant. This definition allows easier construction of these DateTimes.
 timeZero :: HG.TimeOfDay
-timeZero = HG.TimeOfDay {todHour = HG.Hours 0, todMin = HG.Minutes 0, todSec = HG.Seconds 0, todNSec = HG.NanoSeconds 0}
+timeZero = HG.TimeOfDay {todHour = 0, todMin = 0, todSec = 0, todNSec = 0}
 
 -- | Load all files in the given directory, and ensure that all of them can be
 -- decoded. The caller can pass in a function to run further checks on the

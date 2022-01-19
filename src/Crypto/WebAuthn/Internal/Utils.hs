@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | Stability: internal
 --
@@ -12,11 +13,13 @@ module Crypto.WebAuthn.Internal.Utils
     failure,
     certificateSubjectKeyIdentifier,
     IdFidoGenCeAAGUID (..),
+    AppleNonceExtension (..),
   )
 where
 
 import Control.Monad (void)
 import Crypto.Hash (hash)
+import qualified Crypto.Hash as Hash
 import Crypto.WebAuthn.Model.Identifier (AAGUID (AAGUID), SubjectKeyIdentifier (SubjectKeyIdentifier))
 import qualified Data.ASN1.BitArray as ASN1
 import Data.ASN1.Parse (ParseASN1, getNext, runParseASN1)
@@ -24,6 +27,7 @@ import qualified Data.ASN1.Parse as ASN1
 import Data.ASN1.Prim (ASN1 (OctetString))
 import qualified Data.ASN1.Types as ASN1
 import Data.Bifunctor (first)
+import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Char (toLower)
@@ -104,3 +108,33 @@ instance Extension IdFidoGenCeAAGUID where
         case UUID.fromByteString $ LBS.fromStrict bytes of
           Just aaguid -> pure $ IdFidoGenCeAAGUID $ AAGUID aaguid
           Nothing -> fail "Could not extract aaguid"
+
+-- | An Apple specific X509 certificate extension.
+-- Undocumented, but the Apple Nonce Extension should only contain the nonce.
+-- Encoding of the extension is used during emulation tests.
+newtype AppleNonceExtension = AppleNonceExtension
+  { nonce :: Hash.Digest Hash.SHA256
+  }
+  deriving (Eq, Show)
+
+instance X509.Extension AppleNonceExtension where
+  extOID = const [1, 2, 840, 113635, 100, 8, 2]
+  extHasNestedASN1 = const False
+  extEncode AppleNonceExtension {..} =
+    [ ASN1.Start ASN1.Sequence,
+      ASN1.Start $ ASN1.Container ASN1.Context 1,
+      ASN1.OctetString $ BA.convert nonce,
+      ASN1.End $ ASN1.Container ASN1.Context 1,
+      ASN1.End ASN1.Sequence
+    ]
+  extDecode = ASN1.runParseASN1 decode
+    where
+      decode :: ASN1.ParseASN1 AppleNonceExtension
+      decode = do
+        ASN1.OctetString nonce <-
+          ASN1.onNextContainer ASN1.Sequence $
+            ASN1.onNextContainer (ASN1.Container ASN1.Context 1) ASN1.getNext
+        maybe
+          (fail "The nonce in the Extention was not a valid SHA256 hash")
+          (pure . AppleNonceExtension)
+          (Hash.digestFromByteString nonce)

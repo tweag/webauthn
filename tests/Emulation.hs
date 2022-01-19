@@ -16,12 +16,14 @@ import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operation as O
 import Data.Bifunctor (Bifunctor (second))
 import Data.Hourglass (DateTime)
+import qualified Data.Hourglass as HG
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
 import Data.Validation (toEither)
+import Debug.Trace
 import Emulation.Authenticator
-  ( Authenticator (AuthenticatorNone, aAuthenticatorDataFlags, aConformance, aSignatureCounter),
+  ( Authenticator (Authenticator, aAuthenticatorDataFlags, aConformance, aSignatureCounter),
     AuthenticatorNonConformingBehaviour (RandomPrivateKey, RandomSignatureData, StaticCounter),
     AuthenticatorSignatureCounter (Unsupported),
   )
@@ -37,6 +39,15 @@ import Emulation.Client.Arbitrary ()
 import System.Hourglass (dateCurrent)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 import Test.QuickCheck (property)
+
+-- | Attestation requires a specific time to be passed for the verification of the certificate chain.
+-- For sake of reproducability we hardcode a time.
+predeterminedDateTime :: HG.DateTime
+predeterminedDateTime = HG.DateTime {dtDate = HG.Date {dateYear = 2021, dateMonth = HG.December, dateDay = 22}, dtTime = timeZero}
+
+-- | For most uses of DateTime in these tests, the time of day isn't relevant. This definition allows easier construction of these DateTimes.
+timeZero :: HG.TimeOfDay
+timeZero = HG.TimeOfDay {todHour = HG.Hours 0, todMin = HG.Minutes 0, todSec = HG.Seconds 0, todNSec = HG.NanoSeconds 0}
 
 -- | Custom type to combine the MonadPseudoRandom with the Except monad. We
 -- force the ChaChaDRG to ensure the App type is completely pure, and
@@ -128,13 +139,13 @@ spec =
         -- Since our emulator only supports None attestation the registry can be left empty.
         let registry = mempty
         -- The time could also be empty, but since we're in IO anyway, might as well just fetch it.
-        now <- dateCurrent
+        let now = predeterminedDateTime
         -- We are not currently interested in client or authenticator fails, we
         -- only wish to test our relying party implementation and are thus only
         -- interested in its errors.
         let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry now)
         -- Since we only do None attestation, we only care about the resulting entry
-        let registerResult' = second O.rrEntry registerResult
+        let registerResult' = second O.rrEntry (traceShowId registerResult)
         registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options
         -- Only if attestation succeeded can we continue with assertion
         case registerResult' of
@@ -154,7 +165,7 @@ validAttestationResult _ _ M.CredentialOptionsRegistration {..} (Right O.Credent
 -- If we did result in errors, we want every error to be validated by some
 -- configuration issue (NOTE: We cannot currently exhibit non conforming
 -- behaviour during attestation)
-validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = all isValidated errors
+validAttestationResult Authenticator {..} uaConformance _ (Left errors) = all isValidated errors
   where
     isValidated :: O.RegistrationError -> Bool
     isValidated (O.RegistrationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
@@ -174,16 +185,16 @@ validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = al
 validAssertionResult :: Authenticator -> UserAgentConformance -> Either (NE.NonEmpty O.AuthenticationError) O.SignatureCounterResult -> Bool
 -- We can only result in a 0 signature counter if the authenticator doesn't
 -- have a counter and is either conforming or only has a static counter
-validAssertionResult AuthenticatorNone {..} _ (Right O.SignatureCounterZero) =
+validAssertionResult Authenticator {..} _ (Right O.SignatureCounterZero) =
   aSignatureCounter == Unsupported && (Set.null aConformance || aConformance == Set.singleton StaticCounter)
 -- A valid response must only happen if we have no non-confirming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right (O.SignatureCounterUpdated _)) = Set.null aConformance
+validAssertionResult Authenticator {..} _ (Right (O.SignatureCounterUpdated _)) = Set.null aConformance
 -- A potentially cloned counter must imply that we only exhibited the static
 -- counter non-conforming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right O.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
+validAssertionResult Authenticator {..} _ (Right O.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
 -- If we did result in errors, we want every error to be validated by some
 -- non-conforming behaviour or configuration issue
-validAssertionResult AuthenticatorNone {..} uaConformance (Left errors) = all isValidated errors
+validAssertionResult Authenticator {..} uaConformance (Left errors) = all isValidated errors
   where
     isValidated :: O.AuthenticationError -> Bool
     isValidated (O.AuthenticationDisallowedCredential _ _) = False
