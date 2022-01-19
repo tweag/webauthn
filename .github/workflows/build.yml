@@ -1,4 +1,4 @@
-name: "Build"
+name: CI
 on:
   push:
     branches:
@@ -23,20 +23,33 @@ jobs:
         name: tweag-haskell-fido2
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
+    - name: "Nix build"
+      run: nix-build -A webauthn -A server
+
+  dev:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        os:
+        - ubuntu-latest
+        - macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: cachix/install-nix-action@v16
+    - uses: cachix/cachix-action@v10
+      with:
+        name: tweag-haskell-fido2
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
     - name: "Install Nix bash"
       run: nix-env -f . -iA pkgs.bash
 
     - name: "Nix shell"
       run: nix-shell --run "echo Success"
 
-    - name: "Cabal build"
-      run: nix-shell --run "cabal update && cabal build all"
+    - name: "Cabal build and test"
+      run: nix-shell --run "cabal run test:tests"
 
     - name: "Style check"
       run: nix-shell --run "bin/autoformat.sh"
-
-    - name: "HLS works"
-      run: nix-shell --run "haskell-language-server"
-
-    - name: "Nix build"
-      run: nix-build -A webauthn
