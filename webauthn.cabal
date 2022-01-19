@@ -136,41 +136,6 @@ library
     Crypto.WebAuthn.Model.WebIDL.Types,
     Crypto.WebAuthn.WebIDL
 
-executable server
-  import: sanity
-  hs-source-dirs: server/src
-  main-is: Main.hs
-  other-modules:
-    Database,
-    MetadataFetch,
-    PendingOps
-
-  build-depends:
-    base,
-    aeson,
-    aeson-pretty          >= 0.8.9 && < 0.9,
-    base64-bytestring,
-    binary,
-    bytestring,
-    clock                 >= 0.8.2 && < 0.9,
-    containers,
-    cookie                >= 0.4.5 && < 0.5,
-    cryptonite,
-    hourglass,
-    http-client           >= 0.6.4 && < 0.7,
-    http-client-tls       >= 0.3.5 && < 0.4,
-    http-types            >= 0.12.3 && < 0.13,
-    mtl,
-    scotty                >= 0.12 && < 0.13,
-    singletons,
-    sqlite-simple         >= 0.4.18 && < 0.5,
-    stm                   >= 2.5.0 && < 2.6,
-    text,
-    transformers          >= 0.5.6 && < 0.6,
-    validation,
-    wai-middleware-static >= 0.9.1 && < 0.10,
-    webauthn,
-
 test-suite tests
   import: sanity
   type: exitcode-stdio-1.0
