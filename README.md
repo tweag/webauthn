@@ -1,5 +1,7 @@
 # Haskell WebAuthn Library
 
+[![Hackage](https://img.shields.io/hackage/v/webauthn.svg)](https://hackage.haskell.org/package/webauthn)
+
 This library implements the server-side
 [Web Authentication Relying Party specification Level 2][spec]. The goal of Web
 Authentication (WebAuthn) is to bring passwordless login/second factor
