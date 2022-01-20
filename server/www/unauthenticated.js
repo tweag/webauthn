@@ -2,6 +2,11 @@ import {supported, get, create} from  "@github/webauthn-json";
 
 document.getElementById("registerForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (! supported()) {
+    alert("WebAuthn is not supported on this device");
+    return;
+  }
+
   const accountName = document.getElementById("registerAccountName").value;
   var accountDisplayName = document.getElementById("accountDisplayName").value;
   if (accountDisplayName == "") {
@@ -43,6 +48,10 @@ document.getElementById("registerForm").addEventListener("submit", async (e) => 
 
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (! supported()) {
+    alert("WebAuthn is not supported on this device");
+    return;
+  }
 
   const accountName = document.getElementById("loginAccountName").value;
   const response = await fetch(`/login/begin`, {
