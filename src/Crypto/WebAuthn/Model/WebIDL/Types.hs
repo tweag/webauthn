@@ -180,7 +180,11 @@ data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
     clientDataJSON :: IDL.ArrayBuffer,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
-    attestationObject :: IDL.ArrayBuffer
+    attestationObject :: IDL.ArrayBuffer,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot)
+    -- This field is only being propagated by webauthn-json [since recently](https://github.com/github/webauthn-json/pull/44),
+    -- which is why we allow absence of this value
+    transports :: Maybe [IDL.DOMString]
   }
   deriving (Eq, Show, Generic)
   deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorAttestationResponse

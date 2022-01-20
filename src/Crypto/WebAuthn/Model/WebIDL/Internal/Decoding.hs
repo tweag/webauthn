@@ -232,6 +232,9 @@ instance DecodeCreated (M.AuthenticatorResponse 'K.Registration 'True) where
   decodeCreated supportedFormats IDL.AuthenticatorAttestationResponse {..} = do
     arrClientData <- decode clientDataJSON
     arrAttestationObject <- decodeCreated supportedFormats attestationObject
+    arrTransports <- case transports of
+      Nothing -> pure []
+      Just t -> decode t
     pure $ M.AuthenticatorResponseRegistration {..}
 
 instance DecodeCreated (M.Credential 'K.Registration 'True) where

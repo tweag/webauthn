@@ -191,6 +191,14 @@ main = Hspec.hspec $ do
         True
         registry
         predeterminedDateTime
+    it "the response with transports information works" $
+      registerTestFromFile
+        "tests/responses/attestation/with-transports.json"
+        "https://infinisil.webauthn.dev.tweag.io"
+        "infinisil.webauthn.dev.tweag.io"
+        True
+        registry
+        predeterminedDateTime
   describe "AndroidKey register" $ do
     it "tests whether the fixed android key register has a valid attestation" $
       registerTestFromFile

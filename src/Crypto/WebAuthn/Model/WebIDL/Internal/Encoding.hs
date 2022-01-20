@@ -212,7 +212,8 @@ instance Encode (M.AuthenticatorResponse 'K.Registration 'True) where
   encode M.AuthenticatorResponseRegistration {..} =
     IDL.AuthenticatorAttestationResponse
       { clientDataJSON = encode arrClientData,
-        attestationObject = encode arrAttestationObject
+        attestationObject = encode arrAttestationObject,
+        transports = Just $ encode arrTransports
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-attestationobject)
