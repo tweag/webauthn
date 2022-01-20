@@ -43,6 +43,7 @@ import Crypto.WebAuthn.Operation.CredentialEntry
         ceCredentialId,
         cePublicKeyBytes,
         ceSignCounter,
+        ceTransports,
         ceUserHandle
       ),
   )
@@ -405,7 +406,8 @@ verifyRegistrationResponse
                 { ceUserHandle = M.cueId $ M.corUser options,
                   ceCredentialId = M.cIdentifier credential,
                   cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
-                  ceSignCounter = M.adSignCount authData
+                  ceSignCounter = M.adSignCount authData,
+                  ceTransports = M.arrTransports $ M.cResponse credential
                 },
             rrAttestationStatement = attStmt
           }

@@ -326,7 +326,8 @@ isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration 
               . M.adAttestedCredentialData
               . M.aoAuthData
               $ M.arrAttestationObject cResponse,
-          ceSignCounter = M.adSignCount . M.aoAuthData $ M.arrAttestationObject cResponse
+          ceSignCounter = M.adSignCount . M.aoAuthData $ M.arrAttestationObject cResponse,
+          ceTransports = M.arrTransports cResponse
         }
 
 defaultPublicKeyCredentialCreationOptions :: M.Credential 'M.Registration raw -> M.CredentialOptions 'M.Registration

@@ -144,11 +144,11 @@ app origin rpIdHash db pending registryVar = do
   Scotty.get "/logout" $ logout db
 
 mkCredentialDescriptor :: WA.CredentialEntry -> WA.CredentialDescriptor
-mkCredentialDescriptor WA.CredentialEntry {WA.ceCredentialId} =
+mkCredentialDescriptor WA.CredentialEntry {WA.ceCredentialId, WA.ceTransports} =
   WA.CredentialDescriptor
     { WA.cdTyp = WA.CredentialTypePublicKey,
       WA.cdId = ceCredentialId,
-      WA.cdTransports = Nothing
+      WA.cdTransports = Just ceTransports
     }
 
 beginLogin :: Database.Connection -> PendingOps -> Scotty.ActionM ()
