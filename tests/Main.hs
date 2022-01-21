@@ -191,6 +191,14 @@ main = Hspec.hspec $ do
         True
         registry
         predeterminedDateTime
+    it "the response with transports information works" $
+      registerTestFromFile
+        "tests/responses/attestation/with-transports.json"
+        "https://infinisil.webauthn.dev.tweag.io"
+        "infinisil.webauthn.dev.tweag.io"
+        True
+        registry
+        predeterminedDateTime
   describe "AndroidKey register" $ do
     it "tests whether the fixed android key register has a valid attestation" $
       registerTestFromFile
@@ -318,7 +326,8 @@ isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration 
               . M.adAttestedCredentialData
               . M.aoAuthData
               $ M.arrAttestationObject cResponse,
-          ceSignCounter = M.adSignCount . M.aoAuthData $ M.arrAttestationObject cResponse
+          ceSignCounter = M.adSignCount . M.aoAuthData $ M.arrAttestationObject cResponse,
+          ceTransports = M.arrTransports cResponse
         }
 
 defaultPublicKeyCredentialCreationOptions :: M.Credential 'M.Registration raw -> M.CredentialOptions 'M.Registration

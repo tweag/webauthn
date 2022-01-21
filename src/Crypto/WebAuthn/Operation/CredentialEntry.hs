@@ -16,6 +16,7 @@ data CredentialEntry = CredentialEntry
   { ceCredentialId :: M.CredentialId,
     ceUserHandle :: M.UserHandle,
     cePublicKeyBytes :: M.PublicKeyBytes,
-    ceSignCounter :: M.SignatureCounter
+    ceSignCounter :: M.SignatureCounter,
+    ceTransports :: [M.AuthenticatorTransport]
   }
   deriving (Eq, Show, Generic, ToJSON)

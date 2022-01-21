@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Database
   ( Connection,
@@ -28,6 +29,7 @@ where
 
 import Crypto.Random (MonadRandom, getRandomBytes)
 import qualified Crypto.WebAuthn as WA
+import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import Data.Word (Word32)
@@ -62,6 +64,7 @@ initialize conn = do
     \ , user_handle      blob    not null                                      \
     \ , public_key       blob    not null                                      \
     \ , sign_counter     integer not null                                      \
+    \ , transports       integer not null                                      \
     \ , created          text    not null                                      \
     \                    default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))       \
     \ , foreign key (user_handle) references users (handle)                    \
@@ -129,19 +132,21 @@ insertCredentialEntry
     { WA.ceUserHandle = WA.UserHandle userHandle,
       WA.ceCredentialId = WA.CredentialId credentialId,
       WA.cePublicKeyBytes = WA.PublicKeyBytes publicKey,
-      WA.ceSignCounter = WA.SignatureCounter signCounter
+      WA.ceSignCounter = WA.SignatureCounter signCounter,
+      WA.ceTransports = transportsToBits -> transportBits
     } =
     do
       Sqlite.execute
         conn
-        " insert into credential_entries                          \
-        \ (credential_id, user_handle, public_key, sign_counter)  \
-        \ values                                                  \
-        \ (?, ?, ?, ?);                                           "
+        " insert into credential_entries                                     \
+        \ (credential_id, user_handle, public_key, sign_counter, transports) \
+        \ values                                                             \
+        \ (?, ?, ?, ?, ?);                                                   "
         ( credentialId,
           userHandle,
           publicKey,
-          signCounter
+          signCounter,
+          transportBits
         )
 
 queryCredentialEntryByCredential :: Transaction -> WA.CredentialId -> IO (Maybe WA.CredentialEntry)
@@ -149,7 +154,7 @@ queryCredentialEntryByCredential (Transaction conn) (WA.CredentialId credentialI
   entries <-
     Sqlite.query
       conn
-      " select credential_id, user_handle, public_key, sign_counter \
+      " select credential_id, user_handle, public_key, sign_counter, transports \
       \ from credential_entries                                     \
       \ where credential_id = ?;                                    "
       [credentialId]
@@ -163,7 +168,7 @@ queryCredentialEntriesByUser (Transaction conn) (WA.UserAccountName accountName)
   entries <-
     Sqlite.query
       conn
-      " select credential_id, user_handle, public_key, sign_counter \
+      " select credential_id, user_handle, public_key, sign_counter, transports \
       \ from credential_entries                                     \
       \ join users on users.handle = credential_entries.user_handle \
       \ where account_name = ?;                                             "
@@ -179,13 +184,28 @@ updateSignatureCounter (Transaction conn) (WA.CredentialId credentialId) (WA.Sig
     \ where credential_id = ?;  "
     (counter, credentialId)
 
-toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32) -> WA.CredentialEntry
-toCredentialEntry (credentialId, userHandle, publicKey, signCounter) =
+transportsToBits :: [WA.AuthenticatorTransport] -> Word32
+transportsToBits [] = Bits.zeroBits
+transportsToBits (WA.AuthenticatorTransportInternal : xs) = transportsToBits xs `Bits.setBit` 0
+transportsToBits (WA.AuthenticatorTransportUSB : xs) = transportsToBits xs `Bits.setBit` 1
+transportsToBits (WA.AuthenticatorTransportBLE : xs) = transportsToBits xs `Bits.setBit` 2
+transportsToBits (WA.AuthenticatorTransportNFC : xs) = transportsToBits xs `Bits.setBit` 3
+
+transportsFromBits :: Word32 -> [WA.AuthenticatorTransport]
+transportsFromBits bits =
+  [WA.AuthenticatorTransportInternal | Bits.testBit bits 0]
+    ++ [WA.AuthenticatorTransportUSB | Bits.testBit bits 1]
+    ++ [WA.AuthenticatorTransportBLE | Bits.testBit bits 2]
+    ++ [WA.AuthenticatorTransportNFC | Bits.testBit bits 3]
+
+toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32, Word32) -> WA.CredentialEntry
+toCredentialEntry (credentialId, userHandle, publicKey, signCounter, transportBits) =
   WA.CredentialEntry
     { WA.ceCredentialId = WA.CredentialId credentialId,
       WA.ceUserHandle = WA.UserHandle userHandle,
       WA.cePublicKeyBytes = WA.PublicKeyBytes publicKey,
-      WA.ceSignCounter = WA.SignatureCounter signCounter
+      WA.ceSignCounter = WA.SignatureCounter signCounter,
+      WA.ceTransports = transportsFromBits transportBits
     }
 
 newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}

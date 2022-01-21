@@ -90,7 +90,7 @@ instance Arbitrary M.AttestationConveyancePreference where
   arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary (M.AuthenticatorResponse 'M.Registration 'False) where
-  arbitrary = M.AuthenticatorResponseRegistration <$> arbitrary <*> arbitrary
+  arbitrary = M.AuthenticatorResponseRegistration <$> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary M.AssertionSignature where
   arbitrary = M.AssertionSignature <$> arbitrary

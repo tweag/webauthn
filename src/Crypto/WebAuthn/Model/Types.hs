@@ -1201,16 +1201,14 @@ data AuthenticatorResponse (c :: CeremonyKind) raw where
       -- For more details, see [§ 6.5 Attestation](https://www.w3.org/TR/webauthn-2/#sctn-attestation),
       -- [§ 6.5.4 Generating an Attestation Object](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object),
       -- and [Figure 6](https://www.w3.org/TR/webauthn-2/#fig-attStructs).
-      arrAttestationObject :: AttestationObject raw
-      -- TODO: This property is currently not propagated by webauthn-json. See:
-      -- <https://github.com/github/webauthn-json/pull/44>
-      -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports)
+      arrAttestationObject :: AttestationObject raw,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports)
       -- This [internal slot](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots)
       -- contains a sequence of zero or more unique `[DOMString](https://heycam.github.io/webidl/#idl-DOMString)`s
       -- in lexicoaraphical order. These values are the transports that the
       -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) is believed to support,
       -- or an empty sequence if the information is unavailable.
-      -- arrTransports :: Set AuthenticatorTransport
+      arrTransports :: [AuthenticatorTransport]
     } ->
     AuthenticatorResponse 'Registration raw
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse)

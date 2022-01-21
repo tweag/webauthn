@@ -89,7 +89,8 @@ clientAttestation M.CredentialOptionsRegistration {..} AnnotatedOrigin {..} conf
             M.cResponse =
               M.AuthenticatorResponseRegistration
                 { M.arrClientData = clientData,
-                  M.arrAttestationObject = attestationObject
+                  M.arrAttestationObject = attestationObject,
+                  M.arrTransports = []
                 },
             M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
           }

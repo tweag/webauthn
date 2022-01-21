@@ -144,11 +144,11 @@ app origin rpIdHash db pending registryVar = do
   Scotty.get "/logout" $ logout db
 
 mkCredentialDescriptor :: WA.CredentialEntry -> WA.CredentialDescriptor
-mkCredentialDescriptor WA.CredentialEntry {WA.ceCredentialId} =
+mkCredentialDescriptor WA.CredentialEntry {WA.ceCredentialId, WA.ceTransports} =
   WA.CredentialDescriptor
     { WA.cdTyp = WA.CredentialTypePublicKey,
       WA.cdId = ceCredentialId,
-      WA.cdTransports = Nothing
+      WA.cdTransports = Just ceTransports
     }
 
 beginLogin :: Database.Connection -> PendingOps -> Scotty.ActionM ()
@@ -179,10 +179,11 @@ beginLogin db pending = do
 completeLogin :: WA.Origin -> WA.RpIdHash -> Database.Connection -> PendingOps -> Scotty.ActionM ()
 completeLogin origin rpIdHash db pending = do
   credential <- Scotty.jsonData
+  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Raw login complete <= " <> jsonText credential
 
   cred <- case WA.decodeCredentialAuthentication credential of
     Left err -> do
-      Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete failed to decode request: " <> jsonText credential <> ": " <> Text.pack (show err)
+      Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete failed to decode request: " <> Text.pack (show err)
       fail $ show err
     Right result -> pure result
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete <= " <> jsonText (WA.stripRawCredential cred)
@@ -264,9 +265,10 @@ completeRegistration ::
   Scotty.ActionM ()
 completeRegistration origin rpIdHash db pending registryVar = do
   credential <- Scotty.jsonData
+  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Raw register complete <= " <> jsonText credential
   cred <- case WA.decodeCredentialRegistration WA.allSupportedFormats credential of
     Left err -> do
-      Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete failed to decode request: " <> jsonText credential <> ": " <> Text.pack (show err)
+      Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete failed to decode raw request: " <> Text.pack (show err)
       fail $ show err
     Right result -> pure result
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete <= " <> jsonText (WA.stripRawCredential cred)
