@@ -21,6 +21,11 @@ description:
   of the [Web Authentication Level 2](https://www.w3.org/TR/webauthn-2/) specification.
   This allows web applications to create strong, attested, scoped, public key-based
   credentials for the purpose of strongly authenticating users.
+  .
+  While the general design of the library won't change, it's still in an alpha
+  state, so smaller breaking changes should be expected for now. We will
+  however follow the [PVP](https://pvp.haskell.org/) and properly label changes
+  with the appropriate version increase.
 category: Web, Authentication
 tested-with: GHC == 8.10.7
 extra-source-files:
