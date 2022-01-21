@@ -1,4 +1,4 @@
-### next version
+### 0.1.1.0
 
 * [#111](https://github.com/tweag/webauthn/pull/111) Support the
   [`transports`](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot)
