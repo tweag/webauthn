@@ -45,6 +45,7 @@ import Crypto.JWT
 import Crypto.WebAuthn.Internal.DateOrphans ()
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
+import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Identifier
   ( AAGUID,
@@ -56,12 +57,12 @@ import Crypto.WebAuthn.Model.Identifier
       ),
     SubjectKeyIdentifier,
   )
-import Data.Aeson (Value (Object))
-import qualified Data.Aeson as Aeson
+import Data.Aeson (Value)
+import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.FileEmbed (embedFile)
-import Data.HashMap.Strict (HashMap)
+import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
@@ -72,6 +73,7 @@ import qualified Data.Text as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
+import GHC.Exts (fromList, toList)
 
 -- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate
@@ -179,7 +181,7 @@ jwtToJson ::
 jwtToJson blob rootCert now = runExcept $ do
   jwt <- decodeCompact $ LBS.fromStrict blob
   claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
-  return $ claims ^. unregisteredClaims
+  return . fromList . toList $ claims ^. unregisteredClaims
 
 -- | Decodes a FIDO Metadata payload JSON value to a 'Service.MetadataPayload',
 -- returning an error when the JSON is invalid, and ignoring any entries not
@@ -188,11 +190,22 @@ jwtToJson blob rootCert now = runExcept $ do
 -- and `Crypto.WebAuthn.Metadata.Service.Types.mpEntries` fields are most
 -- important.
 jsonToPayload :: HashMap Text Value -> Either Text Service.MetadataPayload
-jsonToPayload value = case Aeson.fromJSON $ Object value of
-  Aeson.Error err -> Left $ Text.pack err
-  Aeson.Success payload -> case decodeMetadataPayload payload of
+jsonToPayload value = case Aeson.parseEither metadataPayloadParser value of
+  Left err -> Left $ Text.pack err
+  Right payload -> case decodeMetadataPayload payload of
     Left err -> Left err
     Right result -> pure result
+
+metadataPayloadParser :: HashMap Text Aeson.Value -> Aeson.Parser ServiceIDL.MetadataBLOBPayload
+metadataPayloadParser hm = case (hm !? "legalHeader", hm !? "no", hm !? "nextUpdate", hm !? "entries") of
+  (Just legalHeader, Just no, Just nextUpdate, Just entries) -> do
+    legalHeader <- Aeson.parseJSON legalHeader
+    no <- Aeson.parseJSON no
+    nextUpdate <- Aeson.parseJSON nextUpdate
+    entries <- Aeson.parseJSON entries
+    pure $
+      ServiceIDL.MetadataBLOBPayload {..}
+  _ -> fail "Could not decode MetadataBLOB: missing fields"
 
 -- | Creates a 'Service.MetadataServiceRegistry' from a list of
 -- 'Service.SomeMetadataEntry', which can either be obtained from a

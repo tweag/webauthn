@@ -32,15 +32,39 @@ let
 
     server = hself.callCabal2nix "server" (src + "/server") {};
 
-    jose = hself.callHackage "jose" "0.8.5" {};
+    jose = hself.jose_0_9;
 
     base64-bytestring = hself.base64-bytestring_1_2_1_0;
+
+    aeson = hself.aeson_2_0_3_0;
+
+    OneTuple = hself.OneTuple_0_3_1;
+
+    hashable = hself.hashable_1_4_0_1;
+
+    quickcheck-instances = hself.quickcheck-instances_0_3_27;
+
+    text-short = pkgs.haskell.lib.dontCheck hself.text-short_0_1_5;
+
+    semialign = hself.semialign_1_2_0_1;
+
+    hspec-expectations-json = pkgs.haskell.lib.dontCheck hself.hspec-expectations-json_1_0_0_5;
+
+    attoparsec = hself.attoparsec_0_14_3;
+
+    time-compat = hself.time-compat_1_9_6_1;
 
     x509-validation = hself.callHackageDirect {
       pkg = "x509-validation";
       ver = "1.6.12";
       sha256 = "1jrsryn6hfdmr1b1alpj5zxvw26dw8y7kqpq555q2njm3kvwmxap";
     } {};
+
+    # Needed for aeson 2.0
+    http2 = pkgs.haskell.lib.appendPatch hsuper.http2 (pkgs.fetchpatch {
+      url = "https://github.com/kazu-yamamoto/http2/commit/0a1f64cb7cd2042554cd2d4e96da850a8940f08d.patch";
+      sha256 = "0kbbd7dv49m6slcfw61kzy21v4d2ingnbygg4i3spn91v3dyh87y";
+    });
   });
 
   deploy = pkgs.writeShellScriptBin "deploy" ''
