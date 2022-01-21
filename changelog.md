@@ -1,6 +1,6 @@
 ### next version
 
-* Support the
+* [#111](https://github.com/tweag/webauthn/pull/111) Support the
   [`transports`](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot)
   field, allowing servers to store information from the browser on how
   authenticators were communicated with (e.g. internal, NFC, etc.). When users
@@ -8,3 +8,5 @@
   Descriptors](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialdescriptor),
   ensuring that only the transports initially registered as supported by the
   authenticator may be used. This is recommended by the standard.
+* [#112](https://github.com/tweag/webauthn/pull/112) Decrease lower bounds for
+  aeson and unordered-containers.
