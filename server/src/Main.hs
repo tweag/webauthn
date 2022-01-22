@@ -33,7 +33,7 @@ import GHC.Generics (Generic)
 import MetadataFetch (continuousFetch, registryFromJsonFile)
 import qualified Network.HTTP.Types as HTTP
 import Network.Wai.Middleware.Static (addBase, staticPolicy)
-import PendingOps (PendingOps, defaultPendingOpsConfig, getPendingOptions, insertPendingOptions, newPendingOps)
+import PendingOps (PendingOps (pendingLogins, pendingRegisters), defaultPendingOpsConfig, getPendingOptions, insertPendingOptions, newPendingOps)
 import System.Environment (getArgs)
 import System.Hourglass (dateCurrent)
 import qualified Web.Cookie as Cookie
@@ -163,7 +163,7 @@ beginLogin db pending = do
     Scotty.liftAndCatchIO $ TIO.putStrLn "Login begin error: User not found"
     Scotty.raiseStatus HTTP.status404 "User not found"
   options <- Scotty.liftAndCatchIO $
-    insertPendingOptions pending $ \challenge -> do
+    insertPendingOptions pending pendingLogins $ \challenge -> do
       WA.CredentialOptionsAuthentication
         { WA.coaRpId = Nothing,
           WA.coaTimeout = Nothing,
@@ -189,7 +189,7 @@ completeLogin origin rpIdHash db pending = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete <= " <> jsonText (WA.stripRawCredential cred)
 
   options <-
-    Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
+    Scotty.liftAndCatchIO (getPendingOptions (pendingLogins pending) (WA.araClientData $ WA.cResponse cred)) >>= \case
       Left err -> do
         Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete problem with challenge: " <> jsonText (String $ Text.pack err)
         Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
@@ -252,7 +252,7 @@ beginRegistration db pending = do
             WA.cueDisplayName = WA.UserAccountDisplayName accountDisplayName,
             WA.cueName = WA.UserAccountName accountName
           }
-  options <- Scotty.liftAndCatchIO $ insertPendingOptions pending $ defaultPkcco user
+  options <- Scotty.liftAndCatchIO $ insertPendingOptions pending pendingRegisters $ defaultPkcco user
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin => " <> jsonText options
   Scotty.json $ WA.encodeCredentialOptionsRegistration options
 
@@ -274,7 +274,7 @@ completeRegistration origin rpIdHash db pending registryVar = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete <= " <> jsonText (WA.stripRawCredential cred)
 
   options <-
-    Scotty.liftAndCatchIO (getPendingOptions pending cred) >>= \case
+    Scotty.liftAndCatchIO (getPendingOptions (pendingRegisters pending) (WA.arrClientData $ WA.cResponse cred)) >>= \case
       Left err -> do
         Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete problem with challenge: " <> jsonText (String $ Text.pack err)
         Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
