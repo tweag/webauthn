@@ -23,7 +23,7 @@ import Control.Monad (forM, unless)
 import Control.Monad.Except (MonadError (throwError))
 import Control.Monad.State (MonadState (get, put), StateT (runStateT))
 import qualified Crypto.Hash as Hash
-import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (jsonEncodingOptions)
 import Crypto.WebAuthn.Model.Identifier (AAGUID (AAGUID))
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
@@ -216,8 +216,10 @@ data ClientDataJSON = ClientDataJSON
     -- tokenBinding :: Maybe TokenBinding
   }
   deriving (Generic)
-  -- Note: Encoding should NOT be derived via aeson. See the Encoding module instead
-  deriving (Aeson.FromJSON) via JSONEncoding ClientDataJSON
+
+-- Note: Encoding should NOT be derived via aeson. See the Encoding module instead
+instance Aeson.FromJSON ClientDataJSON where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
 
 -- | Decodes a 'M.CollectedClientData' from a 'BS.ByteString'. This is needed
 -- to parse the [clientDataJSON](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)

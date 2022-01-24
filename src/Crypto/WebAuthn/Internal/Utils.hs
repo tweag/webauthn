@@ -5,10 +5,8 @@
 --
 -- Internal utilities
 module Crypto.WebAuthn.Internal.Utils
-  ( JSONEncoding,
-    EnumJSONEncoding,
-    Aeson.CustomJSON (..),
-    Lowercase,
+  ( jsonEncodingOptions,
+    enumJSONEncodingOptions,
     failure,
     certificateSubjectKeyIdentifier,
     IdFidoGenCeAAGUID (..),
@@ -23,32 +21,37 @@ import Data.ASN1.Parse (ParseASN1, getNext, runParseASN1)
 import qualified Data.ASN1.Parse as ASN1
 import Data.ASN1.Prim (ASN1 (OctetString))
 import qualified Data.ASN1.Types as ASN1
+import qualified Data.Aeson as Aeson
 import Data.Bifunctor (first)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Char (toLower)
+import Data.List (stripPrefix)
 import Data.List.NonEmpty (NonEmpty)
+import Data.Maybe (fromMaybe)
 import qualified Data.UUID as UUID
 import Data.Validation (Validation (Failure))
 import Data.X509 (Extension)
 import qualified Data.X509 as X509
-import qualified Deriving.Aeson as Aeson
-import GHC.TypeLits (Symbol)
 
--- | Custom JSONEncoding for use in the library. We add a "lit" prefix to every
+-- | Custom Aeson Options for use in the library. We add a "lit" prefix to every
 -- field that would otherwise be a Haskell keyword.
-type JSONEncoding = Aeson.CustomJSON '[Aeson.OmitNothingFields, Aeson.FieldLabelModifier (Aeson.StripPrefix "lit")]
-
--- | Type for 'Aeson.StringModifier' that makes all characters lowercase
-data Lowercase
-
--- | Deriving.Aeson instance turning a string into lowercase.
-instance Aeson.StringModifier Lowercase where
-  getStringModifier = map toLower
+jsonEncodingOptions :: Aeson.Options
+jsonEncodingOptions =
+  Aeson.defaultOptions
+    { Aeson.omitNothingFields = True,
+      Aeson.fieldLabelModifier = \l -> fromMaybe l $ stripPrefix "lit" l
+    }
 
 -- | Custom JSON Encoding for enumerations, strips the given prefix and maps
 -- all constructors to lowercase.
-type EnumJSONEncoding (prefix :: Symbol) = Aeson.CustomJSON '[Aeson.ConstructorTagModifier '[Aeson.StripPrefix prefix, Lowercase]]
+enumJSONEncodingOptions :: String -> Aeson.Options
+enumJSONEncodingOptions prefix =
+  Aeson.defaultOptions
+    { Aeson.omitNothingFields = True,
+      Aeson.fieldLabelModifier = \l -> fromMaybe l $ stripPrefix prefix l,
+      Aeson.constructorTagModifier = \l -> map toLower . fromMaybe l $ stripPrefix prefix l
+    }
 
 -- | A convenience function for creating a 'Validation' failure of a single
 -- 'NonEmpty' value

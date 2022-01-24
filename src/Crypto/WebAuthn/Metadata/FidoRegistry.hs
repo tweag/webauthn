@@ -15,9 +15,8 @@ module Crypto.WebAuthn.Metadata.FidoRegistry
   )
 where
 
-import Crypto.WebAuthn.Internal.Utils (EnumJSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (enumJSONEncodingOptions)
 import qualified Data.Aeson as Aeson
-import Deriving.Aeson (CustomJSON (CustomJSON))
 import GHC.Generics (Generic)
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#user-verification-methods)
@@ -36,7 +35,12 @@ data UserVerificationMethod
   | USER_VERIFY_NONE
   | USER_VERIFY_ALL
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "USER_VERIFY_" UserVerificationMethod
+
+instance Aeson.FromJSON UserVerificationMethod where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "USER_VERIFY_"
+
+instance Aeson.ToJSON UserVerificationMethod where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "USER_VERIFY_"
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#key-protection-types)
 data KeyProtectionType
@@ -46,7 +50,12 @@ data KeyProtectionType
   | KEY_PROTECTION_SECURE_ELEMENT
   | KEY_PROTECTION_REMOTE_HANDLE
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "KEY_PROTECTION_" KeyProtectionType
+
+instance Aeson.FromJSON KeyProtectionType where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "KEY_PROTECTION_"
+
+instance Aeson.ToJSON KeyProtectionType where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "KEY_PROTECTION_"
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#matcher-protection-types)
 data MatcherProtectionType
@@ -54,7 +63,12 @@ data MatcherProtectionType
   | MATCHER_PROTECTION_TEE
   | MATCHER_PROTECTION_ON_CHIP
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "MATCHER_PROTECTION_" MatcherProtectionType
+
+instance Aeson.FromJSON MatcherProtectionType where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "MATCHER_PROTECTION_"
+
+instance Aeson.ToJSON MatcherProtectionType where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "MATCHER_PROTECTION_"
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#authenticator-attachment-hints)
 data AuthenticatorAttachmentHint
@@ -68,7 +82,12 @@ data AuthenticatorAttachmentHint
   | ATTACHMENT_HINT_READY
   | ATTACHMENT_HINT_WIFI_DIRECT
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "ATTACHMENT_HINT_" AuthenticatorAttachmentHint
+
+instance Aeson.FromJSON AuthenticatorAttachmentHint where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "ATTACHMENT_HINT_"
+
+instance Aeson.ToJSON AuthenticatorAttachmentHint where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "ATTACHMENT_HINT_"
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#transaction-confirmation-display-types)
 data TransactionConfirmationDisplayType
@@ -78,7 +97,12 @@ data TransactionConfirmationDisplayType
   | TRANSACTION_CONFIRMATION_DISPLAY_HARDWARE
   | TRANSACTION_CONFIRMATION_DISPLAY_REMOTE
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "TRANSACTION_CONFIRMATION_DISPLAY_" TransactionConfirmationDisplayType
+
+instance Aeson.FromJSON TransactionConfirmationDisplayType where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "TRANSACTION_CONFIRMATION_DISPLAY_"
+
+instance Aeson.ToJSON TransactionConfirmationDisplayType where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "TRANSACTION_CONFIRMATION_DISPLAY_"
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#authentication-algorithms)
 data AuthenticationAlgorithm
@@ -101,7 +125,12 @@ data AuthenticationAlgorithm
   | ALG_SIGN_SECP512R1_ECDSA_SHA512_RAW
   | ALG_SIGN_ED25519_EDDSA_SHA512_RAW
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "ALG_SIGN_" AuthenticationAlgorithm
+
+instance Aeson.FromJSON AuthenticationAlgorithm where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "ALG_SIGN_"
+
+instance Aeson.ToJSON AuthenticationAlgorithm where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "ALG_SIGN_"
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#public-key-representation-formats)
 data PublicKeyRepresentationFormat
@@ -111,7 +140,12 @@ data PublicKeyRepresentationFormat
   | ALG_KEY_RSA_2048_DER
   | ALG_KEY_COSE
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "ALG_KEY_" PublicKeyRepresentationFormat
+
+instance Aeson.FromJSON PublicKeyRepresentationFormat where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "ALG_KEY_"
+
+instance Aeson.ToJSON PublicKeyRepresentationFormat where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "ALG_KEY_"
 
 -- | [(spec)](https://fidoalliance.org/specs/common-specs/fido-registry-v2.1-ps-20191217.html#authenticator-attestation-types)
 data AuthenticatorAttestationType
@@ -120,4 +154,9 @@ data AuthenticatorAttestationType
   | ATTESTATION_ECDAA
   | ATTESTATION_ATTCA
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "ATTESTATION_" AuthenticatorAttestationType
+
+instance Aeson.FromJSON AuthenticatorAttestationType where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "ATTESTATION_"
+
+instance Aeson.ToJSON AuthenticatorAttestationType where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "ATTESTATION_"
