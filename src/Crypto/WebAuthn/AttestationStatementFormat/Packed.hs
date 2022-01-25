@@ -19,8 +19,8 @@ import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
+import Crypto.WebAuthn.Model (AAGUID)
 import qualified Crypto.WebAuthn.Model.Types as M
-import Data.ASN1.Error (ASN1Error)
 import qualified Data.ASN1.OID as OID
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
@@ -63,25 +63,23 @@ instance ToJSON Statement where
 data VerificationError
   = -- | The Algorithm from the attestation format does not match the algorithm
     -- of the key in the credential data
-    VerificationErrorAlgorithmMismatch
+    -- (first: alg specified in the statement, second: credential public key
+    -- alg)
+    AlgorithmMismatch Cose.CoseSignAlg Cose.CoseSignAlg
   | -- | The statement key cannot verify the signature over the attested
     -- credential data and client data for self attestation
-    VerificationErrorInvalidSignature Text
+    InvalidSignature Text
   | -- | The statement certificate cannot verify the signature over the attested
     -- credential data and client data for nonself attestation
-    VerificationErrorVerificationFailure X509.SignatureFailure
+    VerificationFailure X509.SignatureFailure
   | -- | The certificate does not meet the requirements layed out in the
     -- webauthn specification
     -- https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
-    VerificationErrorCertificateRequirementsUnmet
-  | -- | The (supposedly) ASN1 encoded certificate extension could not be
-    -- decoded
-    VerificationErrorASN1Error ASN1Error
-  | -- | The certificate extension does not contain a AAGUID
-    VerificationErrorCredentialAAGUIDMissing
+    CertificateRequirementsUnmet
   | -- | The AAGUID in the certificate extension does not match the AAGUID in
     -- the authenticator data
-    VerificationErrorCertificateAAGUIDMismatch
+    -- (first: from the certificate, second: from the credential data)
+    CertificateAAGUIDMismatch AAGUID AAGUID
   deriving (Show, Exception)
 
 instance M.AttestationStatementFormat Format where
@@ -136,13 +134,13 @@ instance M.AttestationStatementFormat Format where
           -- Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
           let key = M.acdCredentialPublicKey credData
               signAlg = Cose.keySignAlg key
-          when (stmtAlg /= signAlg) $ failure VerificationErrorAlgorithmMismatch
+          when (stmtAlg /= signAlg) . failure $ AlgorithmMismatch stmtAlg signAlg
 
           -- Verify that sig is a valid signature over the concatenation of
           -- authenticatorData and clientDataHash using the credential public key with alg.
           case Cose.verify signAlg (Cose.fromCose key) signedData stmtSig of
             Right () -> pure ()
-            Left err -> failure $ VerificationErrorInvalidSignature err
+            Left err -> failure $ InvalidSignature err
 
           pure $ M.SomeAttestationType M.AttestationTypeSelf
 
@@ -154,7 +152,7 @@ instance M.AttestationStatementFormat Format where
           -- the attestation public key in attestnCert with the algorithm specified in alg.
           case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) pubKey signedData stmtSig of
             X509.SignaturePass -> pure ()
-            X509.SignatureFailed err -> failure $ VerificationErrorVerificationFailure err
+            X509.SignatureFailed err -> failure $ VerificationFailure err
 
           -- Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation Statement Certificate
           -- Requirements.
@@ -165,12 +163,12 @@ instance M.AttestationStatementFormat Format where
                 && hasDnElement X509.DnCommonName dnElements
                 && findDnElement X509.DnOrganizationUnit dnElements == Just "Authenticator Attestation"
             )
-            $ failure VerificationErrorCertificateRequirementsUnmet
+            $ failure CertificateRequirementsUnmet
 
           -- If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that
           -- the value of this extension matches the aaguid in authenticatorData.
           let aaguid = M.acdAaguid credData
-          unless (aaguid == credAAGUID) $ failure VerificationErrorCertificateAAGUIDMismatch
+          unless (credAAGUID == aaguid) . failure $ CertificateAAGUIDMismatch credAAGUID aaguid
 
           pure $
             M.SomeAttestationType $
