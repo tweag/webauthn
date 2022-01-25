@@ -60,13 +60,13 @@ import Data.Aeson (Value (Object))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Either (partitionEithers)
 import Data.FileEmbed (embedFile)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (mapMaybe)
-import Data.Singletons (SingI, sing)
+import Data.Singletons (singByProxy)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
@@ -204,33 +204,14 @@ jsonToPayload value = case Aeson.fromJSON $ Object value of
 createMetadataRegistry :: [Service.SomeMetadataEntry] -> Service.MetadataServiceRegistry
 createMetadataRegistry entries = Service.MetadataServiceRegistry {..}
   where
-    fido2Entries = HashMap.fromList $ mapMaybe getFido2Pairs entries
-    fidoU2FEntries = HashMap.fromList $ mapMaybe getFidoU2FPairs entries
+    fido2Entries = HashMap.fromList fido2Pairs
+    fidoU2FEntries = HashMap.fromList fidoU2FPairs
+    (fido2Pairs, fidoU2FPairs) = partitionEithers $ map fromSomeMetadataEntry entries
 
-    getFido2Pairs (Service.SomeMetadataEntry ident entry) = getFido2Pairs' ident entry
-    getFidoU2FPairs (Service.SomeMetadataEntry ident entry) = getFidoU2FPairs' ident entry
-
-    getFido2Pairs' ::
-      forall p.
-      SingI p =>
-      AuthenticatorIdentifier p ->
-      Service.MetadataEntry p ->
-      Maybe (AAGUID, Service.MetadataEntry 'M.Fido2)
-    getFido2Pairs' ident entry = case sing @p of
-      M.SFido2 ->
-        Just (idAaguid ident, entry)
-      _ -> Nothing
-
-    getFidoU2FPairs' ::
-      forall p.
-      SingI p =>
-      AuthenticatorIdentifier p ->
-      Service.MetadataEntry p ->
-      Maybe (SubjectKeyIdentifier, Service.MetadataEntry 'M.FidoU2F)
-    getFidoU2FPairs' ident entry = case sing @p of
-      M.SFidoU2F ->
-        Just (idSubjectKeyIdentifier ident, entry)
-      _ -> Nothing
+    fromSomeMetadataEntry :: Service.SomeMetadataEntry -> Either (AAGUID, Service.MetadataEntry 'M.Fido2) (SubjectKeyIdentifier, Service.MetadataEntry 'M.FidoU2F)
+    fromSomeMetadataEntry (Service.SomeMetadataEntry ident entry) = case singByProxy ident of
+      M.SFido2 -> Left (idAaguid ident, entry)
+      M.SFidoU2F -> Right (idSubjectKeyIdentifier ident, entry)
 
 -- | Query a 'Service.MetadataEntry' for an 'M.AuthenticatorIdentifier'
 queryMetadata ::
