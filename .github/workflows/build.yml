@@ -24,7 +24,7 @@ jobs:
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
     - name: "Nix build"
-      run: nix-build -A webauthn -A server
+      run: nix-build -A webauthn -A server -A webauthn_aeson1
 
   dev:
     runs-on: ${{ matrix.os }}
