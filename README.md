@@ -8,7 +8,7 @@ Authentication (WebAuthn) is to bring passwordless login/second factor
 authentication to the web, logging in using a FIDO U2F Security Key, finger
 print scanner and some other authenticator.
 
-This project was originally developed in 2020 as a Zurihac project by
+This project was originally developed in 2020 as a [Zurihac project](https://wire.engineering/haskell/events/2020/06/18/wire-goes-zurihac.html) by
 [@arianvp](https://github.com/arianvp/) and [@duijf](https://github.com/duijf).
 Starting September 2021 a team at [Tweag](https://www.tweag.io/) was sponsored
 by [Mercury](https://mercury.com/) to create a production-ready open-source
