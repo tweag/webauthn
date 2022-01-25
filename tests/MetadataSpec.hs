@@ -4,18 +4,19 @@
 module MetadataSpec (spec) where
 
 import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), fidoAllianceRootCertificate, jsonToPayload, jwtToJson)
-import Crypto.WebAuthn.Metadata.Service.WebIDL (MetadataBLOBPayload)
-import Data.Aeson (Result (Success), ToJSON (toJSON), Value (Object), decodeFileStrict, fromJSON)
+import Crypto.WebAuthn.Metadata.Service.WebIDL (MetadataBLOBPayload, entries, legalHeader, nextUpdate, no)
+import Data.Aeson (Result (Success), ToJSON (toJSON), decodeFileStrict, fromJSON)
 import Data.Aeson.Types (Result (Error))
 import qualified Data.ByteString as BS
 import Data.Either (isRight)
+import Data.HashMap.Strict ((!), (!?))
 import qualified Data.PEM as PEM
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import System.Hourglass (dateCurrent)
-import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
+import Test.Hspec (SpecWith, describe, it, shouldBe, shouldSatisfy)
 import Test.Hspec.Expectations.Json (shouldBeUnorderedJson)
 
 golden :: FilePath -> SpecWith ()
@@ -34,7 +35,10 @@ golden subdir = describe subdir $ do
 
     Just expectedPayload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"
 
-    Object result `shouldBeUnorderedJson` expectedPayload
+    (result !? "legalHeader") `shouldBe` toJSON <$> legalHeader expectedPayload
+    (result !? "no") `shouldBe` Just (toJSON (no expectedPayload))
+    (result !? "nextUpdate") `shouldBe` Just (toJSON (nextUpdate expectedPayload))
+    (result ! "entries") `shouldBeUnorderedJson` toJSON (entries expectedPayload)
 
   it "can decode and reencode the payload to the partially parsed JSON" $ do
     Just payload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"

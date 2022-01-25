@@ -8,11 +8,10 @@ module Crypto.WebAuthn.Metadata.UAF
   )
 where
 
-import Crypto.WebAuthn.Internal.Utils (JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (jsonEncodingOptions)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Text (Text)
-import qualified Deriving.Aeson as Aeson
 import GHC.Generics (Generic)
 
 -- | [(spec)](https://fidoalliance.org/specs/fido-uaf-v1.2-ps-20201020/fido-uaf-protocol-v1.2-ps-20201020.html#authenticator-attestation-id-aaid-typedef)
@@ -35,4 +34,9 @@ data Version = Version
     minor :: IDL.UnsignedShort
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding Version
+
+instance Aeson.FromJSON Version where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON Version where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions

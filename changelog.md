@@ -1,3 +1,9 @@
+### Next version
+
+* [#115](https://github.com/tweag/webauthn/pull/115) Increase the upper bound
+  of the supported Aeson versions, allowing the library to be built with Aeson
+  2.x. Drop the deriving-aeson dependency.
+
 ### 0.1.1.0
 
 * [#111](https://github.com/tweag/webauthn/pull/111) Support the

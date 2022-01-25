@@ -17,7 +17,7 @@ where
 -- Unless otherwise specified, if a WebIDL dictionary member is DOMString, it MUST NOT be empty.
 -- Unless otherwise specified, if a WebIDL dictionary member is a List, it MUST NOT be an empty list.
 
-import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (jsonEncodingOptions)
 import Crypto.WebAuthn.Metadata.Statement.WebIDL (AAGUID, MetadataStatement)
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
 import qualified Crypto.WebAuthn.WebIDL as IDL
@@ -46,7 +46,12 @@ data MetadataBLOBPayloadEntry = MetadataBLOBPayloadEntry
     -- entryRogueListHash :: IDL.DOMString
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding MetadataBLOBPayloadEntry
+
+instance Aeson.FromJSON MetadataBLOBPayloadEntry where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON MetadataBLOBPayloadEntry where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#biometricstatusreport-dictionary)
 data BiometricStatusReport = BiometricStatusReport
@@ -66,7 +71,12 @@ data BiometricStatusReport = BiometricStatusReport
     certificationRequirementsVersion :: Maybe IDL.DOMString
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding BiometricStatusReport
+
+instance Aeson.FromJSON BiometricStatusReport where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON BiometricStatusReport where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#statusreport-dictionary)
 data StatusReport = StatusReport
@@ -90,7 +100,12 @@ data StatusReport = StatusReport
     certificationRequirementsVersion :: Maybe IDL.DOMString
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding StatusReport
+
+instance Aeson.FromJSON StatusReport where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON StatusReport where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#authenticatorstatus-enum)
 data AuthenticatorStatus
@@ -110,7 +125,12 @@ data AuthenticatorStatus
   | FIDO_CERTIFIED_L3
   | FIDO_CERTIFIED_L3plus
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorStatus
+
+instance Aeson.FromJSON AuthenticatorStatus where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON AuthenticatorStatus where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#metadata-blob-payload-dictionary)
 data MetadataBLOBPayload = MetadataBLOBPayload
@@ -124,4 +144,9 @@ data MetadataBLOBPayload = MetadataBLOBPayload
     entries :: [MetadataBLOBPayloadEntry]
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding MetadataBLOBPayload
+
+instance Aeson.FromJSON MetadataBLOBPayload where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON MetadataBLOBPayload where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions

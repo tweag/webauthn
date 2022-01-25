@@ -26,7 +26,7 @@ module Crypto.WebAuthn.Metadata.Statement.WebIDL
   )
 where
 
-import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), EnumJSONEncoding, JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (enumJSONEncodingOptions, jsonEncodingOptions)
 import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
 import qualified Crypto.WebAuthn.WebIDL as IDL
@@ -53,7 +53,12 @@ data CodeAccuracyDescriptor = CodeAccuracyDescriptor
     blockSlowdown :: Maybe IDL.UnsignedShort
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding CodeAccuracyDescriptor
+
+instance Aeson.FromJSON CodeAccuracyDescriptor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON CodeAccuracyDescriptor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#biometricaccuracydescriptor-dictionary)
 data BiometricAccuracyDescriptor = BiometricAccuracyDescriptor
@@ -69,7 +74,12 @@ data BiometricAccuracyDescriptor = BiometricAccuracyDescriptor
     blockSlowdown :: Maybe IDL.UnsignedShort
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding BiometricAccuracyDescriptor
+
+instance Aeson.FromJSON BiometricAccuracyDescriptor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON BiometricAccuracyDescriptor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#patternaccuracydescriptor-dictionary)
 data PatternAccuracyDescriptor = PatternAccuracyDescriptor
@@ -84,7 +94,12 @@ data PatternAccuracyDescriptor = PatternAccuracyDescriptor
     blockSlowdown :: Maybe IDL.UnsignedShort
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PatternAccuracyDescriptor
+
+instance Aeson.FromJSON PatternAccuracyDescriptor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON PatternAccuracyDescriptor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#verificationmethoddescriptor-dictionary)
 data VerificationMethodDescriptor = VerificationMethodDescriptor
@@ -98,7 +113,12 @@ data VerificationMethodDescriptor = VerificationMethodDescriptor
     paDesc :: Maybe PatternAccuracyDescriptor
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding VerificationMethodDescriptor
+
+instance Aeson.FromJSON VerificationMethodDescriptor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON VerificationMethodDescriptor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#verificationmethodandcombinations-typedef)
 newtype VerificationMethodANDCombinations = VerificationMethodANDCombinations (NonEmpty VerificationMethodDescriptor)
@@ -115,7 +135,12 @@ data RgbPaletteEntry = RgbPaletteEntry
     b :: IDL.UnsignedShort
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding RgbPaletteEntry
+
+instance Aeson.FromJSON RgbPaletteEntry where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON RgbPaletteEntry where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#displaypngcharacteristicsdescriptor-dictionary)
 data DisplayPNGCharacteristicsDescriptor = DisplayPNGCharacteristicsDescriptor
@@ -137,7 +162,12 @@ data DisplayPNGCharacteristicsDescriptor = DisplayPNGCharacteristicsDescriptor
     plte :: Maybe (NonEmpty RgbPaletteEntry)
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding DisplayPNGCharacteristicsDescriptor
+
+instance Aeson.FromJSON DisplayPNGCharacteristicsDescriptor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON DisplayPNGCharacteristicsDescriptor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#ecdaatrustanchor-dictionary)
 data EcdaaTrustAnchor = EcdaaTrustAnchor
@@ -155,7 +185,12 @@ data EcdaaTrustAnchor = EcdaaTrustAnchor
     litG1Curve :: IDL.DOMString
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding EcdaaTrustAnchor
+
+instance Aeson.FromJSON EcdaaTrustAnchor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON EcdaaTrustAnchor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#extensiondescriptor-dictionary)
 data ExtensionDescriptor = ExtensionDescriptor
@@ -169,7 +204,12 @@ data ExtensionDescriptor = ExtensionDescriptor
     fail_if_unknown :: IDL.Boolean
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding ExtensionDescriptor
+
+instance Aeson.FromJSON ExtensionDescriptor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON ExtensionDescriptor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#alternativedescriptions-dictionary)
 -- TODO: Replace Text with
@@ -253,7 +293,12 @@ data MetadataStatement = MetadataStatement
     authenticatorGetInfo :: Maybe AuthenticatorGetInfo
   }
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding MetadataStatement
+
+instance Aeson.FromJSON MetadataStatement where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON MetadataStatement where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | Possible FIDO protocol families for 'protocolFamily'
 data ProtocolFamily
@@ -261,4 +306,9 @@ data ProtocolFamily
   | ProtocolFamilyU2F
   | ProtocolFamilyFIDO2
   deriving (Show, Eq, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via EnumJSONEncoding "ProtocolFamily" ProtocolFamily
+
+instance Aeson.FromJSON ProtocolFamily where
+  parseJSON = Aeson.genericParseJSON $ enumJSONEncodingOptions "ProtocolFamily"
+
+instance Aeson.ToJSON ProtocolFamily where
+  toJSON = Aeson.genericToJSON $ enumJSONEncodingOptions "ProtocolFamily"

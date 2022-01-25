@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Stability: experimental
 -- This module models direct representations of JavaScript objects interacting with the
@@ -42,7 +41,7 @@ module Crypto.WebAuthn.Model.WebIDL.Types
   )
 where
 
-import Crypto.WebAuthn.Internal.Utils (CustomJSON (CustomJSON), JSONEncoding)
+import Crypto.WebAuthn.Internal.Utils (jsonEncodingOptions)
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Map (Map)
@@ -71,7 +70,12 @@ data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
     extensions :: Maybe (Map Text Aeson.Value)
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialCreationOptions
+
+instance Aeson.FromJSON PublicKeyCredentialCreationOptions where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON PublicKeyCredentialCreationOptions where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-rp-credential-params)
 data PublicKeyCredentialRpEntity = PublicKeyCredentialRpEntity
@@ -81,7 +85,12 @@ data PublicKeyCredentialRpEntity = PublicKeyCredentialRpEntity
     name :: IDL.DOMString
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialRpEntity
+
+instance Aeson.FromJSON PublicKeyCredentialRpEntity where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON PublicKeyCredentialRpEntity where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-user-credential-params)
 data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
@@ -93,7 +102,12 @@ data PublicKeyCredentialUserEntity = PublicKeyCredentialUserEntity
     name :: IDL.DOMString
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialUserEntity
+
+instance Aeson.FromJSON PublicKeyCredentialUserEntity where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON PublicKeyCredentialUserEntity where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-params)
 data PublicKeyCredentialParameters = PublicKeyCredentialParameters
@@ -103,7 +117,12 @@ data PublicKeyCredentialParameters = PublicKeyCredentialParameters
     alg :: COSEAlgorithmIdentifier
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialParameters
+
+instance Aeson.FromJSON PublicKeyCredentialParameters where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON PublicKeyCredentialParameters where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier)
 type COSEAlgorithmIdentifier = IDL.Long
@@ -118,7 +137,12 @@ data PublicKeyCredentialDescriptor = PublicKeyCredentialDescriptor
     transports :: Maybe [IDL.DOMString]
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialDescriptor
+
+instance Aeson.FromJSON PublicKeyCredentialDescriptor where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON PublicKeyCredentialDescriptor where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-authenticatorselectioncriteria)
 data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
@@ -132,7 +156,12 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     userVerification :: Maybe IDL.DOMString
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorSelectionCriteria
+
+instance Aeson.FromJSON AuthenticatorSelectionCriteria where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON AuthenticatorSelectionCriteria where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options)
 data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
@@ -150,7 +179,12 @@ data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
     extensions :: Maybe (Map Text Aeson.Value)
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding PublicKeyCredentialRequestOptions
+
+instance Aeson.FromJSON PublicKeyCredentialRequestOptions where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON PublicKeyCredentialRequestOptions where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 data PublicKeyCredential response = PublicKeyCredential
@@ -163,17 +197,11 @@ data PublicKeyCredential response = PublicKeyCredential
   }
   deriving (Eq, Show, Generic)
 
-deriving via
-  JSONEncoding (PublicKeyCredential response)
-  instance
-    Aeson.FromJSON response =>
-    Aeson.FromJSON (PublicKeyCredential response)
+instance Aeson.FromJSON response => Aeson.FromJSON (PublicKeyCredential response) where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
 
-deriving via
-  JSONEncoding (PublicKeyCredential response)
-  instance
-    Aeson.ToJSON response =>
-    Aeson.ToJSON (PublicKeyCredential response)
+instance Aeson.ToJSON response => Aeson.ToJSON (PublicKeyCredential response) where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorattestationresponse)
 data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
@@ -187,7 +215,12 @@ data AuthenticatorAttestationResponse = AuthenticatorAttestationResponse
     transports :: Maybe [IDL.DOMString]
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorAttestationResponse
+
+instance Aeson.FromJSON AuthenticatorAttestationResponse where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON AuthenticatorAttestationResponse where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authenticatorassertionresponse)
 data AuthenticatorAssertionResponse = AuthenticatorAssertionResponse
@@ -201,4 +234,9 @@ data AuthenticatorAssertionResponse = AuthenticatorAssertionResponse
     userHandle :: Maybe IDL.ArrayBuffer
   }
   deriving (Eq, Show, Generic)
-  deriving (Aeson.FromJSON, Aeson.ToJSON) via JSONEncoding AuthenticatorAssertionResponse
+
+instance Aeson.FromJSON AuthenticatorAssertionResponse where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON AuthenticatorAssertionResponse where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
