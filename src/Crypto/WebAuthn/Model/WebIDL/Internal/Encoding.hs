@@ -185,7 +185,7 @@ instance Encode (M.Credential 'K.Registration 'True) where
       }
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
-instance SingI c => Encode (M.CollectedClientData c 'True) where
+instance SingI c => Encode (M.CollectedClientData (c :: K.CeremonyKind) 'True) where
   encode ccd = IDL.URLEncodedBase64 $ B.encodeCollectedClientData ccd
 
 instance Encode (M.AuthenticatorResponse 'K.Authentication 'True) where

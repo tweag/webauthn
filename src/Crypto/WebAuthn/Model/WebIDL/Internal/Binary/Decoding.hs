@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -223,7 +224,7 @@ data ClientDataJSON = ClientDataJSON
 -- to parse the [clientDataJSON](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
 -- field in the [AuthenticatorResponse](https://www.w3.org/TR/webauthn-2/#iface-authenticatorresponse)
 -- structure, which is used for both attestation and assertion
-decodeCollectedClientData :: forall c. SingI c => BS.ByteString -> Either Text (M.CollectedClientData c 'True)
+decodeCollectedClientData :: forall (c :: K.CeremonyKind). SingI c => BS.ByteString -> Either Text (M.CollectedClientData c 'True)
 decodeCollectedClientData bytes = do
   -- https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data
   ClientDataJSON {..} <-

@@ -910,7 +910,7 @@ data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
   }
   deriving (Eq, Show)
 
-instance SingI c => ToJSON (CollectedClientData c raw) where
+instance SingI c => ToJSON (CollectedClientData (c :: CeremonyKind) raw) where
   toJSON CollectedClientData {..} =
     object
       [ "webauthnKind" .= sing @c,

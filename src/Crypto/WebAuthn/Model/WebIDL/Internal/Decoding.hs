@@ -2,6 +2,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RecordWildCards #-}
 
 -- | Stability: internal
@@ -56,7 +57,7 @@ instance Decode M.AuthenticationExtensionsClientOutputs where
   -- module documentation of `Crypto.WebAuthn.Model` for more information.
   decode _ = pure M.AuthenticationExtensionsClientOutputs {}
 
-instance SingI c => Decode (M.CollectedClientData c 'True) where
+instance SingI c => Decode (M.CollectedClientData (c :: K.CeremonyKind) 'True) where
   decode (IDL.URLEncodedBase64 bytes) = B.decodeCollectedClientData bytes
 
 instance Decode (M.AuthenticatorData 'K.Authentication 'True) where
