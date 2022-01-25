@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -42,7 +43,7 @@ import Data.Word (Word16, Word8)
 -- | Encodes all raw fields of a 'M.Credential'. This function is
 -- mainly useful for testing that the encoding/decoding functions are correct.
 -- The counterpart to this function is 'Crypto.WebAuthn.Model.Binary.Decoding.stripRawCredential'
-encodeRawCredential :: forall c raw. SingI c => M.Credential c raw -> M.Credential c 'True
+encodeRawCredential :: forall (c :: K.CeremonyKind) raw. SingI c => M.Credential c raw -> M.Credential c 'True
 encodeRawCredential M.Credential {..} =
   M.Credential
     { cResponse = case sing @c of
@@ -132,7 +133,7 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
         credentialLength :: Word16
         credentialLength = fromIntegral $ BS.length $ M.unCredentialId acdCredentialId
 
-    encodeRawAttestedCredentialData :: forall c raw. SingI c => M.AttestedCredentialData c raw -> M.AttestedCredentialData c 'True
+    encodeRawAttestedCredentialData :: forall (c :: K.CeremonyKind) raw. SingI c => M.AttestedCredentialData c raw -> M.AttestedCredentialData c 'True
     encodeRawAttestedCredentialData = case sing @c of
       K.SRegistration -> \M.AttestedCredentialData {..} ->
         M.AttestedCredentialData
@@ -195,5 +196,5 @@ encodeAttestationObject M.AttestationObject {..} = CBOR.toStrictByteString $ CBO
 
 -- | Encodes an 'M.CollectedClientData' as a 'BS.ByteString'. This is needed by
 -- the client side to generate a valid JSON response
-encodeCollectedClientData :: forall c. SingI c => M.CollectedClientData c 'True -> BS.ByteString
+encodeCollectedClientData :: forall (c :: K.CeremonyKind). SingI c => M.CollectedClientData c 'True -> BS.ByteString
 encodeCollectedClientData M.CollectedClientData {..} = M.unRaw ccdRawData
