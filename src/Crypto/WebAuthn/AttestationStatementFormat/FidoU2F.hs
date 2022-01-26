@@ -43,8 +43,12 @@ data VerificationError
   | -- | The credential public key is not an ECDSA key
     CredentialPublicKeyNotECDSA Cose.PublicKey
   | -- | The x and/or y coordinates of the credential public key don't have a length of 32 bytes
-    -- (first: length of received x coordinate, second: length of received y coordinate)
-    CoordinateSizeInvalid Int Int
+    CoordinateSizeInvalid
+      { -- | Actual length in bytes of the x coordinate
+        xLength :: Int,
+        -- | Actual length in bytes of the y coordinate
+        yLength :: Int
+      }
   | -- | The provided public key cannot validate the signature over the verification data
     SignatureInvalid X509.SignatureFailure
   deriving (Show, Exception)

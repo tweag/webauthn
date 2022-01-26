@@ -121,15 +121,22 @@ instance Aeson.ToJSON Statement where
 data VerificationError
   = -- | The receiced nonce was not set to the concatenation of the
     -- authenticator data and client data hash
-    -- (first: nonce from the response, second: Base64 encoding of the SHA-256
-    -- hash of the concatenation of authenticatorData and clientDataHash)
-    NonceMismatch Text Text
-  | -- | The response was created to far in the past
-    -- (first: now, second: generated time)
-    ResponseTooOld HG.DateTime HG.DateTime
-  | -- | The response was created to far in the future
-    -- (first: now, second: generated time)
-    ResponseInFuture HG.DateTime HG.DateTime
+    NonceMismatch
+      { -- | Nonce from the AndroidSafetyNet response
+        responseNonce :: Text,
+        -- | Base64 encoding of the SHA-256 hash of the concatenation of
+        -- authenticatorData and clientDataHash
+        calculatedNonce :: Text
+      }
+  | -- | The response was created to far in the past or future
+    ResponseTimeInvalid
+      { -- | The UTC time minus the allowed drift specified in the `Format`.
+        lowerBound :: HG.DateTime,
+        -- | The UTC time plus the allowed drift specified in the `Format`.
+        upperBound :: HG.DateTime,
+        -- | The UTC time when the Android SafetyNet response was generated
+        generatedtime :: HG.DateTime
+      }
   | -- | The integrity check failed based on the required integrity from the
     -- format
     IntegrityCheckFailed Integrity
@@ -239,8 +246,10 @@ instance M.AttestationStatementFormat Format where
     -- NOTE: For WebAuthn, we need not care about the package name or the app's signing certificate. The Nonce as
     -- has already been dealt with.
     let generatedTime = HG.timeConvert $ timestampMs response
-    when ((generatedTime `HG.timeAdd` driftBackwardsTolerance) < now) $ failure $ ResponseTooOld now generatedTime
-    when (generatedTime > (now `HG.timeAdd` driftForwardsTolerance)) $ failure $ ResponseInFuture now generatedTime
+    let lowerBound = now `HG.timeAdd` negate (HG.toSeconds driftBackwardsTolerance)
+    let upperBound = now `HG.timeAdd` driftForwardsTolerance
+    when (generatedTime < lowerBound) $ failure $ ResponseTimeInvalid lowerBound upperBound generatedTime
+    when (generatedTime > upperBound) $ failure $ ResponseTimeInvalid lowerBound upperBound generatedTime
 
     let integrity = case (basicIntegrity response, ctsProfileMatch response) of
           (_, True) -> CTSProfileIntegrity

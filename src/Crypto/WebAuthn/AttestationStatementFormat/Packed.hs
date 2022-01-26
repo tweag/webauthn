@@ -63,9 +63,12 @@ instance ToJSON Statement where
 data VerificationError
   = -- | The Algorithm from the attestation format does not match the algorithm
     -- of the key in the credential data
-    -- (first: alg specified in the statement, second: credential public key
-    -- alg)
-    AlgorithmMismatch Cose.CoseSignAlg Cose.CoseSignAlg
+    AlgorithmMismatch
+      { -- | The algorithm received in the attestation statement
+        statementAlg :: Cose.CoseSignAlg,
+        -- | The algorithm of the credentialPublicKey in authenticatorData
+        credentialAlg :: Cose.CoseSignAlg
+      }
   | -- | The statement key cannot verify the signature over the attested
     -- credential data and client data for self attestation
     InvalidSignature Text
@@ -78,8 +81,13 @@ data VerificationError
     CertificateRequirementsUnmet
   | -- | The AAGUID in the certificate extension does not match the AAGUID in
     -- the authenticator data
-    -- (first: from the certificate, second: from the credential data)
-    CertificateAAGUIDMismatch AAGUID AAGUID
+    CertificateAAGUIDMismatch
+      { -- | AAGUID from the id-fido-gen-ce-aaguid certificate extension
+        certificateExtensionAAGUID :: AAGUID,
+        -- | A AGUID from the attested credential data in the authenticator
+        -- data
+        attestedCredentialDataAAGUID :: AAGUID
+      }
   deriving (Show, Exception)
 
 instance M.AttestationStatementFormat Format where
@@ -145,7 +153,7 @@ instance M.AttestationStatementFormat Format where
           pure $ M.SomeAttestationType M.AttestationTypeSelf
 
         -- Basic, AttCA
-        Just (x5c@(certCred :| _), IdFidoGenCeAAGUID credAAGUID) -> do
+        Just (x5c@(certCred :| _), IdFidoGenCeAAGUID certAAGUID) -> do
           let cert = X509.getCertificate certCred
               pubKey = X509.certPubKey cert
           -- Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using
@@ -168,7 +176,7 @@ instance M.AttestationStatementFormat Format where
           -- If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that
           -- the value of this extension matches the aaguid in authenticatorData.
           let aaguid = M.acdAaguid credData
-          unless (credAAGUID == aaguid) . failure $ CertificateAAGUIDMismatch credAAGUID aaguid
+          unless (certAAGUID == aaguid) . failure $ CertificateAAGUIDMismatch certAAGUID aaguid
 
           pure $
             M.SomeAttestationType $

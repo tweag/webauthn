@@ -236,8 +236,12 @@ instance ToJSON Statement where
 data VerificationError
   = -- | The public key in the certificate is different from the on in the
     -- attested credential data
-    -- (first: certificate, second: credential data)
-    PublicKeyMismatch Cose.PublicKey Cose.PublicKey
+    PublicKeyMismatch
+      { -- | The public key extracted from the certificate
+        certificatePublicKey :: Cose.PublicKey,
+        -- | The public key part of the credential data
+        credentialDataPublicKey :: Cose.PublicKey
+      }
   | -- | The magic number in certInfo was not set to TPM_GENERATED_VALUE (0xff544347)
     MagicNumberInvalid Word32
   | -- | The type in certInfo was not set to TPM_ST_ATTEST_CERTIFY (0x8017)
@@ -246,8 +250,14 @@ data VerificationError
     -- a valid name algorithm
     NameAlgorithmInvalid TPMAlgId
   | -- | The calulated name does not match the provided name.
-    -- (first: expected, second: received)
-    NameMismatch BS.ByteString BS.ByteString
+    NameMismatch
+      { -- | The name calculated from the TPMT_PUBLIC structure with the name
+        -- algorithm.
+        pubAreaName :: BS.ByteString,
+        -- | The expected name from TPMS_CERTIFY_INFO of the TPMS_ATTEST
+        -- structure
+        certifyInfoName :: BS.ByteString
+      }
   | -- | The public key in the certificate was invalid, either because the it
     -- had an unexpected algorithm, or because it was otherwise malformed
     PublicKeyInvalid Text
@@ -264,10 +274,14 @@ data VerificationError
     ExtKeyOIDMissing
   | -- | The CA component of the basic constraints extension was set to True
     BasicConstraintsTrue
-  | -- | The AAGUID in the certificate extension does not match the AAGUID in
-    -- the authenticator data
-    -- (first: from the attested credential data, second: from the certificate extension)
-    CertificateAAGUIDMismatch AAGUID AAGUID
+  | -- | The AAGUID in the attested credential data does not match the AAGUID
+    -- in the fido certificate extension
+    CertificateAAGUIDMismatch
+      { -- | AAGUID from the id-fido-gen-ce-aaguid certificate extension
+        certificateExtensionAAGUID :: AAGUID,
+        -- | AAGUID from the attested credential data
+        attestedCredentialDataAAGUID :: AAGUID
+      }
   | -- | The (supposedly) ASN1 encoded certificate extension could not be
     -- decoded
     ASN1Error ASN1Error
@@ -277,8 +291,14 @@ data VerificationError
     HashFunctionUnknown
   | -- | The calculated hash over the attToBeSigned does not match the received
     -- hash
-    -- (first: calculated, second: received)
-    HashMismatch BS.ByteString BS.ByteString
+    HashMismatch
+      { -- | The hash of the concatenation of the @authenticatorData@ and
+        -- @clientDataHash@ (@attToBeSigned@) calculated by the @alg@ specified in
+        -- the @Statement@.
+        calculatedHash :: BS.ByteString,
+        -- | The extra data from the TPMS_ATTEST structure.
+        extraData :: BS.ByteString
+      }
   deriving (Show, Exception)
 
 -- [(spec)](https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf)
@@ -607,7 +627,7 @@ instance M.AttestationStatementFormat Format where
       let credentialAAGUID = M.acdAaguid adAttestedCredentialData
       case aaguidExt of
         Just (IdFidoGenCeAAGUID aaguid) -> do
-          unless (credentialAAGUID == aaguid) . failure $ CertificateAAGUIDMismatch credentialAAGUID aaguid
+          unless (aaguid == credentialAAGUID) . failure $ CertificateAAGUIDMismatch aaguid credentialAAGUID
         Nothing -> pure ()
 
       pure $
