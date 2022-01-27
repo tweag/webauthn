@@ -35,6 +35,12 @@ multiple hours.
 
 All further instructions in this README assume that you are in a Nix shell.
 
+## Getting Started
+To get started with the library it is best to read the documentation of the
+`Crypto.WebAuthn` module. An example of how to use this library to implement a
+relying party can be found in the `server` directory, particularly the
+`server/src/Main.hs` module.
+
 ## Developing the Library
 The [Haskell Language Server (hls)][hls] and [Ormolu][ormolu] are highly
 recommended for the development of this library. The hls
