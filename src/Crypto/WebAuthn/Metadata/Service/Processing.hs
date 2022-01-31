@@ -4,7 +4,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | Stability: experimental
@@ -49,12 +48,7 @@ import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Identifier
   ( AAGUID,
-    AuthenticatorIdentifier
-      ( AuthenticatorIdentifierFido2,
-        AuthenticatorIdentifierFidoU2F,
-        idAaguid,
-        idSubjectKeyIdentifier
-      ),
+    AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F),
     SubjectKeyIdentifier,
   )
 import Data.Aeson (Value)
@@ -67,7 +61,6 @@ import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
-import Data.Singletons (singByProxy)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
@@ -222,9 +215,9 @@ createMetadataRegistry entries = Service.MetadataServiceRegistry {..}
     (fido2Pairs, fidoU2FPairs) = partitionEithers $ map fromSomeMetadataEntry entries
 
     fromSomeMetadataEntry :: Service.SomeMetadataEntry -> Either (AAGUID, Service.MetadataEntry 'M.Fido2) (SubjectKeyIdentifier, Service.MetadataEntry 'M.FidoU2F)
-    fromSomeMetadataEntry (Service.SomeMetadataEntry ident entry) = case singByProxy ident of
-      M.SFido2 -> Left (idAaguid ident, entry)
-      M.SFidoU2F -> Right (idSubjectKeyIdentifier ident, entry)
+    fromSomeMetadataEntry (Service.SomeMetadataEntry entry@Service.MetadataEntry {..}) = case meIdentifier of
+      AuthenticatorIdentifierFido2 aaguid -> Left (aaguid, entry)
+      AuthenticatorIdentifierFidoU2F subjectKeyIdentifier -> Right (subjectKeyIdentifier, entry)
 
 -- | Query a 'Service.MetadataEntry' for an 'M.AuthenticatorIdentifier'
 queryMetadata ::

@@ -73,7 +73,9 @@ data MetadataPayload = MetadataPayload
 -- Same as 'StatementIDL.MetadataBLOBPayloadEntry', but fully decoded. This type
 -- is parametrized over the 'StatementIDL.ProtocolFamily' this metadata entry is for
 data MetadataEntry (p :: M.ProtocolKind) = MetadataEntry
-  { -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-metadatastatement)
+  { -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-aaguid) or [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-attestationcertificatekeyidentifiers)
+    meIdentifier :: AuthenticatorIdentifier p,
+    -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-metadatablobpayloadentry-metadatastatement)
     meMetadataStatement :: Maybe MetadataStatement,
     -- TODO: Implement this, currently not used in the blob however
     -- meBiometricStatusReports :: Maybe (NonEmpty BiometricStatusReport),
@@ -88,7 +90,7 @@ data MetadataEntry (p :: M.ProtocolKind) = MetadataEntry
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | Same as 'MetadataEntry', but with its type parameter erased
-data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (AuthenticatorIdentifier p) (MetadataEntry p)
+data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (MetadataEntry p)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#statusreport-dictionary)
 -- Same as 'StatementIDL.StatusReport', but fully decoded.
