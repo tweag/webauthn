@@ -48,12 +48,22 @@ instance Show Format where
 data VerificationError
   = -- | The nonce found in the certificate extension does not match the
     -- expected nonce
-    -- (first: expected, second: received)
-    NonceMismatch (Digest SHA256) (Digest SHA256)
+    NonceMismatch
+      { -- | The SHA256 hash of the concatenation of the @authenticatorData@
+        -- and @clientDataHash@
+        calculatedNonce :: Digest SHA256,
+        -- | The nonce from the Apple nonce certificate extension
+        -- (1.2.840.113635.100.8.2)
+        receivedNonce :: Digest SHA256
+      }
   | -- | The public Key found in the certificate does not match the
     -- credential's public key.
-    -- (first: credential, second: certificate)
-    PublickeyMismatch Cose.PublicKey Cose.PublicKey
+    PublicKeyMismatch
+      { -- | The public key part of the credential data
+        credentialDataPublicKey :: Cose.PublicKey,
+        -- | The public key extracted from the signed certificate
+        certificatePublicKey :: Cose.PublicKey
+      }
   deriving (Show, Exception)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-apple-anonymous-attestation)
@@ -152,7 +162,7 @@ instance M.AttestationStatementFormat Format where
       -- 5. Verify that the credential public key equals the Subject Public Key
       -- of credCert.
       let credentialPublicKey = Cose.fromCose $ M.acdCredentialPublicKey credData
-      unless (credentialPublicKey == pubKey) . failure $ PublickeyMismatch credentialPublicKey pubKey
+      unless (credentialPublicKey == pubKey) . failure $ PublicKeyMismatch credentialPublicKey pubKey
 
       -- 6. If successful, return implementation-specific values representing
       -- attestation type Anonymization CA and attestation trust path x5c.

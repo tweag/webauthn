@@ -36,28 +36,21 @@ data Format = Format
 instance Show Format where
   show = Text.unpack . M.asfIdentifier
 
--- | Decoding errors specific to Fido U2F attestation
-data DecodingError
-  = -- | No Signature field was present
-    NoSig
-  | -- | No x5c certificate was present
-    NoX5C
-  | -- | Multiple x5c certificates were found where only one was expected
-    MultipleX5C
-  | -- | There was an error decoding the x5c certificate, string is the error resulted by the `Data.X509.decodeSignedCertificate` function
-    DecodingErrorX5C String
-  deriving (Show, Exception)
-
 -- | Verification errors specific to Fido U2F attestation
 data VerificationError
   = -- | The public key in the certificate was not an EC Key or the curve was not the p256 curve
-    InvalidCertificatePublicKey X509.PubKey
+    CertificatePublicKeyInvalid X509.PubKey
   | -- | The credential public key is not an ECDSA key
-    NonECDSACredentialPublicKey Cose.PublicKey
+    CredentialPublicKeyNotECDSA Cose.PublicKey
   | -- | The x and/or y coordinates of the credential public key don't have a length of 32 bytes
-    WrongCoordinateSize Int Int
+    CoordinateSizeInvalid
+      { -- | Actual length in bytes of the x coordinate
+        xLength :: Int,
+        -- | Actual length in bytes of the y coordinate
+        yLength :: Int
+      }
   | -- | The provided public key cannot validate the signature over the verification data
-    InvalidSignature X509.SignatureFailure
+    SignatureInvalid X509.SignatureFailure
   deriving (Show, Exception)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-fido-u2f-attestation)
@@ -116,8 +109,8 @@ instance M.AttestationStatementFormat Format where
         X509.PubKeyEC pk ->
           case X509.ecPubKeyCurveName pk of
             Just SEC_p256r1 -> pure ()
-            _ -> failure $ InvalidCertificatePublicKey certPubKey
-        _ -> failure $ InvalidCertificatePublicKey certPubKey
+            _ -> failure $ CertificatePublicKeyInvalid certPubKey
+        _ -> failure $ CertificatePublicKeyInvalid certPubKey
 
       -- 3. Extract the claimed rpIdHash from authenticatorData, and the claimed
       -- credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
@@ -140,7 +133,7 @@ instance M.AttestationStatementFormat Format where
         Cose.PublicKeyECDSA {ecdsaX = xb, ecdsaY = yb} -> do
           let xlen = BS.length xb
               ylen = BS.length yb
-          unless (xlen == 32 && ylen == 32) $ failure $ WrongCoordinateSize xlen ylen
+          unless (xlen == 32 && ylen == 32) $ failure $ CoordinateSizeInvalid xlen ylen
 
           -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
           let publicKeyU2F = BS.singleton 0x04 <> xb <> yb
@@ -149,15 +142,20 @@ instance M.AttestationStatementFormat Format where
           -- clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of
           -- [FIDO-U2F-Message-Formats]).
           let credId = M.unCredentialId acdCredentialId
-              verificationData = BS.singleton 0x00 <> BA.convert (M.unRpIdHash adRpIdHash) <> BA.convert (M.unClientDataHash clientDataHash) <> credId <> publicKeyU2F
+              verificationData =
+                BS.singleton 0x00
+                  <> BA.convert (M.unRpIdHash adRpIdHash)
+                  <> BA.convert (M.unClientDataHash clientDataHash)
+                  <> credId
+                  <> publicKeyU2F
 
           -- 6. Verify the sig using verificationData and the certificate public key per
           -- section 4.1.4 of [SEC1] with SHA-256 as the hash function used in step two.
           case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) certPubKey verificationData sig of
             X509.SignaturePass -> pure ()
-            X509.SignatureFailed e -> failure $ InvalidSignature e
+            X509.SignatureFailed e -> failure $ SignatureInvalid e
           pure ()
-        key -> failure $ NonECDSACredentialPublicKey key
+        key -> failure $ CredentialPublicKeyNotECDSA key
 
       -- 7. Optionally, inspect x5c and consult externally provided knowledge to
       -- determine whether attStmt conveys a Basic or AttCA attestation.

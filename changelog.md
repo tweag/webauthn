@@ -3,6 +3,9 @@
 * [#115](https://github.com/tweag/webauthn/pull/115) Increase the upper bound
   of the supported Aeson versions, allowing the library to be built with Aeson
   2.0. Drop the deriving-aeson dependency.
+* [#117](https://github.com/tweag/webauthn/pull/117) Rename and expand
+  documentation for attestation statement format errors. Some unused errors
+  were removed.
 
 ### 0.1.1.0
 

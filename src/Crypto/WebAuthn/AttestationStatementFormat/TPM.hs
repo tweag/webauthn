@@ -11,6 +11,8 @@ module Crypto.WebAuthn.AttestationStatementFormat.TPM
   ( format,
     Format (..),
     VerificationError (..),
+    -- Exported because it's part of an error constructor
+    TPMAlgId (..),
   )
 where
 
@@ -24,6 +26,7 @@ import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
+import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import qualified Crypto.WebAuthn.Model.Types as M
 import Data.ASN1.Error (ASN1Error)
 import Data.ASN1.OID (OID)
@@ -233,48 +236,69 @@ instance ToJSON Statement where
 data VerificationError
   = -- | The public key in the certificate is different from the on in the
     -- attested credential data
-    VerificationErrorCredentialKeyMismatch
-  | -- | The magic number in certInfo was not set to TPM_GENERATED_VALUE
-    VerificationErrorInvalidMagicNumber Word32
-  | -- | The type in certInfo was not set to TPM_ST_ATTEST_CERTIFY
-    VerificationErrorInvalidType Word16
+    PublicKeyMismatch
+      { -- | The public key extracted from the certificate
+        certificatePublicKey :: Cose.PublicKey,
+        -- | The public key part of the credential data
+        credentialDataPublicKey :: Cose.PublicKey
+      }
+  | -- | The magic number in certInfo was not set to TPM_GENERATED_VALUE (0xff544347)
+    MagicNumberInvalid Word32
+  | -- | The type in certInfo was not set to TPM_ST_ATTEST_CERTIFY (0x8017)
+    TypeInvalid Word16
   | -- | The algorithm specified in the nameAlg field is unsupported or is not
     -- a valid name algorithm
-    VerificationErrorInvalidNameAlgorithm
+    NameAlgorithmInvalid TPMAlgId
   | -- | The calulated name does not match the provided name.
-    -- (first: expected, second: received)
-    VerificationErrorInvalidName BS.ByteString BS.ByteString
+    NameMismatch
+      { -- | The name calculated from the TPMT_PUBLIC structure with the name
+        -- algorithm.
+        pubAreaName :: BS.ByteString,
+        -- | The expected name from TPMS_CERTIFY_INFO of the TPMS_ATTEST
+        -- structure
+        certifyInfoName :: BS.ByteString
+      }
   | -- | The public key in the certificate was invalid, either because the it
     -- had an unexpected algorithm, or because it was otherwise malformed
-    VerificationErrorInvalidPublicKey Text
-  | -- | The certificate didn't have the expected version-value
-    -- (first: expected, second: received)
-    VerificationErrorCertificateVersion Int Int
+    PublicKeyInvalid Text
+  | -- | The certificate didn't have the expected version-value (2)
+    CertificateVersionInvalid Int
   | -- | The Public key cannot verify the signature over the authenticatorData
     -- and the clientDataHash.
-    VerificationErrorVerificationFailure Text
+    VerificationFailure Text
   | -- | The subject field was not empty
-    VerificationErrorNonEmptySubjectField
+    SubjectFieldNotEmpty [(OID, X509.ASN1CharacterString)]
   | -- | The vendor was unknown
-    VerificationErrorUnknownVendor
+    VendorUnknown Text
   | -- | The Extended Key Usage did not contain the 2.23.133.8.3 OID
-    VerificationErrorExtKeyOIDMissing
+    ExtKeyOIDMissing
   | -- | The CA component of the basic constraints extension was set to True
-    VerificationErrorBasicConstraintsTrue
-  | -- | The AAGUID in the certificate extension does not match the AAGUID in
-    -- the authenticator data
-    VerificationErrorCertificateAAGUIDMismatch
+    BasicConstraintsTrue
+  | -- | The AAGUID in the attested credential data does not match the AAGUID
+    -- in the fido certificate extension
+    CertificateAAGUIDMismatch
+      { -- | AAGUID from the id-fido-gen-ce-aaguid certificate extension
+        certificateExtensionAAGUID :: AAGUID,
+        -- | AAGUID from the attested credential data
+        attestedCredentialDataAAGUID :: AAGUID
+      }
   | -- | The (supposedly) ASN1 encoded certificate extension could not be
     -- decoded
-    VerificationErrorASN1Error ASN1Error
+    ASN1Error ASN1Error
   | -- | The certificate extension does not contain a AAGUID
-    VerificationErrorCredentialAAGUIDMissing
+    CredentialAAGUIDMissing
   | -- | The desired algorithm does not have a known associated hash function
-    VerificationErrorUnknownHashFunction
+    HashFunctionUnknown
   | -- | The calculated hash over the attToBeSigned does not match the received
     -- hash
-    -- (first: calculated, second: received)
-    VerificationErrorHashMismatch BS.ByteString BS.ByteString
+    HashMismatch
+      { -- | The hash of the concatenation of the @authenticatorData@ and
+        -- @clientDataHash@ (@attToBeSigned@) calculated by the @alg@ specified in
+        -- the @Statement@.
+        calculatedHash :: BS.ByteString,
+        -- | The extra data from the TPMS_ATTEST structure.
+        extraData :: BS.ByteString
+      }
   deriving (Show, Exception)
 
 -- [(spec)](https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf)
@@ -499,7 +523,7 @@ instance M.AttestationStatementFormat Format where
       -- fields of pubArea is identical to the credentialPublicKey in the
       -- attestedCredentialData in authenticatorData.
       let pubKey = Cose.fromCose $ M.acdCredentialPublicKey adAttestedCredentialData
-      unless (pubKey == pubAreaKey) $ failure VerificationErrorCredentialKeyMismatch
+      unless (pubAreaKey == pubKey) . failure $ PublicKeyMismatch pubAreaKey pubKey
 
       -- 3. Concatenate authenticatorData and clientDataHash to form attToBeSigned.
       let attToBeSigned = adRawData <> BA.convert (M.unClientDataHash clientDataHash)
@@ -507,20 +531,20 @@ instance M.AttestationStatementFormat Format where
       -- 4. Validate that certInfo is valid:
       -- 4.1 Verify that magic is set to TPM_GENERATED_VALUE.
       let magic = tpmsaMagic certInfo
-      unless (magic == tpmGeneratedValue) . failure $ VerificationErrorInvalidMagicNumber magic
+      unless (magic == tpmGeneratedValue) . failure $ MagicNumberInvalid magic
 
       -- 4.2 Verify that type is set to TPM_ST_ATTEST_CERTIFY.
       let typ = tpmsaType certInfo
-      unless (typ == tpmStAttestCertify) . failure $ VerificationErrorInvalidType typ
+      unless (typ == tpmStAttestCertify) . failure $ TypeInvalid typ
 
       -- 4.3 Verify that extraData is set to the hash of attToBeSigned using
       -- the hash algorithm employed in "alg".
       case hashWithCorrectAlgorithm alg attToBeSigned of
         Just attHash -> do
           let extraData = tpmsaExtraData certInfo
-          unless (attHash == extraData) . failure $ VerificationErrorHashMismatch attHash extraData
+          unless (attHash == extraData) . failure $ HashMismatch attHash extraData
           pure ()
-        Nothing -> failure VerificationErrorUnknownHashFunction
+        Nothing -> failure HashFunctionUnknown
 
       -- 4.5 Verify that attested contains a TPMS_CERTIFY_INFO structure as
       -- specified in [TPMv2-Part2] section 10.12.3, whose name field contains
@@ -528,22 +552,22 @@ instance M.AttestationStatementFormat Format where
       -- nameAlg field of pubArea using the procedure specified in
       -- [TPMv2-Part1] section 16.
       let mPubAreaHash = case tpmtpNameAlg pubArea of
-            TPMAlgSHA1 -> Just $ BA.convert $ hashWith SHA1 pubAreaRaw
-            TPMAlgSHA256 -> Just $ BA.convert $ hashWith SHA256 pubAreaRaw
-            TPMAlgECC -> Nothing
-            TPMAlgRSA -> Nothing
+            TPMAlgSHA1 -> Right $ BA.convert $ hashWith SHA1 pubAreaRaw
+            TPMAlgSHA256 -> Right $ BA.convert $ hashWith SHA256 pubAreaRaw
+            TPMAlgECC -> Left TPMAlgECC
+            TPMAlgRSA -> Left TPMAlgRSA
 
       case mPubAreaHash of
-        Just pubAreaHash -> do
+        Right pubAreaHash -> do
           let pubName = LBS.toStrict $
                 Put.runPut $ do
                   Put.putWord16be (tpmtpNameAlgRaw pubArea)
                   Put.putByteString pubAreaHash
 
           let name = tpmsciName (tpmsaAttested certInfo)
-          unless (name == pubName) . failure $ VerificationErrorInvalidName pubName name
+          unless (name == pubName) . failure $ NameMismatch pubName name
           pure ()
-        Nothing -> failure VerificationErrorInvalidNameAlgorithm
+        Left alg -> failure $ NameAlgorithmInvalid alg
 
       -- 4.6 Verify that x5c is present
       -- NOTE: Done in decoding
@@ -560,8 +584,8 @@ instance M.AttestationStatementFormat Format where
       case Cose.fromX509 $ X509.certPubKey unsignedAikCert of
         Right certPubKey -> case Cose.verify alg certPubKey certInfoRaw sig of
           Right () -> pure ()
-          Left err -> failure $ VerificationErrorVerificationFailure err
-        Left err -> failure $ VerificationErrorInvalidPublicKey err
+          Left err -> failure $ VerificationFailure err
+        Left err -> failure $ PublicKeyInvalid err
 
       -- 4.9 Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation
       -- Statement Certificate Requirements.
@@ -569,23 +593,25 @@ instance M.AttestationStatementFormat Format where
       -- 4.9.1 Version MUST be set to 3.
       -- Version ::= INTEGER { v1(0), v2(1), v3(2) }, see https://datatracker.ietf.org/doc/html/rfc5280.html#section-4.1
       let version = X509.certVersion unsignedAikCert
-      unless (version == 2) . failure $ VerificationErrorCertificateVersion 2 version
+      unless (version == 2) . failure $ CertificateVersionInvalid version
       -- 4.9.2. Subject field MUST be set to empty.
-      unless (null . X509.getDistinguishedElements $ X509.certSubjectDN unsignedAikCert) $ failure VerificationErrorNonEmptySubjectField
+      let subject = X509.getDistinguishedElements $ X509.certSubjectDN unsignedAikCert
+      unless (null subject) . failure $ SubjectFieldNotEmpty subject
       -- 4.9.3 The Subject Alternative Name extension MUST be set as defined in
       -- [TPMv2-EK-Profile] section 3.2.9.
       -- 4.9.3.1 The TPM manufacturer identifies the manufacturer of the TPM. This value MUST be the
       -- vendor ID defined in the TCG Vendor ID Registry[3]
-      unless (Set.member (tpmManufacturer subjectAlternativeName) tpmManufacturers) $ failure VerificationErrorUnknownVendor
+      let vendor = tpmManufacturer subjectAlternativeName
+      unless (Set.member vendor tpmManufacturers) . failure $ VendorUnknown vendor
 
       -- 4.9.4 The Extended Key Usage extension MUST contain the OID
       -- 2.23.133.8.3 ("joint-iso-itu-t(2) internationalorganizations(23) 133
       -- tcg-kp(8) tcg-kp-AIKCertificate(3)").
-      unless (X509.KeyUsagePurpose_Unknown [2, 23, 133, 8, 3] `elem` extendedKeyUsage) $ failure VerificationErrorExtKeyOIDMissing
+      unless (X509.KeyUsagePurpose_Unknown [2, 23, 133, 8, 3] `elem` extendedKeyUsage) $ failure ExtKeyOIDMissing
 
       -- 4.9.5 The Basic Constraints extension MUST have the CA component set
       -- to false.
-      when basicConstraintsCA $ failure VerificationErrorBasicConstraintsTrue
+      when basicConstraintsCA $ failure BasicConstraintsTrue
 
       -- 4.9.6 An Authority Information Access (AIA) extension with entry
       -- id-ad-ocsp and a CRL Distribution Point extension [RFC5280] are both
@@ -598,8 +624,10 @@ instance M.AttestationStatementFormat Format where
       -- If aikCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4
       -- (id-fido-gen-ce-aaguid) verify that the value of this extension
       -- matches the aaguid in authenticatorData.
+      let credentialAAGUID = M.acdAaguid adAttestedCredentialData
       case aaguidExt of
-        Just (IdFidoGenCeAAGUID aaguid) -> unless (M.acdAaguid adAttestedCredentialData == aaguid) $ failure VerificationErrorCertificateAAGUIDMismatch
+        Just (IdFidoGenCeAAGUID aaguid) -> do
+          unless (aaguid == credentialAAGUID) . failure $ CertificateAAGUIDMismatch aaguid credentialAAGUID
         Nothing -> pure ()
 
       pure $

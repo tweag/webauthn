@@ -175,20 +175,48 @@ instance ToJSON Statement where
 data VerificationError
   = -- | The public key in the certificate is different from the on in the
     -- attested credential data
-    VerificationErrorCredentialKeyMismatch
+    PublicKeyMismatch
+      { -- | The public key part of the credential data
+        credentialDataPublicKey :: Cose.PublicKey,
+        -- | The public key extracted from the signed certificate
+        certificatePublicKey :: Cose.PublicKey
+      }
   | -- | The challenge field of the certificate extension does not match the
     -- clientDataHash
-    VerificationErrorClientDataHashMismatch
+    -- (first: challenge from certificate extension, second: clientDataHash)
+    HashMismatch
+      { -- | The challenge part of the
+        -- [@attestation-extension@](https://source.android.com/security/keystore/attestation#attestation-extension)
+        certificateChallenge :: Digest SHA256,
+        -- | The client data hash
+        clientDataHash :: Digest SHA256
+      }
   | -- | The "attestation" extension is scoped to all applications instead of just the RpId
-    VerificationErrorAndroidKeyAllApplicationsFieldFound
-  | -- | The origin field(s) were not equal to KM_ORIGIN_GENERATED
-    VerificationErrorAndroidKeyOriginFieldInvalid
+    AndroidKeyAllApplicationsFieldFound
+  | -- | The origin field(s) were not equal to KM_ORIGIN_GENERATED (0)
+    -- (first: tee-enforced origin, second: software-enforced origin (if allowed by the specified Format))
+    AndroidKeyOriginFieldInvalid
+      { -- | The origin enforced by the trusted execution environment
+        teeEnforcedOrigin :: Maybe Integer,
+        -- | The origin enforced by software. NOTE: This field is explicitly
+        -- set to `Nothing` if the `Format` specified `TeeEnforced` as the
+        -- `requiredTrustLevel`.
+        softwareEnforcedOrigin :: Maybe Integer
+      }
   | -- | The purpose field(s) were not equal to the singleton set containing
-    -- KM_PURPOSE_SIGN
-    VerificationErrorAndroidKeyPurposeFieldInvalid
+    -- KM_PURPOSE_SIGN (2)
+    -- (first: tee-enforced purpose, second: software-enforced purpose (if allowed by the specified Format))
+    AndroidKeyPurposeFieldInvalid
+      { -- | The purpose enforced by the trusted execution environment
+        teeEnforcedPurpose :: Maybe (Set Integer),
+        -- | The purpose enforced by software. NOTE: This field is explicitly
+        -- set to `Nothing` if the `Format` specified `TeeEnforced` as the
+        -- `requiredTrustLevel`.
+        softwareEnforcedPurpose :: Maybe (Set Integer)
+      }
   | -- | The Public key cannot verify the signature over the authenticatorData
     -- and the clientDataHash.
-    VerificationErrorVerificationFailure Text
+    VerificationFailure Text
   deriving (Show, Exception)
 
 -- | [(spec)](https://android.googlesource.com/platform/hardware/libhardware/+/master/include/hardware/keymaster_defs.h)
@@ -204,7 +232,7 @@ instance M.AttestationStatementFormat Format where
 
   asfIdentifier _ = "android-key"
 
-  asfDecode _ xs = do
+  asfDecode _ xs =
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
       (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw))) -> do
         alg <- Cose.toCoseSignAlg algId
@@ -247,16 +275,19 @@ instance M.AttestationStatementFormat Format where
     let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
     case Cose.verify alg pubKey signedData sig of
       Right () -> pure ()
-      Left err -> failure $ VerificationErrorVerificationFailure err
+      Left err -> failure $ VerificationFailure err
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the
     -- attestedCredentialData in authenticatorData.
-    unless (Cose.fromCose (M.acdCredentialPublicKey adAttestedCredentialData) == pubKey) $ failure VerificationErrorCredentialKeyMismatch
+    let credentialPublicKey = Cose.fromCose (M.acdCredentialPublicKey adAttestedCredentialData)
+    unless (credentialPublicKey == pubKey) . failure $ PublicKeyMismatch credentialPublicKey pubKey
 
     -- 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to
     -- clientDataHash.
     -- See https://source.android.com/security/keystore/attestation for the ASN1 description
-    unless (attestationChallenge attExt == M.unClientDataHash clientDataHash) $ failure VerificationErrorClientDataHashMismatch
+    let attChallenge = attestationChallenge attExt
+    let clientDataHashDigest = M.unClientDataHash clientDataHash
+    unless (attChallenge == clientDataHashDigest) . failure $ HashMismatch attChallenge clientDataHashDigest
 
     -- 5. Verify the following using the appropriate authorization list from the attestation certificate extension data:
 
@@ -264,8 +295,8 @@ instance M.AttestationStatementFormat Format where
     -- authorization list (softwareEnforced nor teeEnforced), since
     -- PublicKeyCredential MUST be scoped to the RP ID.
     let software = softwareEnforced attExt
-        tee = teeEnforced attExt
-    when (isJust (allApplications software) || isJust (allApplications tee)) $ failure VerificationErrorAndroidKeyAllApplicationsFieldFound
+    let tee = teeEnforced attExt
+    when (isJust (allApplications software) || isJust (allApplications tee)) $ failure AndroidKeyAllApplicationsFieldFound
 
     -- 5.b For the following, use only the teeEnforced authorization list if the
     -- RP wants to accept only keys from a trusted execution environment,
@@ -273,15 +304,15 @@ instance M.AttestationStatementFormat Format where
     -- 5.b.1 The value in the AuthorizationList.origin field is equal to KM_ORIGIN_GENERATED.
     -- 5.b.2 The value in the AuthorizationList.purpose field is equal to KM_PURPOSE_SIGN.
     -- NOTE: This statement is ambiguous as the purpose field is a set. Existing libraries take the same approach, checking if KM_PURPOSE_SIGN is the only member.
-    let targetSet = Just $ Set.singleton kmPurposeSign
+    let targetSet = Set.singleton kmPurposeSign
     case requiredTrustLevel of
       SoftwareEnforced -> do
-        unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) $ failure VerificationErrorAndroidKeyOriginFieldInvalid
-        unless (targetSet == purpose software || targetSet == purpose tee) $ failure VerificationErrorAndroidKeyPurposeFieldInvalid
+        unless (origin software == Just kmOriginGenerated || origin tee == Just kmOriginGenerated) . failure $ AndroidKeyOriginFieldInvalid (origin tee) (origin software)
+        unless (Just targetSet == purpose software || Just targetSet == purpose tee) . failure $ AndroidKeyPurposeFieldInvalid (purpose tee) (purpose software)
         pure ()
       TeeEnforced -> do
-        unless (origin tee == Just kmOriginGenerated) $ failure VerificationErrorAndroidKeyOriginFieldInvalid
-        unless (targetSet == purpose tee) $ failure VerificationErrorAndroidKeyPurposeFieldInvalid
+        unless (origin tee == Just kmOriginGenerated) . failure $ AndroidKeyOriginFieldInvalid (origin tee) Nothing
+        unless (Just targetSet == purpose tee) . failure $ AndroidKeyPurposeFieldInvalid (purpose tee) Nothing
         pure ()
 
     -- 6. If successful, return implementation-specific values representing attestation type Basic and attestation trust

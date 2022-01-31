@@ -1114,7 +1114,14 @@ singletonAttestationStatementFormat someFormat@(SomeAttestationStatementFormat f
 
 -- | Attempt to find the desired attestation statement format in a map of
 -- supported formats. Can then be used to perform attestation.
-lookupAttestationStatementFormat :: Text -> SupportedAttestationStatementFormats -> Maybe SomeAttestationStatementFormat
+lookupAttestationStatementFormat ::
+  -- | The desired format, e.g. "android-safetynet" or "none"
+  Text ->
+  -- | The [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
+  -- that should be supported. The value of 'Crypto.WebAuthn.allSupportedFormats'
+  -- can be passed here, but additional or custom formats may also be used if needed.
+  SupportedAttestationStatementFormats ->
+  Maybe SomeAttestationStatementFormat
 lookupAttestationStatementFormat id (SupportedAttestationStatementFormats sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
