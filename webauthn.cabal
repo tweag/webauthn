@@ -17,11 +17,19 @@ homepage: https://github.com/tweag/webauthn
 bug-reports: https://github.com/tweag/webauthn/issues
 synopsis: Relying party (server) implementation of the WebAuthn 2 specification
 description:
-  Implements the [Relying Party conformance class](https://www.w3.org/TR/webauthn-2/#sctn-conforming-relying-parties)
+  == About
+  This library implements the [Relying Party conformance class](https://www.w3.org/TR/webauthn-2/#sctn-conforming-relying-parties)
   of the [Web Authentication Level 2](https://www.w3.org/TR/webauthn-2/) specification.
   This allows web applications to create strong, attested, scoped, public key-based
   credentials for the purpose of strongly authenticating users.
   .
+  == Getting started
+  The "Crypto.WebAuthn" module and its documentation is the best place to get
+  started with the library.
+  The example server: [Main.hs](https://github.com/tweag/webauthn/blob/master/server/src/Main.hs)
+  shows how this module may be used to implement a relying party.
+  .
+  == Stability
   While the general design of the library won't change, it's still in an alpha
   state, so smaller breaking changes should be expected for now. We will
   however follow the [PVP](https://pvp.haskell.org/) and properly label changes
