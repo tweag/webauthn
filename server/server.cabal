@@ -11,7 +11,7 @@ executable server
   other-modules:
     Database,
     MetadataFetch,
-    PendingOps
+    PendingCeremonies
   ghc-options:
     -Wall
     -Wmissing-export-lists
