@@ -760,6 +760,33 @@ data AuthenticatorDataFlags = AuthenticatorDataFlags
 -- and
 -- [requesting](https://www.w3.org/TR/webauthn-2/#dictionary-assertion-options).
 -- The CeremonyKind araument specifies which.
+--
+-- Values of this type are send to the client to
+-- [create](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
+-- and
+-- [get](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
+-- a credential. After they have been sent, they have to be stored awaiting the
+-- response from the client for further validation. At least the following
+-- fields have to be stored, the others are not currently used.
+--
+--  For `Crypto.WebAuthn.Operation.Registration.verifyRegistrationResponse`:
+--
+-- - `corChallenge`
+-- - `ascUserVerification` of `corAuthenticatorSelection`
+-- - `corPubKeyCredParams`
+-- - `corUser` (of which `cueId` is used in the
+--   `Crypto.WebAuthn.Operation.Registration.verifyRegistrationResponse`, and it
+--   and the other fields are need to be stored permanently by the relying party
+--   as the user entity).
+--
+--  For `Crypto.WebAuthn.Operation.Authentication.verifyAuthenticationResponse`:
+--
+-- - `coaChallenge`
+-- - `coaUserVerification`
+-- - `coaAllowCredentials`
+--
+-- Depending on implementation choices by the RP, some of these fields might
+-- additionally be constants, and could thus also be omitted when storing.
 data CredentialOptions (c :: CeremonyKind) where
   -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
   CredentialOptionsRegistration ::
@@ -846,6 +873,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
+      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
       coaExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     CredentialOptions 'Authentication
