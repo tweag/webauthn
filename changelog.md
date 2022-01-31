@@ -1,4 +1,4 @@
-### Next version
+### 0.2.0.0
 
 * [#115](https://github.com/tweag/webauthn/pull/115) Increase the upper bound
   of the supported Aeson versions, allowing the library to be built with Aeson
