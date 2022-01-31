@@ -70,7 +70,7 @@ data ExpiringChallenge = ExpiringChallenge
 -- | The current time in seconds for challenge expiration
 getNow :: IO Int64
 getNow =
-  -- We're only interested in second-resolution, this is also why we use the Coarse clock version
+  -- We're only interested in second-resolution
   sec
     -- While realtime can have backwards jumps with leap seconds, that's not a
     -- problem since our expiration times are on the order of minutes, and it's
