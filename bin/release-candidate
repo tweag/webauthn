@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+# Principles:
+# - Don't change files automatically, instead ask the user to do that
+# - This script should be idempotent, and later calls should override the results of earlier ones
+# - This script doesn't commit to a release, it only creates a Hackage candidate
+
+set -euo pipefail
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' exit
+
+if [[ "$#" -eq 0 ]]; then
+  suggestedVersion=$(sed -n 's/^### Next release: \(.*\)/\1/p' changelog.md)
+  echo "Usage: release <version> (suggested version based on changelog.md: ${suggestedVersion:-unknown})" >&2
+  exit 2
+fi
+
+version=$1
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$branch" != master ]]; then
+  echo "Please switch to the master branch" >&2
+  exit 1
+fi
+
+cabalVersion=$(sed -n 's/^version: \(.*\)/\1/p' webauthn.cabal)
+if [[ "$version" != "$cabalVersion" ]]; then
+  echo "Please update the version field in webauthn.cabal from $cabalVersion to $version" >&2
+  exit 3
+fi
+
+changelogHeader=$(sed -n '1s/^### \(.*\)/\1/p' changelog.md)
+if [[ "$version" != "$changelogHeader" ]]; then
+  echo "Please update the first header in changelog.md from \"$changelogHeader\" to \"$version\"" >&2
+  exit 4
+fi
+
+
+if ! git diff --quiet HEAD; then
+  echo "Please commit all changes into a release commit with subject \"Version $version\":" >&2
+  git --no-pager status
+  exit 5
+fi
+
+subject=$(git log --format=%s -1)
+if [[ "$subject" != "Version $version" ]]; then
+  echo "Please use \"Version $version\" as the commit subject of the release commit:" >&2
+  git --no-pager log -1 HEAD
+  exit 6
+fi
+
+set -x
+git tag --force v"$version"
+
+cabal sdist --builddir "$tmp/dist"
+cabal haddock --builddir "$tmp/docs" --haddock-for-hackage
+
+cabal upload "$tmp/dist/sdist/webauthn-$version.tar.gz"
+cabal upload --documentation "$tmp/docs/webauthn-$version-docs.tar.gz"
+
+set +x
+
+echo ""
+echo "In order to finish the release:"
+echo "- View the Hackage release candidate at https://hackage.haskell.org/package/webauthn-$version/candidate and make sure everything looks good"
+echo "- If changes are needed, make those changes, ideally with a PR. Then run this command again with the updated master branch"
+echo "- Otherwise, commit to the release by doing:"
+echo "  - git push origin master v$version"
+echo "  - Publish the Hackage release candidate at https://hackage.haskell.org/package/webauthn-$version/candidate"
+
+echo "This command is uncommitting and idempotent, it can be run more times if some changes are needed"
