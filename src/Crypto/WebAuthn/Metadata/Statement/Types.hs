@@ -1,23 +1,17 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE StandaloneDeriving #-}
-
 -- | Stability: experimental
 -- This module contains additional Haskell-specific type definitions for the
 -- [FIDO Metadata Statement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html)
 -- specification
 module Crypto.WebAuthn.Metadata.Statement.Types
   ( MetadataStatement (..),
-    ProtocolVersion (..),
     WebauthnAttestationType (..),
   )
 where
 
 import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
-import qualified Crypto.WebAuthn.Model as M
-import Data.Aeson (ToJSON, toJSON)
+import qualified Crypto.WebAuthn.Metadata.UAF as UAF
+import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
@@ -27,7 +21,7 @@ import GHC.Generics (Generic)
 import GHC.Word (Word16)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-keys)
-data MetadataStatement (p :: M.ProtocolKind) = MetadataStatement
+data MetadataStatement = MetadataStatement
   { -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-legalheader)
     msLegalHeader :: Text,
     -- msAaid, msAaguid, attestationCertificateKeyIdentifiers: These fields are the key of the hashmaps in MetadataServiceRegistry
@@ -42,7 +36,7 @@ data MetadataStatement (p :: M.ProtocolKind) = MetadataStatement
     -- msSchema, this is always schema version 3
 
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-upv)
-    msUpv :: NonEmpty (ProtocolVersion p),
+    msUpv :: NonEmpty UAF.Version,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-authenticationalgorithms)
     msAuthenticationAlgorithms :: NonEmpty Registry.AuthenticationAlgorithm,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-publickeyalgandencodings)
@@ -81,30 +75,6 @@ data MetadataStatement (p :: M.ProtocolKind) = MetadataStatement
     msAuthenticatorGetInfo :: Maybe StatementIDL.AuthenticatorGetInfo
   }
   deriving (Eq, Show, Generic, ToJSON)
-
--- | FIDO protocol versions, parametrized by the protocol family
-data ProtocolVersion (p :: M.ProtocolKind) where
-  -- | FIDO U2F 1.0
-  U2F1_0 :: ProtocolVersion 'M.FidoU2F
-  -- | FIDO U2F 1.1
-  U2F1_1 :: ProtocolVersion 'M.FidoU2F
-  -- | FIDO U2F 1.2
-  U2F1_2 :: ProtocolVersion 'M.FidoU2F
-  -- | FIDO 2, CTAP 2.0
-  CTAP2_0 :: ProtocolVersion 'M.Fido2
-  -- | FIDO 2, CTAP 2.1
-  CTAP2_1 :: ProtocolVersion 'M.Fido2
-
-deriving instance Eq (ProtocolVersion p)
-
-deriving instance Show (ProtocolVersion p)
-
-instance ToJSON (ProtocolVersion p) where
-  toJSON U2F1_0 = "U2F 1.0"
-  toJSON U2F1_1 = "U2F 1.1"
-  toJSON U2F1_2 = "U2F 1.2"
-  toJSON CTAP2_0 = "CTAP 2.0"
-  toJSON CTAP2_1 = "CTAP 2.1"
 
 -- | Values of 'Registry.AuthenticatorAttestationType' but limited to the ones possible with Webauthn, see https://www.w3.org/TR/webauthn-2/#sctn-attestation-types
 data WebauthnAttestationType
