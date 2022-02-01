@@ -14,7 +14,7 @@ import qualified Crypto.WebAuthn.Model.Types as M
 -- | All supported [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
 -- of this library. This value can be passed to 'Crypto.WebAuthn.Model.WebIDL.Decoding.decodeCreatedPublicKeyCredential'.
 -- Since 'M.SupportedAttestationStatementFormats' is a 'Semigroup' the '<>' operator can be used to add additional formats if needed.
-allSupportedFormats :: M.SupportedAttestationStatementFormats
+allSupportedFormats :: M.AttestationStatementFormatRegistry
 allSupportedFormats =
   foldMap
     M.singletonAttestationStatementFormat

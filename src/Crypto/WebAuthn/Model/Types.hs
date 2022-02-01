@@ -76,7 +76,7 @@ module Crypto.WebAuthn.Model.Types
     SomeAttestationType (..),
     AttestationStatementFormat (..),
     SomeAttestationStatementFormat (..),
-    SupportedAttestationStatementFormats,
+    AttestationStatementFormatRegistry,
     singletonAttestationStatementFormat,
     lookupAttestationStatementFormat,
 
@@ -1129,16 +1129,16 @@ data SomeAttestationStatementFormat
 -- 'singletonAttestationStatementFormat' instead to construct it and
 -- 'lookupAttestationStatementFormat' to look up formats. '<>' can be used to
 -- combine multiple formats. 'mempty' can be used for not supporting any formats.
-newtype SupportedAttestationStatementFormats
+newtype AttestationStatementFormatRegistry
   = -- HashMap invariant: asfIdentifier (hm ! k) == k
-    SupportedAttestationStatementFormats (HashMap Text SomeAttestationStatementFormat)
+    AttestationStatementFormatRegistry (HashMap Text SomeAttestationStatementFormat)
   deriving newtype (Semigroup, Monoid)
 
--- | Creates a `SupportedAttestationStatementFormats`-Map containing a single
+-- | Creates a `AttestationStatementFormatRegistry`-Map containing a single
 -- supported format.
-singletonAttestationStatementFormat :: SomeAttestationStatementFormat -> SupportedAttestationStatementFormats
+singletonAttestationStatementFormat :: SomeAttestationStatementFormat -> AttestationStatementFormatRegistry
 singletonAttestationStatementFormat someFormat@(SomeAttestationStatementFormat format) =
-  SupportedAttestationStatementFormats $ HashMap.singleton (asfIdentifier format) someFormat
+  AttestationStatementFormatRegistry $ HashMap.singleton (asfIdentifier format) someFormat
 
 -- | Attempt to find the desired attestation statement format in a map of
 -- supported formats. Can then be used to perform attestation.
@@ -1148,9 +1148,9 @@ lookupAttestationStatementFormat ::
   -- | The [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
   -- that should be supported. The value of 'Crypto.WebAuthn.allSupportedFormats'
   -- can be passed here, but additional or custom formats may also be used if needed.
-  SupportedAttestationStatementFormats ->
+  AttestationStatementFormatRegistry ->
   Maybe SomeAttestationStatementFormat
-lookupAttestationStatementFormat id (SupportedAttestationStatementFormats sasf) = sasf !? id
+lookupAttestationStatementFormat id (AttestationStatementFormatRegistry sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
 data AttestationObject raw = forall a.

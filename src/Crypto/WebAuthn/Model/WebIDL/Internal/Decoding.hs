@@ -40,7 +40,7 @@ class Convert a => Decode a where
 -- 'M.SupportedAttestationStatementFormats' in order to allow decoding to depend
 -- on the supported attestation formats.
 class Convert a => DecodeCreated a where
-  decodeCreated :: M.SupportedAttestationStatementFormats -> IDL a -> Either Text a
+  decodeCreated :: M.AttestationStatementFormatRegistry -> IDL a -> Either Text a
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing

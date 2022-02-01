@@ -177,7 +177,7 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes $ do
 -- structure This function takes a 'M.SupportedAttestationStatementFormats'
 -- argument to indicate which attestation statement formats are supported.
 -- structure
-decodeAttestationObject :: M.SupportedAttestationStatementFormats -> BS.ByteString -> Either Text (M.AttestationObject 'True)
+decodeAttestationObject :: M.AttestationStatementFormatRegistry -> BS.ByteString -> Either Text (M.AttestationObject 'True)
 decodeAttestationObject supportedFormats bytes = do
   (_consumed, result) <- runPartialBinaryDecoder bytes (runCBOR CBOR.decodeTerm)
   pairs <- case result of
