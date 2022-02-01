@@ -36,8 +36,10 @@ import Network.Wai.Middleware.Static (addBase, staticPolicy)
 import PendingCeremonies
   ( PendingCeremonies,
     defaultPendingCeremoniesConfig,
-    getPendingCeremony,
-    insertPendingCeremony,
+    getPendingAuthentication,
+    getPendingRegistration,
+    insertPendingAuthentication,
+    insertPendingRegistration,
     newPendingCeremonies,
   )
 import System.Environment (getArgs)
@@ -220,7 +222,7 @@ beginRegistration db pending = do
             WA.cueDisplayName = WA.UserAccountDisplayName accountDisplayName,
             WA.cueName = WA.UserAccountName accountName
           }
-  options <- Scotty.liftAndCatchIO $ insertPendingCeremony pending $ defaultPkcco user
+  options <- Scotty.liftAndCatchIO $ insertPendingRegistration pending $ defaultPkcco user
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin => " <> jsonText options
   Scotty.json $ WA.encodeCredentialOptionsRegistration options
 
@@ -247,7 +249,7 @@ completeRegistration origin rpIdHash db pending registryVar = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete <= " <> jsonText (WA.stripRawCredential cred)
 
   options <-
-    Scotty.liftAndCatchIO (getPendingCeremony pending cred) >>= \case
+    Scotty.liftAndCatchIO (getPendingRegistration pending cred) >>= \case
       Left err -> do
         Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete problem with challenge: " <> jsonText (String $ Text.pack err)
         Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
@@ -311,7 +313,7 @@ beginLogin db pending = do
   -- RP implementation. See the documentation of `WA.CredentialOptions` for
   -- more information.
   options <- Scotty.liftAndCatchIO $
-    insertPendingCeremony pending $ \challenge -> do
+    insertPendingAuthentication pending $ \challenge -> do
       WA.CredentialOptionsAuthentication
         { WA.coaRpId = Nothing,
           WA.coaTimeout = Nothing,
@@ -354,7 +356,7 @@ completeLogin origin rpIdHash db pending = do
 
   -- Retrieve stored options from the pendingOptions
   options <-
-    Scotty.liftAndCatchIO (getPendingCeremony pending cred) >>= \case
+    Scotty.liftAndCatchIO (getPendingAuthentication pending cred) >>= \case
       Left err -> do
         Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete problem with challenge: " <> jsonText (String $ Text.pack err)
         Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
