@@ -1,4 +1,4 @@
-### Next version (0.3.0.0)
+### 0.3.0.0
 
 * [#125](https://github.com/tweag/webauthn/pull/125) Some small metadata type
   simplifications involving `msUpv` and `SomeMetadataEntry`
