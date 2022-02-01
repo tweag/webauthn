@@ -1,7 +1,5 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Stability: experimental
 -- This module contains functions to further decode
@@ -21,7 +19,6 @@ import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import Crypto.WebAuthn.Metadata.Statement.Types (WebauthnAttestationType (WebauthnAttestationAttCA, WebauthnAttestationBasic))
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as StatementTypes
 import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
-import qualified Crypto.WebAuthn.Metadata.UAF as UAF
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Identifier (AAGUID (AAGUID), AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F), SubjectKeyIdentifier (SubjectKeyIdentifier))
 import qualified Crypto.WebAuthn.WebIDL as IDL
@@ -32,7 +29,6 @@ import qualified Data.ByteString.Base64 as Base64
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (mapMaybe)
-import Data.Singletons (SingI, sing)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
@@ -68,25 +64,21 @@ decodeCertificate text =
 -- | Fully decodes a [MetadataStatement](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#metadata-keys).
 -- The @p@ type parameter is the 'StatementIDL.ProtocolFamily' that this metadata statement is for.
 decodeMetadataStatement ::
-  forall p.
-  SingI p =>
   -- | The raw metadata statement, directly parsed from JSON
   StatementIDL.MetadataStatement ->
   -- | Either an early exit with 'Left', where @Left Nothing@ signals that
   -- this entry can be skipped because it's not relevant for Webauthn, and
   -- @Left . Just@ signals that an error happened during decoding
   -- Otherwise a successful result with 'Right'
-  Either (Maybe Text) (StatementTypes.MetadataStatement p)
+  Either (Maybe Text) StatementTypes.MetadataStatement
 decodeMetadataStatement StatementIDL.MetadataStatement {..} = do
   let msLegalHeader = legalHeader
       msDescription = description
       msAlternativeDescriptions = alternativeDescriptions
       msAuthenticatorVersion = authenticatorVersion
   unless (schema == 3) $ Left $ Just $ "Schema version is not 3 but " <> Text.pack (show schema)
-  msUpv <- case sing @p of
-    M.SFidoU2F -> first Just $ traverse decodeUpvFidoU2F upv
-    M.SFido2 -> first Just $ traverse decodeUpvFido2 upv
-  let msAuthenticationAlgorithms = authenticationAlgorithms
+  let msUpv = upv
+      msAuthenticationAlgorithms = authenticationAlgorithms
       msPublicKeyAlgAndEncodings = publicKeyAlgAndEncodings
   msAttestationTypes <- decodeAttestationTypes attestationTypes
   let msUserVerificationDetails = userVerificationDetails
@@ -109,17 +101,6 @@ decodeMetadataStatement StatementIDL.MetadataStatement {..} = do
       msAuthenticatorGetInfo = authenticatorGetInfo
   pure $ StatementTypes.MetadataStatement {..}
   where
-    decodeUpvFidoU2F :: UAF.Version -> Either Text (StatementTypes.ProtocolVersion 'M.FidoU2F)
-    decodeUpvFidoU2F UAF.Version {UAF.major = 1, UAF.minor = 0} = Right StatementTypes.U2F1_0
-    decodeUpvFidoU2F UAF.Version {UAF.major = 1, UAF.minor = 1} = Right StatementTypes.U2F1_1
-    decodeUpvFidoU2F UAF.Version {UAF.major = 1, UAF.minor = 2} = Right StatementTypes.U2F1_2
-    decodeUpvFidoU2F version = Left $ "Unknown FIDO U2F UPV version: " <> Text.pack (show version)
-
-    decodeUpvFido2 :: UAF.Version -> Either Text (StatementTypes.ProtocolVersion 'M.Fido2)
-    decodeUpvFido2 UAF.Version {UAF.major = 1, UAF.minor = 0} = Right StatementTypes.CTAP2_0
-    decodeUpvFido2 UAF.Version {UAF.major = 1, UAF.minor = 1} = Right StatementTypes.CTAP2_1
-    decodeUpvFido2 version = Left $ "Unknown FIDO2 UPV version: " <> Text.pack (show version)
-
     -- Turns a non-empty list of 'Registry.AuthenticatorAttestationType' into a non-empty list of 'WebauthnAttestationType'.
     -- If the authenticator doesn't support any webauthn attestation types,
     -- `Left Nothing` is returned, indicating that this authenticator should be ignored

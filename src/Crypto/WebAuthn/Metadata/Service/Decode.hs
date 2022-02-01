@@ -55,19 +55,18 @@ decodeMetadataEntry ServiceIDL.MetadataBLOBPayloadEntry {..} = liftEitherMaybe $
       Left Nothing
     (Nothing, Just aaguid, Nothing) -> do
       -- This is a FIDO 2 entry
-      identifier <- first Just $ decodeAAGUID aaguid
+      meIdentifier <- first Just $ decodeAAGUID aaguid
       meMetadataStatement <- traverse decodeMetadataStatement metadataStatement
       meStatusReports <- first Just $ traverse decodeStatusReport statusReports
       meTimeOfLastStatusChange <- first Just $ decodeDate timeOfLastStatusChange
-      Right $ pure $ ServiceTypes.SomeMetadataEntry identifier ServiceTypes.MetadataEntry {..}
+      Right $ pure $ ServiceTypes.SomeMetadataEntry ServiceTypes.MetadataEntry {..}
     (Nothing, Nothing, Just attestationCertificateKeyIdentifiers) -> do
       -- This is a FIDO U2F entry
       identifiers <- first Just $ traverse decodeSubjectKeyIdentifier attestationCertificateKeyIdentifiers
       meMetadataStatement <- traverse decodeMetadataStatement metadataStatement
       meStatusReports <- first Just $ traverse decodeStatusReport statusReports
       meTimeOfLastStatusChange <- first Just $ decodeDate timeOfLastStatusChange
-      let entry = ServiceTypes.MetadataEntry {..}
-      Right $ fmap (`ServiceTypes.SomeMetadataEntry` entry) identifiers
+      Right $ fmap (\meIdentifier -> ServiceTypes.SomeMetadataEntry ServiceTypes.MetadataEntry {..}) identifiers
     (Nothing, Nothing, Nothing) ->
       Left $ Just "None of aaid, aaguid or attestationCertificateKeyIdentifiers are set for this entry"
     _ ->

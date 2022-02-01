@@ -513,7 +513,7 @@ validateAttestationChain
 -- | Metadata statements can convey multiple attestation types.
 -- In such a case we choose to result in the Uncertain type.
 -- Otherwise, we results in the only one available.
-fixupVerifiableAttestationType :: M.VerifiableAttestationType -> Meta.MetadataStatement p -> M.VerifiableAttestationType
+fixupVerifiableAttestationType :: M.VerifiableAttestationType -> Meta.MetadataStatement -> M.VerifiableAttestationType
 fixupVerifiableAttestationType M.VerifiableAttestationTypeUncertain statement =
   case Meta.msAttestationTypes statement of
     -- If there are multiple types we can't know which one it is
