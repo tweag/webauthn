@@ -164,7 +164,7 @@ validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = al
     isValidated O.RegistrationUserNotPresent = not $ M.adfUserPresent aAuthenticatorDataFlags
     -- The User not being valided must be a result of the authenticator not validating the user
     isValidated O.RegistrationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
-    isValidated (O.RegistrationUndesiredPublicKeyAlgorithm _ _) = False
+    isValidated (O.RegistrationPublicKeyAlgorithmDisallowed _ _) = False
     isValidated (O.RegistrationAttestationFormatError _ _) = False
 
 -- | Validates the result of assertion. Ensures that the proper errors are
@@ -186,7 +186,7 @@ validAssertionResult AuthenticatorNone {..} _ (Right O.SignatureCounterPotential
 validAssertionResult AuthenticatorNone {..} uaConformance (Left errors) = all isValidated errors
   where
     isValidated :: O.AuthenticationError -> Bool
-    isValidated (O.AuthenticationDisallowedCredential _ _) = False
+    isValidated (O.AuthenticationCredentialDisallowed _ _) = False
     isValidated (O.AuthenticationIdentifiedUserHandleMismatch _ _) = False
     isValidated (O.AuthenticationCredentialUserHandleMismatch _ _) = False
     isValidated O.AuthenticationCannotVerifyUserHandle = False
@@ -199,7 +199,7 @@ validAssertionResult AuthenticatorNone {..} uaConformance (Left errors) = all is
     isValidated O.AuthenticationUserNotVerified = not $ M.adfUserVerified aAuthenticatorDataFlags
     -- The Signature being invalid can happen when the data was wrong or the wrong private key was used
     isValidated (O.AuthenticationSignatureDecodingError _) = False
-    isValidated O.AuthenticationInvalidSignature {} = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
+    isValidated O.AuthenticationSignatureInvalid {} = elem RandomSignatureData aConformance || elem RandomPrivateKey aConformance
 
 -- | Create a default set of options for attestation. These options can be modified before using them in the tests
 defaultPkcoc :: M.CredentialUserEntity -> M.Challenge -> M.CredentialOptions 'M.Registration

@@ -59,21 +59,45 @@ import GHC.Generics (Generic)
 
 -- | All the errors that can result from a call to 'verifyRegistrationResponse'
 data RegistrationError
-  = -- | The returned challenge does not match the desired one
-    RegistrationChallengeMismatch M.Challenge M.Challenge
+  = -- | The received challenge does not match the originally created
+    -- challenge
+    RegistrationChallengeMismatch
+      { -- | The challenge created by the relying party and part of the
+        -- `M.CredentialOptions`
+        reCreatedChallenge :: M.Challenge,
+        -- | The challenge received from the client, part of the response
+        reReceivedChallenge :: M.Challenge
+      }
   | -- | The returned origin does not match the relying party's origin
-    RegistrationOriginMismatch M.Origin M.Origin
-  | -- | The hash of the relying party id does not match the has in the returned authentication data
-    RegistrationRpIdHashMismatch M.RpIdHash M.RpIdHash
+    RegistrationOriginMismatch
+      { -- | The origin explicitly passed to the `verifyRegistrationResponse`
+        -- response, set by the RP
+        reExpectedOrigin :: M.Origin,
+        -- | The origin received from the client as part of the client data
+        reReceivedOrigin :: M.Origin
+      }
+  | -- | The rpIdHash in the authData is not a valid hash over the RpId
+    -- expected by the Relying party
+    RegistrationRpIdHashMismatch
+      { -- | The RP ID hash explicitly passed to the
+        -- `verifyAuthenticationResponse` response, set by the RP
+        reExpectedRpIdHash :: M.RpIdHash,
+        -- | The RP ID hash received from the client as part of the authenticator
+        -- data
+        reReceivedRpIdHash :: M.RpIdHash
+      }
   | -- | The userpresent bit in the authdata was not set
     RegistrationUserNotPresent
   | -- | The userverified bit in the authdata was not set
     RegistrationUserNotVerified
   | -- | The algorithm received from the client was not one of the algorithms
     -- we (the relying party) requested from the client.
-    -- first: The received algorithm
-    -- second: The list of requested algorithm
-    RegistrationUndesiredPublicKeyAlgorithm Cose.CoseSignAlg [Cose.CoseSignAlg]
+    RegistrationPublicKeyAlgorithmDisallowed
+      { -- | The signing algorithms requested by the RP
+        reAllowedSigningAlgorithms :: [Cose.CoseSignAlg],
+        -- | The signing algorithm received from the client
+        reReceivedSigningAlgorithm :: Cose.CoseSignAlg
+      }
   | -- | There was some exception in the statement format specific section
     forall a. M.AttestationStatementFormat a => RegistrationAttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
 
@@ -309,12 +333,12 @@ verifyRegistrationResponse
 
       -- 8. Verify that the value of C.challenge equals the base64url encoding of
       -- options.challenge.
-      unless (M.ccdChallenge c == corChallenge) $
-        failure $ RegistrationChallengeMismatch (M.ccdChallenge c) corChallenge
+      unless (corChallenge == M.ccdChallenge c) $
+        failure $ RegistrationChallengeMismatch corChallenge (M.ccdChallenge c)
 
       -- 9. Verify that the value of C.origin matches the Relying Party's origin.
-      unless (M.ccdOrigin c == rpOrigin) $
-        failure $ RegistrationOriginMismatch (M.ccdOrigin c) rpOrigin
+      unless (rpOrigin == M.ccdOrigin c) $
+        failure $ RegistrationOriginMismatch rpOrigin (M.ccdOrigin c)
 
       -- 10. Verify that the value of C.tokenBinding.status matches the state of
       -- Token Binding for the TLS connection over which the assertion was
@@ -338,8 +362,8 @@ verifyRegistrationResponse
 
       -- 13. Verify that the rpIdHash in authData is the SHA-256 hash of the RP
       -- ID expected by the Relying Party.
-      unless (M.adRpIdHash authData == rpIdHash) $
-        failure $ RegistrationRpIdHashMismatch (M.adRpIdHash authData) rpIdHash
+      unless (rpIdHash == M.adRpIdHash authData) $
+        failure $ RegistrationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
       -- 14. Verify that the User Present bit of the flags in authData is set.
       unless (M.adfUserPresent (M.adFlags authData)) $
@@ -367,7 +391,7 @@ verifyRegistrationResponse
       let acdAlg = Cose.keySignAlg acdCredentialPublicKey
           desiredAlgs = map M.cpAlg corPubKeyCredParams
       unless (acdAlg `elem` desiredAlgs) $
-        failure $ RegistrationUndesiredPublicKeyAlgorithm acdAlg desiredAlgs
+        failure $ RegistrationPublicKeyAlgorithmDisallowed desiredAlgs acdAlg
 
       -- 17. Verify that the values of the client extension outputs in
       -- clientExtensionResults and the authenticator extension outputs in the
