@@ -224,10 +224,11 @@ beginRegistration db pending = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin => " <> jsonText options
   Scotty.json $ WA.encodeCredentialOptionsRegistration options
 
--- | Completes the registration procedure. Receives the credential from the
--- client and performs the registration ceremony. If the ceremony succeeds, the
--- user is added to the database, logged in, and redirected to the
--- @authenticated.html@ page.
+-- | Completes the relying party's responsibilities of the registration
+-- ceremony. Receives the credential from the client and performs the
+-- [registration operation](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential).
+-- If the operation succeeds, the user is added to the database, logged in, and
+-- redirected to the @authenticated.html@ page.
 completeRegistration ::
   WA.Origin ->
   WA.RpIdHash ->
@@ -332,8 +333,11 @@ beginLogin db pending = do
           WA.cdTransports = Just ceTransports
         }
 
--- | Receives the credential from the client and perform the authentication
--- ceremony. If the credential is valid the user is logged in.
+-- | Completes the relying party's responsibilities of the authentication
+-- ceremony. Receives the credential from the client and performs the
+-- [authentication operation](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion).
+-- If the operation succeeds, the user is logged in, and
+-- redirected to the @authenticated.html@ page.
 completeLogin :: WA.Origin -> WA.RpIdHash -> Database.Connection -> PendingCeremonies -> Scotty.ActionM ()
 completeLogin origin rpIdHash db pending = do
   -- Receive the credential from the client
