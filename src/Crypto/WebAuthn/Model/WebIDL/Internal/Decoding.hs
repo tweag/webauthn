@@ -13,11 +13,10 @@
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
 module Crypto.WebAuthn.Model.WebIDL.Internal.Decoding
   ( Decode (..),
-    DecodeCreated (..),
   )
 where
 
-import Control.Monad.Except (Except, lift, liftEither)
+import Control.Monad.Except (Except, liftEither)
 import Control.Monad.Reader (ReaderT, ask)
 import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Model.Kinds as K
@@ -38,15 +37,9 @@ type Decoder = ReaderT M.WebAuthnRegistries (Except Text)
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be
 -- decoded from the more generic JavaScript type @'IDL' a@ with the 'decode' function.
 class Convert a => Decode a where
-  decode :: IDL a -> Except Text a
-  default decode :: Coercible (IDL a) a => IDL a -> Except Text a
+  decode :: IDL a -> Decoder a
+  default decode :: Coercible (IDL a) a => IDL a -> Decoder a
   decode = pure . coerce
-
--- | Like 'Decode', but with a 'decodeCreated' function that also takes a
--- 'M.SupportedAttestationStatementFormats' in order to allow decoding to depend
--- on the supported attestation formats.
-class Convert a => DecodeCreated a where
-  decodeCreated :: IDL a -> Decoder a
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -135,7 +128,7 @@ instance Decode [M.CredentialDescriptor] where
   decode Nothing = pure []
   decode (Just xs) = catMaybes <$> traverse decodeDescriptor xs
     where
-      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Except Text (Maybe M.CredentialDescriptor)
+      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Decoder (Maybe M.CredentialDescriptor)
       decodeDescriptor IDL.PublicKeyCredentialDescriptor {littype = "public-key", ..} = do
         let cdTyp = M.CredentialTypePublicKey
         cdId <- decode id
@@ -198,7 +191,7 @@ instance Decode M.AttestationConveyancePreference where
 instance Decode [M.CredentialParameters] where
   decode xs = catMaybes <$> traverse decodeParam xs
     where
-      decodeParam :: IDL.PublicKeyCredentialParameters -> Except Text (Maybe M.CredentialParameters)
+      decodeParam :: IDL.PublicKeyCredentialParameters -> Decoder (Maybe M.CredentialParameters)
       decodeParam IDL.PublicKeyCredentialParameters {littype = "public-key", ..} = do
         let cpTyp = M.CredentialTypePublicKey
         cpAlg <- decode alg
@@ -231,23 +224,23 @@ instance Decode (M.CredentialOptions 'K.Authentication) where
     pure $ M.CredentialOptionsAuthentication {..}
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
-instance DecodeCreated (M.AttestationObject 'True) where
-  decodeCreated (IDL.URLEncodedBase64 bytes) = do
+instance Decode (M.AttestationObject 'True) where
+  decode (IDL.URLEncodedBase64 bytes) = do
     registries <- ask
     liftEither $ B.decodeAttestationObject (M.warAttestationStatementFormats registries) bytes
 
-instance DecodeCreated (M.AuthenticatorResponse 'K.Registration 'True) where
-  decodeCreated IDL.AuthenticatorAttestationResponse {..} = do
-    arrClientData <- lift $ decode clientDataJSON
-    arrAttestationObject <- decodeCreated attestationObject
+instance Decode (M.AuthenticatorResponse 'K.Registration 'True) where
+  decode IDL.AuthenticatorAttestationResponse {..} = do
+    arrClientData <- decode clientDataJSON
+    arrAttestationObject <- decode attestationObject
     arrTransports <- case transports of
       Nothing -> pure []
-      Just t -> lift $ decode t
+      Just t -> decode t
     pure $ M.AuthenticatorResponseRegistration {..}
 
-instance DecodeCreated (M.Credential 'K.Registration 'True) where
-  decodeCreated IDL.PublicKeyCredential {..} = do
-    cIdentifier <- lift $ decode rawId
-    cResponse <- decodeCreated response
-    cClientExtensionResults <- lift $ decode clientExtensionResults
+instance Decode (M.Credential 'K.Registration 'True) where
+  decode IDL.PublicKeyCredential {..} = do
+    cIdentifier <- decode rawId
+    cResponse <- decode response
+    cClientExtensionResults <- decode clientExtensionResults
     pure $ M.Credential {..}

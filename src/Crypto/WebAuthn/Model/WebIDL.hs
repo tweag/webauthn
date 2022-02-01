@@ -22,7 +22,7 @@ import Control.Monad.Except (runExcept)
 import Control.Monad.Reader (runReaderT)
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as T
-import Crypto.WebAuthn.Model.WebIDL.Internal.Decoding (Decode (decode), DecodeCreated (decodeCreated))
+import Crypto.WebAuthn.Model.WebIDL.Internal.Decoding (Decode (decode))
 import Crypto.WebAuthn.Model.WebIDL.Internal.Encoding (Encode (encode))
 import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import Data.Aeson (FromJSON, ToJSON)
@@ -61,13 +61,16 @@ newtype IDLCredentialRegistration = IDLCredentialRegistration
 -- function, to a @'T.Credential' 'K.Registration'@. This is the continuation
 -- of 'encodeCredentialOptionsRegistration'.
 decodeCredentialRegistration ::
-  -- | The [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
-  -- that should be supported. The value of 'Crypto.WebAuthn.allSupportedFormats'
-  -- can be passed here, but additional or custom formats may also be used if needed
+  -- | The [WebAuthn registries](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids)
+  -- that should be supported. This currently only includes
+  -- [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+  -- The value of 'Crypto.WebAuthn.Registries.supportedRegistries' can be
+  -- passed here, but additional or custom registry values may also be used if
+  -- needed
   T.WebAuthnRegistries ->
   IDLCredentialRegistration ->
   Either Text (T.Credential 'K.Registration 'True)
-decodeCredentialRegistration registries (IDLCredentialRegistration value) = runExcept $ runReaderT (decodeCreated value) registries
+decodeCredentialRegistration registries (IDLCredentialRegistration value) = runExcept $ runReaderT (decode value) registries
 
 -- | Encodes a @'T.CredentialOptions' 'K.Authentication'@, which is needed for the
 -- [authentication ceremony](https://www.w3.org/TR/webauthn-2/#authentication). The
@@ -109,6 +112,13 @@ newtype IDLCredentialAuthentication = IDLCredentialAuthentication
 -- function, to a @'T.Credential' 'K.Authentication' True@. This is the continuation
 -- of 'encodeCredentialOptionsAuthentication'
 decodeCredentialAuthentication ::
+  -- | The [WebAuthn registries](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids)
+  -- that should be supported. This currently only includes
+  -- [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats),
+  -- which notably isn't used during authentication. The value of
+  -- 'Crypto.WebAuthn.Registries.supportedRegistries' can be passed here, but
+  -- additional or custom registry values may also be used if needed.
+  T.WebAuthnRegistries ->
   IDLCredentialAuthentication ->
   Either Text (T.Credential 'K.Authentication 'True)
-decodeCredentialAuthentication (IDLCredentialAuthentication value) = runExcept $ decode value
+decodeCredentialAuthentication registries (IDLCredentialAuthentication value) = runExcept $ runReaderT (decode value) registries

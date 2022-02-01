@@ -345,7 +345,7 @@ completeLogin origin rpIdHash db pending = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Raw login complete <= " <> jsonText credential
 
   -- Decode credential
-  cred <- case WA.decodeCredentialAuthentication credential of
+  cred <- case WA.decodeCredentialAuthentication WA.supportedRegistries credential of
     Left err -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete failed to decode request: " <> Text.pack (show err)
       fail $ show err

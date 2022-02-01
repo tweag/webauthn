@@ -140,7 +140,7 @@ main = Hspec.hspec $ do
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
         loginReq <-
-          either (error . show) id . M.decodeCredentialAuthentication
+          either (error . show) id . M.decodeCredentialAuthentication supportedRegistries
             <$> decodeFile
               @M.IDLCredentialAuthentication
               "tests/responses/assertion/01-none.json"
