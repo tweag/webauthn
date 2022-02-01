@@ -79,6 +79,14 @@
 -- [a potential implementation](https://github.com/tweag/webauthn/blob/master/server/www/unauthenticated.js).
 -- See also these [Sample API Usage Scenarios](https://www.w3.org/TR/webauthn-2/#sctn-sample-scenarios).
 --
+-- == WebAuthn Security considerations
+--
+-- [Chapter 13](https://www.w3.org/TR/webauthn-2/#sctn-security-considerations)
+-- details the security considerations of WebAuthn. It is highly recommend to
+-- read at least the
+-- [relying party section](https://www.w3.org/TR/webauthn-2/#sctn-security-considerations-rp)
+-- of these considerations before implementing a relying party.
+--
 -- == Library
 --
 -- The two ceremonies described above are very similar in many ways. Because of
