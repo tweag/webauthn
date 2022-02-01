@@ -124,7 +124,7 @@ module Crypto.WebAuthn
     -- implementations of all standard attestation statement formats supported
     -- by this library. It can be passed to the 'decodeCredentialRegistration'
     -- to enable all these formats.
-    module Crypto.WebAuthn.AttestationStatementFormat,
+    module Crypto.WebAuthn.Registries,
 
     -- * Operations
 
@@ -158,7 +158,7 @@ module Crypto.WebAuthn
   )
 where
 
-import Crypto.WebAuthn.AttestationStatementFormat
 import Crypto.WebAuthn.Metadata
 import Crypto.WebAuthn.Model
 import Crypto.WebAuthn.Operation
+import Crypto.WebAuthn.Registries

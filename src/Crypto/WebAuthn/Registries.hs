@@ -1,6 +1,6 @@
 -- | Stability: experimental
 -- This module exports all supported [attestation statement format](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)s by this library.
-module Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats) where
+module Crypto.WebAuthn.Registries (supportedRegistries) where
 
 import qualified Crypto.WebAuthn.AttestationStatementFormat.AndroidKey as AndroidKey
 import qualified Crypto.WebAuthn.AttestationStatementFormat.AndroidSafetyNet as AndroidSafetyNet
@@ -14,15 +14,18 @@ import qualified Crypto.WebAuthn.Model.Types as M
 -- | All supported [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
 -- of this library. This value can be passed to 'Crypto.WebAuthn.Model.WebIDL.Decoding.decodeCreatedPublicKeyCredential'.
 -- Since 'M.SupportedAttestationStatementFormats' is a 'Semigroup' the '<>' operator can be used to add additional formats if needed.
-allSupportedFormats :: M.AttestationStatementFormatRegistry
-allSupportedFormats =
-  foldMap
-    M.singletonAttestationStatementFormat
-    [ None.format,
-      Packed.format,
-      AndroidKey.format,
-      AndroidSafetyNet.format,
-      FidoU2F.format,
-      Apple.format,
-      TPM.format
-    ]
+supportedRegistries :: M.WebAuthnRegistries
+supportedRegistries =
+  M.WebAuthnRegistries
+    { M.warAttestationStatementFormats =
+        foldMap
+          M.singletonAttestationStatementFormat
+          [ None.format,
+            Packed.format,
+            AndroidKey.format,
+            AndroidSafetyNet.format,
+            FidoU2F.format,
+            Apple.format,
+            TPM.format
+          ]
+    }

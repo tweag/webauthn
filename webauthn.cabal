@@ -105,7 +105,6 @@ library
     x509-validation       >= 1.6.12 && < 1.7
   exposed-modules:
     Crypto.WebAuthn,
-    Crypto.WebAuthn.AttestationStatementFormat,
     Crypto.WebAuthn.AttestationStatementFormat.AndroidKey,
     Crypto.WebAuthn.AttestationStatementFormat.AndroidSafetyNet,
     Crypto.WebAuthn.AttestationStatementFormat.Apple,
@@ -145,6 +144,7 @@ library
     Crypto.WebAuthn.Model.WebIDL.Internal.Encoding,
     Crypto.WebAuthn.Model.WebIDL.Internal.Convert,
     Crypto.WebAuthn.Model.WebIDL.Types,
+    Crypto.WebAuthn.Registries,
     Crypto.WebAuthn.WebIDL
 
 test-suite tests

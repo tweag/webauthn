@@ -40,7 +40,7 @@ class Convert a => Decode a where
 -- 'M.SupportedAttestationStatementFormats' in order to allow decoding to depend
 -- on the supported attestation formats.
 class Convert a => DecodeCreated a where
-  decodeCreated :: M.AttestationStatementFormatRegistry -> IDL a -> Either Text a
+  decodeCreated :: M.WebAuthnRegistries -> IDL a -> Either Text a
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -226,8 +226,8 @@ instance Decode (M.CredentialOptions 'K.Authentication) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated (M.AttestationObject 'True) where
-  decodeCreated supportedFormats (IDL.URLEncodedBase64 bytes) =
-    B.decodeAttestationObject supportedFormats bytes
+  decodeCreated registries (IDL.URLEncodedBase64 bytes) =
+    B.decodeAttestationObject (M.warAttestationStatementFormats registries) bytes
 
 instance DecodeCreated (M.AuthenticatorResponse 'K.Registration 'True) where
   decodeCreated supportedFormats IDL.AuthenticatorAttestationResponse {..} = do

@@ -79,6 +79,7 @@ module Crypto.WebAuthn.Model.Types
     AttestationStatementFormatRegistry,
     singletonAttestationStatementFormat,
     lookupAttestationStatementFormat,
+    WebAuthnRegistries (..),
 
     -- * Raw fields
     RawField (..),
@@ -1151,6 +1152,18 @@ lookupAttestationStatementFormat ::
   AttestationStatementFormatRegistry ->
   Maybe SomeAttestationStatementFormat
 lookupAttestationStatementFormat id (AttestationStatementFormatRegistry sasf) = sasf !? id
+
+-- A type for [IANA WebAuthn registries](https://www.iana.org/assignments/webauthn/webauthn.xhtml)
+-- of identifiers and their implementations. This currently only includes the
+-- [WebAuthn Attestation Statement Format Identifiers
+-- registry](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-attestation-statement-format-ids),
+-- but in the future the [WebAuthn Extension Identifiers
+-- registry](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids)
+-- could be included as well.
+newtype WebAuthnRegistries = WebAuthnRegistries
+  { warAttestationStatementFormats :: AttestationStatementFormatRegistry
+  }
+  deriving newtype (Semigroup, Monoid)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
 data AttestationObject raw = forall a.

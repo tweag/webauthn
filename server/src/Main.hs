@@ -239,7 +239,7 @@ completeRegistration ::
 completeRegistration origin rpIdHash db pending registryVar = do
   credential <- Scotty.jsonData
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Raw register complete <= " <> jsonText credential
-  cred <- case WA.decodeCredentialRegistration WA.allSupportedFormats credential of
+  cred <- case WA.decodeCredentialRegistration WA.supportedRegistries credential of
     Left err -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete failed to decode raw request: " <> Text.pack (show err)
       fail $ show err

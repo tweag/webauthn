@@ -10,12 +10,12 @@ module Main
 where
 
 import Crypto.Hash (hash)
-import Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats)
 import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Metadata as Meta
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operation as O
+import Crypto.WebAuthn.Registries (supportedRegistries)
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
@@ -80,7 +80,7 @@ registryFromBlobFile = do
 registerTestFromFile :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
 registerTestFromFile fp origin rpId verifiable service now = do
   pkCredential <-
-    either (error . show) id . M.decodeCredentialRegistration allSupportedFormats
+    either (error . show) id . M.decodeCredentialRegistration supportedRegistries
       <$> decodeFile fp
   let options = defaultPublicKeyCredentialCreationOptions pkCredential
   let registerResult =
@@ -124,7 +124,7 @@ main = Hspec.hspec $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
-          either (error . show) id . M.decodeCredentialRegistration allSupportedFormats
+          either (error . show) id . M.decodeCredentialRegistration supportedRegistries
             <$> decodeFile
               "tests/responses/attestation/01-none.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential

@@ -62,7 +62,7 @@ decodeCredentialRegistration ::
   -- | The [attestation statement formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats)
   -- that should be supported. The value of 'Crypto.WebAuthn.allSupportedFormats'
   -- can be passed here, but additional or custom formats may also be used if needed
-  T.AttestationStatementFormatRegistry ->
+  T.WebAuthnRegistries ->
   IDLCredentialRegistration ->
   Either Text (T.Credential 'K.Registration 'True)
 decodeCredentialRegistration supportedFormats = decodeCreated supportedFormats . unIDLCredentialRegistration
