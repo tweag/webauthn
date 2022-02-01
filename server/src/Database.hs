@@ -39,12 +39,14 @@ type Connection = Sqlite.Connection
 
 newtype Transaction = Transaction Sqlite.Connection
 
+-- | Opens the @users.sqlite3@ database
 connect :: IO Sqlite.Connection
 connect = do
   conn <- Sqlite.open "users.sqlite3"
   Sqlite.execute conn "pragma foreign_keys = on;" ()
   pure conn
 
+-- | Creates the tables if they do not exist yet
 initialize :: Sqlite.Connection -> IO ()
 initialize conn = do
   Sqlite.execute
@@ -102,6 +104,7 @@ initialize conn = do
 withTransaction :: Sqlite.Connection -> (Transaction -> IO a) -> IO a
 withTransaction conn action = Sqlite.withTransaction conn (action (Transaction conn))
 
+-- | Inserts a new user into the database. Used during registration.
 insertUser ::
   Transaction ->
   WA.CredentialUserEntity ->
@@ -117,11 +120,15 @@ insertUser (Transaction conn) user =
         "insert into users (handle, account_name, account_display_name) values (?, ?, ?);"
         (handle, accountName, accountDisplayName)
 
+-- | Check if a user exists in the database
 userExists :: Transaction -> WA.UserAccountName -> IO Bool
 userExists (Transaction conn) (WA.UserAccountName accountName) = do
   results :: [Sqlite.Only Text] <- Sqlite.query conn "select account_name from users where account_name = ?;" (Sqlite.Only accountName)
   pure $ not $ null results
 
+-- | Inserts a new credential entry into the database. The example server's
+-- logic doesn't allow multiple credential per user, but a typical RP
+-- implementation will likely want to support it.
 insertCredentialEntry ::
   Transaction ->
   WA.CredentialEntry ->
@@ -149,6 +156,7 @@ insertCredentialEntry
           transportBits
         )
 
+-- | Find a credential entry in the database
 queryCredentialEntryByCredential :: Transaction -> WA.CredentialId -> IO (Maybe WA.CredentialEntry)
 queryCredentialEntryByCredential (Transaction conn) (WA.CredentialId credentialId) = do
   entries <-
@@ -163,6 +171,9 @@ queryCredentialEntryByCredential (Transaction conn) (WA.CredentialId credentialI
     [entry] -> pure $ Just $ toCredentialEntry entry
     _ -> fail "Unreachable: credential_entries.credential_id has a unique index."
 
+-- | Retrieve the credential entries belonging to the specified user. In
+-- reality, the logic of the server doesn't actually allow a single user to
+-- register multiple credentials.
 queryCredentialEntriesByUser :: Transaction -> WA.UserAccountName -> IO [WA.CredentialEntry]
 queryCredentialEntriesByUser (Transaction conn) (WA.UserAccountName accountName) = do
   entries <-
@@ -175,6 +186,8 @@ queryCredentialEntriesByUser (Transaction conn) (WA.UserAccountName accountName)
       [accountName]
   pure $ map toCredentialEntry entries
 
+-- | Set the new signature counter for the specified credential. Used to check
+-- if the authenticator wasn't cloned.
 updateSignatureCounter :: Transaction -> WA.CredentialId -> WA.SignatureCounter -> IO ()
 updateSignatureCounter (Transaction conn) (WA.CredentialId credentialId) (WA.SignatureCounter counter) =
   Sqlite.execute
@@ -213,6 +226,7 @@ newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
 generateAuthToken :: MonadRandom m => m AuthToken
 generateAuthToken = AuthToken <$> getRandomBytes 16
 
+-- | Find a user from their `AuthToken` cookie
 queryUserByAuthToken :: Transaction -> AuthToken -> IO (Maybe WA.UserAccountName)
 queryUserByAuthToken (Transaction conn) (AuthToken token) = do
   result <-
@@ -227,6 +241,7 @@ queryUserByAuthToken (Transaction conn) (AuthToken token) = do
     [Sqlite.Only accountName] -> pure $ Just $ WA.UserAccountName accountName
     _ -> fail "Unreachable: credential_entries.credential_id has a unique index."
 
+-- | Store `AuthToken` to keep the user logged in
 insertAuthToken :: Transaction -> AuthToken -> WA.UserHandle -> IO ()
 insertAuthToken (Transaction conn) (AuthToken token) (WA.UserHandle userHandle) = do
   Sqlite.execute
@@ -234,6 +249,8 @@ insertAuthToken (Transaction conn) (AuthToken token) (WA.UserHandle userHandle) 
     "insert into auth_tokens (token, user_handle) values (?, ?);"
     (token, userHandle)
 
+-- | Remove the `AuthToken` from the database, effectively logging out the
+-- user
 deleteAuthToken :: Transaction -> AuthToken -> IO ()
 deleteAuthToken (Transaction conn) (AuthToken token) = do
   Sqlite.execute

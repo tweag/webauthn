@@ -46,7 +46,8 @@ continuousFetch var = do
   threadId <- forkIO $ forever $ sleepThenUpdate manager var
   pure threadId
   where
-    -- 1 hour delay for testing purposes. In reality this only needs to happen perhaps once a month, see also the 'Service.mpNextUpdate' field
+    -- 1 hour delay for testing purposes. In reality this only needs to happen
+    -- perhaps once a month, see also the 'Service.mpNextUpdate' field
     delay :: Int
     delay = 60 * 60 * 1000 * 1000
 
@@ -57,12 +58,16 @@ continuousFetch var = do
       registry <- fetchRegistry manager
       atomically $ modifyTVar var (<> registry)
 
+-- | Fetches the fidoalliance provided metadata blob. The latest version of the
+-- blob is always available at @https://mds.fidoalliance.org@.
 fetchBlob :: Manager -> IO BS.ByteString
 fetchBlob manager = do
   putStrLn "Fetching Metadata"
   response <- httpLbs "https://mds.fidoalliance.org" manager
   pure $ LBS.toStrict $ responseBody response
 
+-- | Fetch the metadata blob and decode it, used in the `continuousFetch`
+-- function of this module.
 fetchRegistry :: Manager -> IO WA.MetadataServiceRegistry
 fetchRegistry manager = do
   blobBytes <- fetchBlob manager
