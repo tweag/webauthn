@@ -2,6 +2,8 @@
 
 * [#125](https://github.com/tweag/webauthn/pull/125) Some small metadata type
   simplifications involving `msUpv` and `SomeMetadataEntry`
+* [#126](https://github.com/tweag/webauthn/pull/126) Decrease lower bounds of
+  many dependencies including `base`, adding compatibility with GHC 8.8
 
 ### 0.2.0.0
 
