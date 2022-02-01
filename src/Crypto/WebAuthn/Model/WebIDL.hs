@@ -18,6 +18,8 @@ module Crypto.WebAuthn.Model.WebIDL
   )
 where
 
+import Control.Monad.Except (runExcept)
+import Control.Monad.Reader (runReaderT)
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as T
 import Crypto.WebAuthn.Model.WebIDL.Internal.Decoding (Decode (decode), DecodeCreated (decodeCreated))
@@ -48,7 +50,7 @@ newtype IDLCredentialOptionsRegistration = IDLCredentialOptionsRegistration
 -- interface with the response being an
 -- [AuthenticatorAttestationResponse](https://www.w3.org/TR/webauthn-2/#authenticatorattestationresponse).
 newtype IDLCredentialRegistration = IDLCredentialRegistration
-  { unIDLCredentialRegistration :: IDL.PublicKeyCredential IDL.AuthenticatorAttestationResponse
+  { _unIDLCredentialRegistration :: IDL.PublicKeyCredential IDL.AuthenticatorAttestationResponse
   }
   deriving newtype (Show, Eq, FromJSON, ToJSON)
 
@@ -65,7 +67,7 @@ decodeCredentialRegistration ::
   T.WebAuthnRegistries ->
   IDLCredentialRegistration ->
   Either Text (T.Credential 'K.Registration 'True)
-decodeCredentialRegistration supportedFormats = decodeCreated supportedFormats . unIDLCredentialRegistration
+decodeCredentialRegistration registries (IDLCredentialRegistration value) = runExcept $ runReaderT (decodeCreated value) registries
 
 -- | Encodes a @'T.CredentialOptions' 'K.Authentication'@, which is needed for the
 -- [authentication ceremony](https://www.w3.org/TR/webauthn-2/#authentication). The
@@ -91,7 +93,7 @@ newtype IDLCredentialOptionsAuthentication = IDLCredentialOptionsAuthentication
 -- interface with the response being an
 -- [AuthenticatorAssertionResponse](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse).
 newtype IDLCredentialAuthentication = IDLCredentialAuthentication
-  { unIDLCredentialAuthentication :: IDL.PublicKeyCredential IDL.AuthenticatorAssertionResponse
+  { _unIDLCredentialAuthentication :: IDL.PublicKeyCredential IDL.AuthenticatorAssertionResponse
   }
   deriving newtype (Show, Eq, FromJSON, ToJSON)
 
@@ -109,4 +111,4 @@ newtype IDLCredentialAuthentication = IDLCredentialAuthentication
 decodeCredentialAuthentication ::
   IDLCredentialAuthentication ->
   Either Text (T.Credential 'K.Authentication 'True)
-decodeCredentialAuthentication = decode . unIDLCredentialAuthentication
+decodeCredentialAuthentication (IDLCredentialAuthentication value) = runExcept $ decode value

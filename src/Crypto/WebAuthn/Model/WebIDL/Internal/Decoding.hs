@@ -17,6 +17,8 @@ module Crypto.WebAuthn.Model.WebIDL.Internal.Decoding
   )
 where
 
+import Control.Monad.Except (Except, lift, liftEither)
+import Control.Monad.Reader (ReaderT, ask)
 import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
@@ -29,18 +31,22 @@ import Data.Maybe (catMaybes, mapMaybe)
 import Data.Singletons (SingI)
 import Data.Text (Text)
 
+-- | Convenience monad alias that can both throw an error and has access to a
+-- 'M.WebAuthnRegistries' value
+type Decoder = ReaderT M.WebAuthnRegistries (Except Text)
+
 -- | @'Decode' a@ indicates that the Haskell-specific type @a@ can be
 -- decoded from the more generic JavaScript type @'IDL' a@ with the 'decode' function.
 class Convert a => Decode a where
-  decode :: IDL a -> Either Text a
-  default decode :: Coercible (IDL a) a => IDL a -> Either Text a
+  decode :: IDL a -> Except Text a
+  default decode :: Coercible (IDL a) a => IDL a -> Except Text a
   decode = pure . coerce
 
 -- | Like 'Decode', but with a 'decodeCreated' function that also takes a
 -- 'M.SupportedAttestationStatementFormats' in order to allow decoding to depend
 -- on the supported attestation formats.
 class Convert a => DecodeCreated a where
-  decodeCreated :: M.WebAuthnRegistries -> IDL a -> Either Text a
+  decodeCreated :: IDL a -> Decoder a
 
 instance Decode a => Decode (Maybe a) where
   decode Nothing = pure Nothing
@@ -58,10 +64,10 @@ instance Decode M.AuthenticationExtensionsClientOutputs where
   decode _ = pure M.AuthenticationExtensionsClientOutputs {}
 
 instance SingI c => Decode (M.CollectedClientData (c :: K.CeremonyKind) 'True) where
-  decode (IDL.URLEncodedBase64 bytes) = B.decodeCollectedClientData bytes
+  decode (IDL.URLEncodedBase64 bytes) = liftEither $ B.decodeCollectedClientData bytes
 
 instance Decode (M.AuthenticatorData 'K.Authentication 'True) where
-  decode (IDL.URLEncodedBase64 bytes) = B.decodeAuthenticatorData bytes
+  decode (IDL.URLEncodedBase64 bytes) = liftEither $ B.decodeAuthenticatorData bytes
 
 instance Decode (M.AuthenticatorResponse 'K.Authentication 'True) where
   decode IDL.AuthenticatorAssertionResponse {..} = do
@@ -106,7 +112,7 @@ instance Decode Cose.CoseSignAlg where
   -- assertion/attestation. We implement the check here to go to a Haskell
   -- type. Erring on the side of caution by failing to parse if an unsupported
   -- alg was encountered.
-  decode = Cose.toCoseSignAlg
+  decode = liftEither . Cose.toCoseSignAlg
 
 instance Decode M.Timeout
 
@@ -129,7 +135,7 @@ instance Decode [M.CredentialDescriptor] where
   decode Nothing = pure []
   decode (Just xs) = catMaybes <$> traverse decodeDescriptor xs
     where
-      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Either Text (Maybe M.CredentialDescriptor)
+      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Except Text (Maybe M.CredentialDescriptor)
       decodeDescriptor IDL.PublicKeyCredentialDescriptor {littype = "public-key", ..} = do
         let cdTyp = M.CredentialTypePublicKey
         cdId <- decode id
@@ -142,10 +148,10 @@ instance Decode [M.CredentialDescriptor] where
 -- platforms MUST ignore unknown values, treating an unknown value as if the
 -- member does not exist. The default is "preferred".
 instance Decode M.UserVerificationRequirement where
-  decode (Just "discouraged") = Right M.UserVerificationRequirementDiscouraged
-  decode (Just "preferred") = Right M.UserVerificationRequirementPreferred
-  decode (Just "required") = Right M.UserVerificationRequirementRequired
-  decode _ = Right M.UserVerificationRequirementPreferred
+  decode (Just "discouraged") = pure M.UserVerificationRequirementDiscouraged
+  decode (Just "preferred") = pure M.UserVerificationRequirementPreferred
+  decode (Just "required") = pure M.UserVerificationRequirementRequired
+  decode _ = pure M.UserVerificationRequirementPreferred
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-authenticatorSelection)
 instance Decode M.AuthenticatorSelectionCriteria where
@@ -178,11 +184,11 @@ instance Decode M.AuthenticatorSelectionCriteria where
 -- platforms MUST ignore unknown values, treating an unknown value as if the
 -- member does not exist. Its default value is "none".
 instance Decode M.AttestationConveyancePreference where
-  decode (Just "none") = Right M.AttestationConveyancePreferenceNone
-  decode (Just "indirect") = Right M.AttestationConveyancePreferenceIndirect
-  decode (Just "direct") = Right M.AttestationConveyancePreferenceDirect
-  decode (Just "enterprise") = Right M.AttestationConveyancePreferenceEnterprise
-  decode _ = Right M.AttestationConveyancePreferenceNone
+  decode (Just "none") = pure M.AttestationConveyancePreferenceNone
+  decode (Just "indirect") = pure M.AttestationConveyancePreferenceIndirect
+  decode (Just "direct") = pure M.AttestationConveyancePreferenceDirect
+  decode (Just "enterprise") = pure M.AttestationConveyancePreferenceEnterprise
+  decode _ = pure M.AttestationConveyancePreferenceNone
 
 -- [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialparameters)
 -- [The type] member specifies the type of credential to be created. The value SHOULD
@@ -192,7 +198,7 @@ instance Decode M.AttestationConveyancePreference where
 instance Decode [M.CredentialParameters] where
   decode xs = catMaybes <$> traverse decodeParam xs
     where
-      decodeParam :: IDL.PublicKeyCredentialParameters -> Either Text (Maybe M.CredentialParameters)
+      decodeParam :: IDL.PublicKeyCredentialParameters -> Except Text (Maybe M.CredentialParameters)
       decodeParam IDL.PublicKeyCredentialParameters {littype = "public-key", ..} = do
         let cpTyp = M.CredentialTypePublicKey
         cpAlg <- decode alg
@@ -226,21 +232,22 @@ instance Decode (M.CredentialOptions 'K.Authentication) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
 instance DecodeCreated (M.AttestationObject 'True) where
-  decodeCreated registries (IDL.URLEncodedBase64 bytes) =
-    B.decodeAttestationObject (M.warAttestationStatementFormats registries) bytes
+  decodeCreated (IDL.URLEncodedBase64 bytes) = do
+    registries <- ask
+    liftEither $ B.decodeAttestationObject (M.warAttestationStatementFormats registries) bytes
 
 instance DecodeCreated (M.AuthenticatorResponse 'K.Registration 'True) where
-  decodeCreated supportedFormats IDL.AuthenticatorAttestationResponse {..} = do
-    arrClientData <- decode clientDataJSON
-    arrAttestationObject <- decodeCreated supportedFormats attestationObject
+  decodeCreated IDL.AuthenticatorAttestationResponse {..} = do
+    arrClientData <- lift $ decode clientDataJSON
+    arrAttestationObject <- decodeCreated attestationObject
     arrTransports <- case transports of
       Nothing -> pure []
-      Just t -> decode t
+      Just t -> lift $ decode t
     pure $ M.AuthenticatorResponseRegistration {..}
 
 instance DecodeCreated (M.Credential 'K.Registration 'True) where
-  decodeCreated supportedFormats IDL.PublicKeyCredential {..} = do
-    cIdentifier <- decode rawId
-    cResponse <- decodeCreated supportedFormats response
-    cClientExtensionResults <- decode clientExtensionResults
+  decodeCreated IDL.PublicKeyCredential {..} = do
+    cIdentifier <- lift $ decode rawId
+    cResponse <- decodeCreated response
+    cClientExtensionResults <- lift $ decode clientExtensionResults
     pure $ M.Credential {..}
