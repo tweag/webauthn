@@ -7,9 +7,6 @@
 
 set -euo pipefail
 
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' exit
-
 if [[ "$#" -eq 0 ]]; then
   suggestedVersion=$(sed -n 's/^### Next release: \(.*\)/\1/p' changelog.md)
   echo "Usage: release <version> (suggested version based on changelog.md: ${suggestedVersion:-unknown})" >&2
@@ -53,11 +50,11 @@ fi
 set -x
 git tag --force v"$version"
 
-cabal sdist --builddir "$tmp/dist"
-cabal haddock --builddir "$tmp/docs" --haddock-for-hackage
+cabal sdist
+cabal haddock --haddock-for-hackage
 
-cabal upload "$tmp/dist/sdist/webauthn-$version.tar.gz"
-cabal upload --documentation "$tmp/docs/webauthn-$version-docs.tar.gz"
+cabal upload "dist-newstyle/sdist/webauthn-$version.tar.gz"
+cabal upload --documentation "dist-newstyle/webauthn-$version-docs.tar.gz"
 
 set +x
 
@@ -68,5 +65,7 @@ echo "- If changes are needed, make those changes, ideally with a PR. Then run t
 echo "- Otherwise, commit to the release by doing:"
 echo "  - git push origin master v$version"
 echo "  - Publish the Hackage release candidate at https://hackage.haskell.org/package/webauthn-$version/candidate"
-
+# Needed because of https://github.com/haskell/hackage-server/issues/70
+echo "  - Optionally make docs available immediately with"
+echo "    cabal upload --documentation --publish \"dist-newstyle/webauthn-$version-docs.tar.gz\""
 echo "This command is uncommitting and idempotent, it can be run more times if some changes are needed"
