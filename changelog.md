@@ -1,3 +1,18 @@
+### Next release: 0.4.0.0
+
+* [#132](https://github.com/tweag/webauthn/pull/125) Preparations for future extension support:
+  - Renames `SupportedAttestationStatementFormats` to
+    `AttestationStatementFormatRegistry`
+  - Introduce the `WebAuthnRegistries` type, currently only consisting of an
+    `AttestationStatementFormatRegistry` and use it throughout instead of the
+    latter
+  - Replace `allSupportedFormats :: AttestationStatementFormatRegistry` with
+    `supportedRegistries :: WebAuthnRegistries`
+  - Make not only the registration response decoding function take a
+    `WebAuthnRegistries`, but also the authentication response decoding, so
+    that we later don't have to break compatibility when extensions are
+    implemented
+
 ### 0.3.0.0
 
 * [#125](https://github.com/tweag/webauthn/pull/125) Some small metadata type
