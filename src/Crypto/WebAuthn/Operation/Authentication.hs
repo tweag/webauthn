@@ -33,7 +33,6 @@ import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Operation.CredentialEntry (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle))
 import Data.ByteArray (convert)
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
@@ -42,28 +41,58 @@ import Data.Validation (Validation)
 -- | Errors that may occur during [assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 data AuthenticationError
   = -- | The provided Credential was not one explicitly allowed by the server
-    -- (first: allowed credentials, second: received credential)
-    AuthenticationDisallowedCredential [M.CredentialDescriptor] (M.Credential 'M.Authentication 'True)
+    AuthenticationCredentialDisallowed
+      { -- | The credentials allowed by the server
+        aeAllowedCredentials :: [M.CredentialDescriptor],
+        -- | The credential returned by the client
+        aeReceivedCredential :: M.Credential 'M.Authentication 'True
+      }
   | -- | The received credential does not match the currently identified user
-    -- (first: identified, second: received)
-    AuthenticationIdentifiedUserHandleMismatch M.UserHandle M.UserHandle
+    AuthenticationIdentifiedUserHandleMismatch
+      { -- | The `M.UserHandle` of the user who is attempting authentication
+        aeIdentifiedUser :: M.UserHandle,
+        -- | The owner of the credential passed to the
+        -- `verifyAuthenticationResponse` function (retrieved from the
+        -- database)
+        aeRegisteredUser :: M.UserHandle
+      }
   | -- | The stored credential does not match the user specified in the
     -- response
-    -- (first: stored, second: received)
-    AuthenticationCredentialUserHandleMismatch M.UserHandle M.UserHandle
+    AuthenticationCredentialUserHandleMismatch
+      { -- | The `M.UserHandle` of the user who is attempting authentication
+        aeIdentifiedUser :: M.UserHandle,
+        -- | The `M.UserHandle` reported by the authenticator in the response
+        aeAuthenticatorUser :: M.UserHandle
+      }
   | -- | No user was identified and the response did not specify a user
     AuthenticationCannotVerifyUserHandle
   | -- | The received challenge does not match the originally created
     -- challenge
-    -- (first: expected, second: received)
-    AuthenticationChallengeMismatch M.Challenge M.Challenge
+    AuthenticationChallengeMismatch
+      { -- | The challenge created by the relying party and part of the
+        -- `M.CredentialOptions`
+        aeCreatedChallenge :: M.Challenge,
+        -- | The challenge received from the client, part of the response
+        aeReceivedChallenge :: M.Challenge
+      }
   | -- | The origin derived by the client does match the assumed origin
-    -- (first: expected, second: received)
-    AuthenticationOriginMismatch M.Origin M.Origin
+    AuthenticationOriginMismatch
+      { -- | The origin explicitly passed to the `verifyAuthenticationResponse`
+        -- response, set by the RP
+        aeExpectedOrigin :: M.Origin,
+        -- | The origin received from the client as part of the client data
+        aeReceivedOrigin :: M.Origin
+      }
   | -- | The rpIdHash in the authData is not a valid hash over the RpId
     -- expected by the Relying party
-    -- (first: expected, second: received)
-    AuthenticationRpIdHashMismatch M.RpIdHash M.RpIdHash
+    AuthenticationRpIdHashMismatch
+      { -- | The RP ID hash explicitly passed to the
+        -- `verifyAuthenticationResponse` response, set by the RP
+        aeExpectedRpIdHash :: M.RpIdHash,
+        -- | The RP ID hash received from the client as part of the authenticator
+        -- data
+        aeReceivedRpIdHash :: M.RpIdHash
+      }
   | -- | The UserPresent bit was not set in the authData
     AuthenticationUserNotPresent
   | -- | The UserVerified bit was not set in the authData while user
@@ -71,8 +100,8 @@ data AuthenticationError
     AuthenticationUserNotVerified
   | -- | The public key provided in the 'CredentialEntry' could not be decoded
     AuthenticationSignatureDecodingError CBOR.DeserialiseFailure
-  | -- | the public key does verify the signature over the authData
-    AuthenticationInvalidSignature Cose.PublicKey BS.ByteString M.AssertionSignature Text
+  | -- | The public key doesn't verify the signature over the authData
+    AuthenticationSignatureInvalid Text
   deriving (Show, Exception)
 
 -- | [Section 6.1.1 of the specification](https://www.w3.org/TR/webauthn-2/#sctn-sign-counter)
@@ -185,7 +214,10 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- identifies one of the public key credentials listed in
   -- options.allowCredentials.
   let allowCredentials = M.coaAllowCredentials options
-  unless (null allowCredentials || M.cIdentifier credential `elem` map M.cdId allowCredentials) . failure $ AuthenticationDisallowedCredential allowCredentials credential
+  unless
+    (null allowCredentials || M.cIdentifier credential `elem` map M.cdId allowCredentials)
+    . failure
+    $ AuthenticationCredentialDisallowed allowCredentials credential
 
   -- 6. Identify the user being authenticated and verify that this user is the
   -- owner of the public key credential source credentialSource identified by
@@ -312,7 +344,7 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
           publicKey = Cose.fromCose coseKey
       case Cose.verify signAlg publicKey message (M.unAssertionSignature sig) of
         Right () -> pure ()
-        Left err -> failure $ AuthenticationInvalidSignature publicKey message sig err
+        Left err -> failure $ AuthenticationSignatureInvalid err
 
   -- 21. Let storedSignCount be the stored signature counter value associated
   -- with credential.id. If authData.signCount is nonzero or storedSignCount
