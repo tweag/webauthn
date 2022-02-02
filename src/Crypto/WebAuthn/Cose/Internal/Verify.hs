@@ -41,10 +41,12 @@ module Crypto.WebAuthn.Cose.Internal.Verify
   )
 where
 
+import Control.Monad (unless)
 import Crypto.Error (CryptoFailable (CryptoFailed, CryptoPassed))
 import qualified Crypto.Hash as Hash
 import Crypto.Number.Serialize (i2osp, i2ospOf, os2ip)
 import qualified Crypto.PubKey.ECC.ECDSA as ECDSA
+import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA as RSA
@@ -164,11 +166,24 @@ verify A.CoseSignAlgEdDSA PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..
     then Right ()
     else Left "EdDSA Signature invalid"
 verify (A.CoseSignAlgECDSA (toCryptHashECDSA -> SomeHashAlgorithm hash)) PublicKeyECDSA {..} msg sig = do
-  let key =
-        ECDSA.PublicKey
-          { public_curve = ECC.getCurveByName $ toCryptCurveECDSA ecdsaCurve,
-            public_q = ECC.Point (os2ip ecdsaX) (os2ip ecdsaY)
-          }
+  let curveName = toCryptCurveECDSA ecdsaCurve
+      public_curve = ECC.getCurveByName curveName
+      public_q = ECC.Point (os2ip ecdsaX) (os2ip ecdsaY)
+
+  -- <https://www.w3.org/TR/webauthn-2/#sctn-alg-identifier>
+  -- > Note: There are many checks neccessary to correctly implement signature
+  -- verification using these algorithms. One of these is that, when processing
+  -- uncompressed elliptic-curve points, implementations should check that the
+  -- point is actually on the curve. This check is highlighted because it’s
+  -- judged to be at particular risk of falling through the gap between a
+  -- cryptographic library and other code.
+  --
+  -- Note: I really don't think this check should have to be here, but I can't
+  -- see it being performed by cryptonite. Though I also can't find any
+  -- evidence of an attack if this check is not performed.
+  unless (ECC.isPointValid public_curve public_q) $
+    Left $ "ECDSA point is not valid for curve " <> Text.pack (show curveName) <> ": " <> Text.pack (show public_q)
+  let key = ECDSA.PublicKey {..}
 
   -- https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
   -- > For COSEAlgorithmIdentifier -7 (ES256), and other ECDSA-based algorithms,
