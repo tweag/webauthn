@@ -21,6 +21,9 @@ if [[ "$branch" != master ]]; then
   exit 1
 fi
 
+# Fetch updated root certificates
+bin/update-root-certs
+
 cabalVersion=$(sed -n 's/^version: \(.*\)/\1/p' webauthn.cabal)
 if [[ "$version" != "$cabalVersion" ]]; then
   echo "Please update the version field in webauthn.cabal from $cabalVersion to $version" >&2
