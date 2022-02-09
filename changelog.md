@@ -2,6 +2,9 @@
 
 * [#129](https://github.com/tweag/webauthn/pull/129) Rename and expand
   documentation for authentication/registration errors.
+* [#136](https://github.com/tweag/webauthn/pull/136) Improve the safety and
+  remove duplication of the public key interface. More checks are being done
+  now, preventing invalid public keys from being constructed.
 
 ### 0.3.0.0
 
