@@ -17,7 +17,7 @@ module Crypto.WebAuthn.Model.WebIDL.Internal.Decoding
   )
 where
 
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Decoding as B

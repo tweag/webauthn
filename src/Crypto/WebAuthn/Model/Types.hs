@@ -95,8 +95,8 @@ import Control.Exception (Exception)
 import Crypto.Hash (Digest)
 import Crypto.Hash.Algorithms (SHA256)
 import Crypto.Random (MonadRandom, getRandomBytes)
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import Crypto.WebAuthn.Internal.ToJSONOrphans ()
 import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import Crypto.WebAuthn.Model.Kinds

@@ -22,10 +22,10 @@ import Control.Monad (forM, unless, when)
 import Crypto.Hash (SHA1 (SHA1), SHA256 (SHA256), hashWith)
 import qualified Crypto.Hash as Hash
 import Crypto.Number.Serialize (os2ip)
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import qualified Crypto.WebAuthn.Model.Types as M

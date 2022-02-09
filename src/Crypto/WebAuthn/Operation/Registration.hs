@@ -29,8 +29,8 @@ where
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import Crypto.WebAuthn.Internal.Utils (certificateSubjectKeyIdentifier, failure)
 import Crypto.WebAuthn.Metadata.Service.Processing (queryMetadata)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta

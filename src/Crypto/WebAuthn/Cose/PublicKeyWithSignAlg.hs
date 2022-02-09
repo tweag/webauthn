@@ -6,9 +6,9 @@
 -- This module contains a partial implementation of the
 -- [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7) format,
 -- limited to what is needed for Webauthn, and in a structured way.
-module Crypto.WebAuthn.Cose.Key
+module Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
   ( -- * COSE public Key
-    PublicKeyWithSignAlg (PublicKeyWithSignAlg, Crypto.WebAuthn.Cose.Key.publicKey, signAlg),
+    PublicKeyWithSignAlg (PublicKeyWithSignAlg, Crypto.WebAuthn.Cose.PublicKeyWithSignAlg.publicKey, signAlg),
     CosePublicKey,
     makePublicKeyWithSignAlg,
   )
@@ -19,9 +19,9 @@ import Codec.CBOR.Encoding (Encoding, encodeBytes, encodeMapLen)
 import Codec.Serialise (Serialise (decode, encode))
 import Control.Monad (unless)
 import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
-import qualified Crypto.WebAuthn.Cose.Algorithm as A
 import qualified Crypto.WebAuthn.Cose.Internal.Registry as R
 import qualified Crypto.WebAuthn.Cose.PublicKey as P
+import qualified Crypto.WebAuthn.Cose.SignAlg as A
 import Crypto.WebAuthn.Internal.ToJSONOrphans ()
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS

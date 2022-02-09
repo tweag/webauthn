@@ -11,7 +11,7 @@ where
 
 import Crypto.Hash (hash)
 import Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats)
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Metadata as Meta
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M

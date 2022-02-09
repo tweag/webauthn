@@ -22,8 +22,8 @@ import Control.Monad (forM)
 import Control.Monad.Cont (unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Data.ASN1.Parse as ASN1
