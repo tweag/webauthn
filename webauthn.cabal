@@ -120,6 +120,7 @@ library
     Crypto.WebAuthn.Cose.Algorithm,
     Crypto.WebAuthn.Cose.Internal.Registry,
     Crypto.WebAuthn.Cose.Internal.Verify,
+    Crypto.WebAuthn.Cose.PublicKey,
     Crypto.WebAuthn.Cose.Key,
     Crypto.WebAuthn.Internal.DateOrphans,
     Crypto.WebAuthn.Internal.ToJSONOrphans,

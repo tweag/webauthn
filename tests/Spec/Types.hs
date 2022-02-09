@@ -13,7 +13,7 @@ import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
 import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
-import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
 import qualified Crypto.WebAuthn.Model as M
 import qualified Data.ByteString.Lazy as LBS
@@ -54,10 +54,10 @@ instance Arbitrary Cose.CoseSignAlg where
       ]
 
 instance Arbitrary Cose.PublicKey where
-  arbitrary = Cose.fromCose <$> arbitrary
+  arbitrary = Cose.publicKey <$> arbitrary
 
 instance Arbitrary Cose.CosePublicKey where
-  arbitrary = Key.pubKey <$> arbitrary
+  arbitrary = Key.cosePubKey <$> arbitrary
 
 instance Arbitrary Cose.CoseCurveEdDSA where
   arbitrary = arbitraryBoundedEnum

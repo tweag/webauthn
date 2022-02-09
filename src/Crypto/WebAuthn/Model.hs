@@ -26,11 +26,13 @@ module Crypto.WebAuthn.Model
     module Crypto.WebAuthn.Model.WebIDL,
     module Crypto.WebAuthn.Cose.Algorithm,
     module Crypto.WebAuthn.Cose.Key,
+    module Crypto.WebAuthn.Cose.PublicKey,
   )
 where
 
 import Crypto.WebAuthn.Cose.Algorithm
 import Crypto.WebAuthn.Cose.Key
+import Crypto.WebAuthn.Cose.PublicKey
 import Crypto.WebAuthn.Model.Identifier
 import Crypto.WebAuthn.Model.Kinds
 import Crypto.WebAuthn.Model.Types

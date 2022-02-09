@@ -1,4 +1,6 @@
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 -- | Stability: experimental
 -- This module contains a partial implementation of the
@@ -6,12 +8,9 @@
 -- limited to what is needed for Webauthn, and in a structured way.
 module Crypto.WebAuthn.Cose.Key
   ( -- * COSE public Key
-    CosePublicKey (..),
-    keySignAlg,
-
-    -- * COSE Elliptic Curves
-    CoseCurveEdDSA (..),
-    CoseCurveECDSA (..),
+    PublicKeyWithSignAlg (PublicKeyWithSignAlg, Crypto.WebAuthn.Cose.Key.publicKey, signAlg),
+    CosePublicKey,
+    makePublicKeyWithSignAlg,
   )
 where
 
@@ -19,118 +18,91 @@ import Codec.CBOR.Decoding (Decoder, TokenType (TypeBool, TypeBytes), decodeByte
 import Codec.CBOR.Encoding (Encoding, encodeBytes, encodeMapLen)
 import Codec.Serialise (Serialise (decode, encode))
 import Control.Monad (unless)
-import Crypto.Number.Serialize (i2osp, os2ip)
+import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
 import qualified Crypto.WebAuthn.Cose.Algorithm as A
 import qualified Crypto.WebAuthn.Cose.Internal.Registry as R
+import qualified Crypto.WebAuthn.Cose.PublicKey as P
 import Crypto.WebAuthn.Internal.ToJSONOrphans ()
-import Data.Aeson (ToJSON)
+import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
+import Data.Functor (($>))
+import Data.Text (Text)
+import qualified Data.Text as Text
 import GHC.Generics (Generic)
 
+-- | A combination of a t'P.PublicKey' holding the public key data and a
+-- 'A.CoseSignAlg' holding the exact signature algorithm that should be used.
+-- This type can only be constructed with 'makePublicKeyWithSignAlg', which
+-- ensures that the signature scheme matches between 'P.PublicKey' and
+-- 'A.CoseSignAlg'. This type is equivalent to a COSE public key, which holds
+-- the same information, see 'CosePublicKey'
+data PublicKeyWithSignAlg = PublicKeyWithSignAlgInternal
+  { publicKeyInternal :: P.PublicKey,
+    signAlgInternal :: A.CoseSignAlg
+  }
+  deriving (Eq, Show, Generic, Aeson.ToJSON)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
--- A structured representation of a [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7)
--- limited to what is know to be necessary for Webauthn public keys for the
--- [credentialPublicKey](https://www.w3.org/TR/webauthn-2/#credentialpublickey) field.
--- Constructors represent signature algorithms.
-data CosePublicKey
-  = -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2)
-    -- EdDSA Signature Algorithm
-    --
-    -- [RFC8032](https://datatracker.ietf.org/doc/html/rfc8032) describes the
-    -- elliptic curve signature scheme Edwards-curve
-    -- Digital Signature Algorithm (EdDSA). In that document, the signature
-    -- algorithm is instantiated using parameters for edwards25519 and
-    -- edwards448 curves. The document additionally describes two variants
-    -- of the EdDSA algorithm: Pure EdDSA, where no hash function is applied
-    -- to the content before signing, and HashEdDSA, where a hash function
-    -- is applied to the content before signing and the result of that hash
-    -- function is signed. For EdDSA, the content to be signed (either the
-    -- message or the pre-hash value) is processed twice inside of the
-    -- signature algorithm. For use with COSE, only the pure EdDSA version
-    -- is used.
-    --
-    -- Security considerations are [here](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2.1)
-    CosePublicKeyEdDSA
-      { -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
-        -- The elliptic curve to use
-        eddsaCurve :: CoseCurveEdDSA,
-        -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
-        -- This contains the public key bytes
-        eddsaX :: BS.ByteString
+-- A structured and checked representation of a
+-- [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7), limited
+-- to what is know to be necessary for Webauthn public keys for the
+-- [credentialPublicKey](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
+-- field.
+type CosePublicKey = PublicKeyWithSignAlg
+
+-- | Deconstructs a 'makePublicKeyWithSignAlg' into its t'P.PublicKey' and
+-- 'A.CoseSignAlg'. Since 'makePublicKeyWithSignAlg' can only be constructed
+-- using 'makePublicKeyWithSignAlg', we can be sure that the signature scheme
+-- of t'P.PublicKey' and 'A.CoseSignAlg' matches.
+pattern PublicKeyWithSignAlg :: P.PublicKey -> A.CoseSignAlg -> PublicKeyWithSignAlg
+pattern PublicKeyWithSignAlg {publicKey, signAlg} <- PublicKeyWithSignAlgInternal {publicKeyInternal = publicKey, signAlgInternal = signAlg}
+
+{-# COMPLETE PublicKeyWithSignAlg #-}
+
+-- | Constructs a t'PublicKeyWithSignAlg' from a t'P.PublicKey' and
+-- 'A.CoseSignAlg', returning an error if the signature schemes between these
+-- two types don't match.
+makePublicKeyWithSignAlg :: P.PublicKey -> A.CoseSignAlg -> Either Text PublicKeyWithSignAlg
+makePublicKeyWithSignAlg key@(P.PublicKey k) alg =
+  verifyValid k alg
+    $> PublicKeyWithSignAlgInternal
+      { publicKeyInternal = key,
+        signAlgInternal = alg
       }
-  | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1)
-    -- ECDSA Signature Algorithm
-    --
-    -- This document defines ECDSA to work only with the curves P-256,
-    -- P-384, and P-521. Future documents may define it to work with other
-    -- curves and points in the future.
-    --
-    -- In order to promote interoperability, it is suggested that SHA-256 be
-    -- used only with curve P-256, SHA-384 be used only with curve P-384,
-    -- and SHA-512 be used with curve P-521. This is aligned with the recommendation in
-    -- [Section 4 of RFC5480](https://datatracker.ietf.org/doc/html/rfc5480#section-4).
-    --
-    -- Security considerations are [here](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1.1)
-    CosePublicKeyECDSA
-      { -- | The hash function to use
-        ecdsaHash :: A.CoseHashAlgECDSA,
-        -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
-        -- The elliptic curve to use
-        ecdsaCurve :: CoseCurveECDSA,
-        -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
-        -- This contains the x-coordinate for the EC point. The integer is
-        -- converted to a byte string as defined in [SEC1]. Leading zero
-        -- octets MUST be preserved.
-        ecdsaX :: BS.ByteString,
-        -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
-        -- This contains the value of the
-        -- y-coordinate for the EC point. When encoding the value y, the
-        -- integer is converted to an byte string (as defined in
-        -- [SEC1](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#ref-SEC1))
-        -- and encoded as a CBOR bstr. Leading zero octets MUST be
-        -- preserved.
-        ecdsaY :: BS.ByteString
-      }
-  | -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8812.html#section-2)
-    -- [RSASSA-PKCS1-v1_5](https://www.rfc-editor.org/rfc/rfc8017#section-8.2) Signature Algorithm
-    --
-    -- A key of size 2048 bits or larger MUST be used with these algorithms.
-    -- Security considerations are [here](https://www.rfc-editor.org/rfc/rfc8812.html#section-5)
-    CosePublicKeyRSA
-      { -- | The hash function to use
-        rsaHash :: A.CoseHashAlgRSA,
-        -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8230.html#section-4)
-        -- The RSA modulus n is a product of u distinct odd primes
-        -- r_i, i = 1, 2, ..., u, where u >= 2
-        rsaN :: Integer,
-        -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8230.html#section-4)
-        -- The RSA public exponent e is an integer between 3 and n - 1 satisfying
-        -- GCD(e,\\lambda(n)) = 1, where \\lambda(n) = LCM(r_1 - 1, ..., r_u - 1)
-        rsaE :: Integer
-      }
-  deriving (Eq, Show, Generic, ToJSON)
+  where
+    verifyValid :: P.UncheckedPublicKey -> A.CoseSignAlg -> Either Text ()
+    verifyValid P.PublicKeyEdDSA {} A.CoseSignAlgEdDSA = pure ()
+    verifyValid P.PublicKeyEdDSA {} alg = Left $ "EdDSA public key cannot be used with signing algorithm " <> Text.pack (show alg)
+    verifyValid P.PublicKeyECDSA {} A.CoseSignAlgECDSA {} = pure ()
+    verifyValid P.PublicKeyECDSA {} alg = Left $ "ECDSA public key cannot be used with signing algorithm " <> Text.pack (show alg)
+    verifyValid P.PublicKeyRSA {} A.CoseSignAlgRSA {} = pure ()
+    verifyValid P.PublicKeyRSA {} alg = Left $ "RSA public key cannot be used with signing algorithm " <> Text.pack (show alg)
 
 -- | CBOR encoding as a [COSE_Key](https://tools.ietf.org/html/rfc8152#section-7)
 -- using the [CTAP2 canonical CBOR encoding form](https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#ctap2-canonical-cbor-encoding-form)
 instance Serialise CosePublicKey where
-  encode key = case key of
-    CosePublicKeyEdDSA {..} ->
+  encode PublicKeyWithSignAlg {..} = case publicKey of
+    P.PublicKey P.PublicKeyEdDSA {..} ->
       common R.CoseKeyTypeOKP
         <> encode R.CoseKeyTypeParameterOKPCrv
         <> encode (fromCurveEdDSA eddsaCurve)
         <> encode R.CoseKeyTypeParameterOKPX
         <> encodeBytes eddsaX
-    CosePublicKeyECDSA {..} ->
+    P.PublicKey P.PublicKeyECDSA {..} ->
       common R.CoseKeyTypeEC2
         <> encode R.CoseKeyTypeParameterEC2Crv
         <> encode (fromCurveECDSA ecdsaCurve)
         -- https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1
         -- > Leading zero octets MUST be preserved.
         <> encode R.CoseKeyTypeParameterEC2X
-        <> encodeBytes ecdsaX
+        -- This version of i2ospOf_ throws if the bytestring is larger than
+        -- size, but this can't happen due to the PublicKey invariants
+        <> encodeBytes (i2ospOf_ size ecdsaX)
         <> encode R.CoseKeyTypeParameterEC2Y
-        <> encodeBytes ecdsaY
-    CosePublicKeyRSA {..} ->
+        <> encodeBytes (i2ospOf_ size ecdsaY)
+      where
+        size = P.coordinateSizeECDSA ecdsaCurve
+    P.PublicKey P.PublicKeyRSA {..} ->
       common R.CoseKeyTypeRSA
         -- https://www.rfc-editor.org/rfc/rfc8230.html#section-4
         -- > The octet sequence MUST utilize the minimum
@@ -140,14 +112,13 @@ instance Serialise CosePublicKey where
         <> encode R.CoseKeyTypeParameterRSAE
         <> encodeBytes (i2osp rsaE)
     where
-      alg = keySignAlg key
       common :: R.CoseKeyType -> Encoding
       common kty =
         encodeMapLen (R.parameterCount kty)
           <> encode R.CoseKeyCommonParameterKty
           <> encode kty
           <> encode R.CoseKeyCommonParameterAlg
-          <> encode alg
+          <> encode signAlg
 
   -- NOTE: CBOR itself doesn't give an ordering of map keys, but the CTAP2 canonical CBOR encoding form does:
   -- > The keys in every map must be sorted lowest value to highest. The sorting rules are:
@@ -172,13 +143,21 @@ instance Serialise CosePublicKey where
     decodeExpected R.CoseKeyCommonParameterAlg
     alg <- decode
 
-    decodeKey n kty alg
+    uncheckedKey <- decodeKey n kty alg
+    case P.checkPublicKey uncheckedKey of
+      Left err -> fail $ "Key check failed: " <> Text.unpack err
+      Right result ->
+        pure $
+          PublicKeyWithSignAlgInternal
+            { publicKeyInternal = result,
+              signAlgInternal = alg
+            }
     where
-      decodeKey :: Word -> R.CoseKeyType -> A.CoseSignAlg -> Decoder s CosePublicKey
+      decodeKey :: Word -> R.CoseKeyType -> A.CoseSignAlg -> Decoder s P.UncheckedPublicKey
       decodeKey n kty alg = case alg of
         A.CoseSignAlgEdDSA -> decodeEdDSAKey
-        A.CoseSignAlgECDSA hash -> decodeECDSAKey hash
-        A.CoseSignAlgRSA hash -> decodeRSAKey hash
+        A.CoseSignAlgECDSA _ -> decodeECDSAKey
+        A.CoseSignAlgRSA _ -> decodeRSAKey
         where
           -- [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-struct-15#section-7.1)
           -- Implementations MUST verify that the key type is appropriate for
@@ -204,7 +183,7 @@ instance Serialise CosePublicKey where
                   <> show n
                   <> " parameters instead"
 
-          decodeEdDSAKey :: Decoder s CosePublicKey
+          decodeEdDSAKey :: Decoder s P.UncheckedPublicKey
           decodeEdDSAKey = do
             -- https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2
             -- > The 'kty' field MUST be present, and it MUST be 'OKP' (Octet Key Pair).
@@ -214,38 +193,66 @@ instance Serialise CosePublicKey where
             eddsaCurve <- toCurveEdDSA <$> decode
             decodeExpected R.CoseKeyTypeParameterOKPX
             eddsaX <- decodeBytesCanonical
-            pure $ CosePublicKeyEdDSA {..}
+            pure P.PublicKeyEdDSA {..}
 
-          decodeECDSAKey :: A.CoseHashAlgECDSA -> Decoder s CosePublicKey
-          decodeECDSAKey ecdsaHash = do
+          decodeECDSAKey :: Decoder s P.UncheckedPublicKey
+          decodeECDSAKey = do
             -- https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1
             -- > The 'kty' field MUST be present, and it MUST be 'EC2'.
             checkKty R.CoseKeyTypeEC2
             -- https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1
             decodeExpected R.CoseKeyTypeParameterEC2Crv
             ecdsaCurve <- toCurveECDSA <$> decode
+            let size = P.coordinateSizeECDSA ecdsaCurve
             decodeExpected R.CoseKeyTypeParameterEC2X
-            ecdsaX <- decodeBytesCanonical
+            ecdsaX <- os2ipWithSize size =<< decodeBytesCanonical
+
             decodeExpected R.CoseKeyTypeParameterEC2Y
             ecdsaY <-
               peekTokenType >>= \case
-                TypeBytes -> decodeBytesCanonical
-                -- TODO: Implement this
+                TypeBytes -> os2ipWithSize size =<< decodeBytesCanonical
                 TypeBool -> fail "Compressed EC2 y coordinate not yet supported"
                 typ -> fail $ "Unexpected type in EC2 y parameter: " <> show typ
-            pure $ CosePublicKeyECDSA {..}
 
-          decodeRSAKey :: A.CoseHashAlgRSA -> Decoder s CosePublicKey
-          decodeRSAKey rsaHash = do
+            pure P.PublicKeyECDSA {..}
+
+          decodeRSAKey :: Decoder s P.UncheckedPublicKey
+          decodeRSAKey = do
             -- https://www.rfc-editor.org/rfc/rfc8812.html#section-2
             -- > Implementations need to check that the key type is 'RSA' when creating or verifying a signature.
             checkKty R.CoseKeyTypeRSA
             -- https://www.rfc-editor.org/rfc/rfc8230.html#section-4
             decodeExpected R.CoseKeyTypeParameterRSAN
-            rsaN <- os2ip <$> decodeBytesCanonical
+            -- > The octet sequence MUST utilize the minimum number of octets needed to represent the value.
+            rsaN <- os2ipNoLeading =<< decodeBytesCanonical
             decodeExpected R.CoseKeyTypeParameterRSAE
-            rsaE <- os2ip <$> decodeBytesCanonical
-            pure $ CosePublicKeyRSA {..}
+            rsaE <- os2ipNoLeading =<< decodeBytesCanonical
+            pure P.PublicKeyRSA {..}
+
+-- | Same as 'os2ip', but throws an error if there are not exactly as many bytes as expected. Thus any successful result of this function will give the same 'BS.ByteString' back if encoded with @'i2ospOf_' size@.
+os2ipWithSize :: MonadFail m => Int -> BS.ByteString -> m Integer
+os2ipWithSize size bytes
+  | BS.length bytes == size = pure $ os2ip bytes
+  | otherwise =
+    fail $
+      "bytes have length " <> show (BS.length bytes)
+        <> " when length "
+        <> show size
+        <> " was expected"
+
+-- | Same as 'os2ip', but throws an error if there are leading zero bytes. Thus any successful result of this function will give the same 'BS.ByteString' back if encoded with 'i2osp'.
+os2ipNoLeading :: MonadFail m => BS.ByteString -> m Integer
+os2ipNoLeading bytes
+  | leadingZeroCount == 0 = pure $ os2ip bytes
+  | otherwise =
+    fail $
+      "bytes of length "
+        <> show (BS.length bytes)
+        <> " has "
+        <> show leadingZeroCount
+        <> " leading zero bytes when none were expected"
+  where
+    leadingZeroCount = BS.length (BS.takeWhile (== 0) bytes)
 
 -- | Decode a value and ensure it's the same as the value that was given
 decodeExpected :: (Show a, Eq a, Serialise a) => a -> Decoder s ()
@@ -254,44 +261,18 @@ decodeExpected expected = do
   unless (expected == actual) $
     fail $ "Expected " <> show expected <> " but got " <> show actual
 
--- | The COSE signing algorithm corresponding to a COSE public key
-keySignAlg :: CosePublicKey -> A.CoseSignAlg
-keySignAlg CosePublicKeyEdDSA {} = A.CoseSignAlgEdDSA
-keySignAlg CosePublicKeyECDSA {..} = A.CoseSignAlgECDSA ecdsaHash
-keySignAlg CosePublicKeyRSA {..} = A.CoseSignAlgRSA rsaHash
+fromCurveEdDSA :: P.CoseCurveEdDSA -> R.CoseEllipticCurveOKP
+fromCurveEdDSA P.CoseCurveEd25519 = R.CoseEllipticCurveEd25519
 
--- | COSE elliptic curves that can be used with EdDSA
-data CoseCurveEdDSA
-  = -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
-    -- Ed25519 for use w/ EdDSA only
-    CoseCurveEd25519
-  deriving (Eq, Show, Enum, Bounded, Generic, ToJSON)
+toCurveEdDSA :: R.CoseEllipticCurveOKP -> P.CoseCurveEdDSA
+toCurveEdDSA R.CoseEllipticCurveEd25519 = P.CoseCurveEd25519
 
-fromCurveEdDSA :: CoseCurveEdDSA -> R.CoseEllipticCurveOKP
-fromCurveEdDSA CoseCurveEd25519 = R.CoseEllipticCurveEd25519
+fromCurveECDSA :: P.CoseCurveECDSA -> R.CoseEllipticCurveEC2
+fromCurveECDSA P.CoseCurveP256 = R.CoseEllipticCurveEC2P256
+fromCurveECDSA P.CoseCurveP384 = R.CoseEllipticCurveEC2P384
+fromCurveECDSA P.CoseCurveP521 = R.CoseEllipticCurveEC2P521
 
-toCurveEdDSA :: R.CoseEllipticCurveOKP -> CoseCurveEdDSA
-toCurveEdDSA R.CoseEllipticCurveEd25519 = CoseCurveEd25519
-
--- | COSE elliptic curves that can be used with ECDSA
-data CoseCurveECDSA
-  = -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
-    -- NIST P-256 also known as secp256r1
-    CoseCurveP256
-  | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
-    -- NIST P-384 also known as secp384r1
-    CoseCurveP384
-  | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
-    -- NIST P-521 also known as secp521r1
-    CoseCurveP521
-  deriving (Eq, Show, Enum, Bounded, Generic, ToJSON)
-
-fromCurveECDSA :: CoseCurveECDSA -> R.CoseEllipticCurveEC2
-fromCurveECDSA CoseCurveP256 = R.CoseEllipticCurveEC2P256
-fromCurveECDSA CoseCurveP384 = R.CoseEllipticCurveEC2P384
-fromCurveECDSA CoseCurveP521 = R.CoseEllipticCurveEC2P521
-
-toCurveECDSA :: R.CoseEllipticCurveEC2 -> CoseCurveECDSA
-toCurveECDSA R.CoseEllipticCurveEC2P256 = CoseCurveP256
-toCurveECDSA R.CoseEllipticCurveEC2P384 = CoseCurveP384
-toCurveECDSA R.CoseEllipticCurveEC2P521 = CoseCurveP521
+toCurveECDSA :: R.CoseEllipticCurveEC2 -> P.CoseCurveECDSA
+toCurveECDSA R.CoseEllipticCurveEC2P256 = P.CoseCurveP256
+toCurveECDSA R.CoseEllipticCurveEC2P384 = P.CoseCurveP384
+toCurveECDSA R.CoseEllipticCurveEC2P521 = P.CoseCurveP521

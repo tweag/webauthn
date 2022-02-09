@@ -20,6 +20,8 @@ import Control.Monad (forM, unless, void, when)
 import Crypto.Hash (Digest, SHA256, digestFromByteString)
 import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
+import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
 import Data.ASN1.Parse (ParseASN1, getNext, getNextContainerMaybe, hasNext, onNextContainer, onNextContainerMaybe, runParseASN1)
@@ -155,10 +157,11 @@ instance Show Format where
 data Statement = Statement
   { sig :: ByteString,
     x5c :: NonEmpty X509.SignedCertificate,
-    alg :: Cose.CoseSignAlg,
-    -- | Holds the parsed attestation extension of the above X509 certificate
-    -- Not part of the spec, but prevents parsing in the AndroidKey.verify function
-    pubKey :: Cose.PublicKey,
+    -- | Holds both the "alg" from the statement and the public key from the
+    -- X.509 certificate
+    pubKeyAndAlg :: Cose.PublicKeyWithSignAlg,
+    -- | Holds the parsed attestation extension of the above X509 certificate,
+    -- prevents having to parse it in the AndroidKey.verify function
     attExt :: ExtAttestation
   }
   deriving (Eq, Show)
@@ -166,7 +169,7 @@ data Statement = Statement
 instance ToJSON Statement where
   toJSON Statement {..} =
     object
-      [ "alg" .= alg,
+      [ "alg" .= Cose.signAlg pubKeyAndAlg,
         "sig" .= sig,
         "x5c" .= x5c
       ]
@@ -250,13 +253,15 @@ instance M.AttestationStatementFormat Format where
 
         pubKey <- Cose.fromX509 $ X509.certPubKey cert
 
+        pubKeyAndAlg <- Cose.makePublicKeyWithSignAlg pubKey alg
+
         pure Statement {..}
       _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, x5c: nonempty list): " <> Text.pack (show xs)
 
   asfEncode _ Statement {..} =
     CBOR.TMap
       [ (CBOR.TString "sig", CBOR.TBytes sig),
-        (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
+        (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg $ Cose.signAlg pubKeyAndAlg),
         ( CBOR.TString "x5c",
           CBOR.TList $
             map (CBOR.TBytes . X509.encodeSignedObject) $ toList x5c
@@ -273,13 +278,14 @@ instance M.AttestationStatementFormat Format where
     -- 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the
     -- public key in the first certificate in x5c with the algorithm specified in alg.
     let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
-    case Cose.verify alg pubKey signedData sig of
+    case Cose.verify pubKeyAndAlg signedData sig of
       Right () -> pure ()
       Left err -> failure $ VerificationFailure err
 
     -- 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the
     -- attestedCredentialData in authenticatorData.
-    let credentialPublicKey = Cose.fromCose (M.acdCredentialPublicKey adAttestedCredentialData)
+    let credentialPublicKey = Cose.publicKey (M.acdCredentialPublicKey adAttestedCredentialData)
+        pubKey = Cose.publicKey pubKeyAndAlg
     unless (credentialPublicKey == pubKey) . failure $ PublicKeyMismatch credentialPublicKey pubKey
 
     -- 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to

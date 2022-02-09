@@ -25,6 +25,7 @@ import Crypto.Number.Serialize (os2ip)
 import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import qualified Crypto.WebAuthn.Model.Types as M
@@ -205,9 +206,10 @@ data SubjectAlternativeName = SubjectAlternativeName
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-tpm-attestation)
 data Statement = Statement
-  { alg :: Cose.CoseSignAlg,
-    x5c :: NE.NonEmpty X509.SignedCertificate,
-    aikCert :: X509.SignedCertificate,
+  { x5c :: NE.NonEmpty X509.SignedCertificate,
+    aikCert :: X509.Certificate,
+    -- Combined aikCert public key and the "alg" statement key
+    aikPubKeyAndAlg :: Cose.PublicKeyWithSignAlg,
     subjectAlternativeName :: SubjectAlternativeName,
     aaguidExt :: Maybe IdFidoGenCeAAGUID,
     extendedKeyUsage :: [X509.ExtKeyUsagePurpose],
@@ -225,7 +227,7 @@ instance ToJSON Statement where
   toJSON Statement {..} =
     object
       [ "ver" .= String "2.0",
-        "alg" .= alg,
+        "alg" .= Cose.signAlg aikPubKeyAndAlg,
         "x5c" .= x5c,
         "sig" .= sig,
         "certInfo" .= certInfo,
@@ -357,7 +359,7 @@ instance M.AttestationStatementFormat Format where
     case (xs !? "ver", xs !? "alg", xs !? "x5c", xs !? "sig", xs !? "certInfo", xs !? "pubArea") of
       (Just (CBOR.TString "2.0"), Just (CBOR.TInt algId), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)), Just (CBOR.TBytes sig), Just (CBOR.TBytes certInfoRaw), Just (CBOR.TBytes pubAreaRaw)) ->
         do
-          x5c@(aikCert :| _) <- forM x5cRaw $ \case
+          x5c@(signedAikCert :| _) <- forM x5cRaw $ \case
             CBOR.TBytes certBytes ->
               first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
             cert ->
@@ -374,21 +376,24 @@ instance M.AttestationStatementFormat Format where
             Right (_, _, res) -> pure res
           pubAreaKey <- extractPublicKey pubArea
 
-          let cert = X509.getCertificate aikCert
+          let aikCert = X509.getCertificate signedAikCert
 
-          subjectAlternativeName <- case X509.extensionGetE (X509.certExtensions cert) of
+          aikCertPubKey <- Cose.fromX509 $ X509.certPubKey aikCert
+          aikPubKeyAndAlg <- Cose.makePublicKeyWithSignAlg aikCertPubKey alg
+
+          subjectAlternativeName <- case X509.extensionGetE (X509.certExtensions aikCert) of
             Just (Right ext) -> pure ext
             Just (Left err) -> Left $ "Failed to decode certificate subject alternative name extension: " <> Text.pack err
             Nothing -> Left "Certificate subject alternative name extension is missing"
-          aaguidExt <- case X509.extensionGetE (X509.certExtensions cert) of
+          aaguidExt <- case X509.extensionGetE (X509.certExtensions aikCert) of
             Just (Right ext) -> pure $ Just ext
             Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
             Nothing -> pure Nothing
-          X509.ExtExtendedKeyUsage extendedKeyUsage <- case X509.extensionGetE (X509.certExtensions cert) of
+          X509.ExtExtendedKeyUsage extendedKeyUsage <- case X509.extensionGetE (X509.certExtensions aikCert) of
             Just (Right ext) -> pure ext
             Just (Left err) -> Left $ "Failed to decode certificate extended key usage extension: " <> Text.pack err
             Nothing -> Left "Certificate extended key usage extension is missing"
-          X509.ExtBasicConstraints basicConstraintsCA _ <- case X509.extensionGetE (X509.certExtensions cert) of
+          X509.ExtBasicConstraints basicConstraintsCA _ <- case X509.extensionGetE (X509.certExtensions aikCert) of
             Just (Right ext) -> pure ext
             Just (Left err) -> Left $ "Failed to decode certificate basic constraints extension: " <> Text.pack err
             Nothing -> Left "Certificate basic constraints extension is missing"
@@ -476,7 +481,7 @@ instance M.AttestationStatementFormat Format where
             tpmtpParameters = TPMSRSAParms {..},
             tpmtpUnique = TPM2BPublicKeyRSA nb
           } =
-          pure
+          Cose.checkPublicKey
             Cose.PublicKeyRSA
               { rsaN = os2ip nb,
                 rsaE = toInteger tpmsrpExponent
@@ -487,18 +492,18 @@ instance M.AttestationStatementFormat Format where
             tpmtpParameters = TPMSECCParms {..},
             tpmtpUnique = TPMSECCPoint {..}
           } =
-          pure
+          Cose.checkPublicKey
             Cose.PublicKeyECDSA
               { ecdsaCurve = tpmsepCurveId,
-                ecdsaX = tpmseX,
-                ecdsaY = tpmseY
+                ecdsaX = os2ip tpmseX,
+                ecdsaY = os2ip tpmseY
               }
       extractPublicKey key = Left $ "Unsupported TPM public key: " <> Text.pack (show key)
 
   asfEncode _ Statement {..} =
     CBOR.TMap
       [ (CBOR.TString "ver", CBOR.TString "2.0"),
-        (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
+        (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg $ Cose.signAlg aikPubKeyAndAlg),
         ( CBOR.TString "x5c",
           CBOR.TList $ map (CBOR.TBytes . X509.encodeSignedObject) $ NE.toList x5c
         ),
@@ -522,7 +527,7 @@ instance M.AttestationStatementFormat Format where
       -- 2. Verify that the public key specified by the parameters and unique
       -- fields of pubArea is identical to the credentialPublicKey in the
       -- attestedCredentialData in authenticatorData.
-      let pubKey = Cose.fromCose $ M.acdCredentialPublicKey adAttestedCredentialData
+      let pubKey = Cose.publicKey $ M.acdCredentialPublicKey adAttestedCredentialData
       unless (pubAreaKey == pubKey) . failure $ PublicKeyMismatch pubAreaKey pubKey
 
       -- 3. Concatenate authenticatorData and clientDataHash to form attToBeSigned.
@@ -539,7 +544,7 @@ instance M.AttestationStatementFormat Format where
 
       -- 4.3 Verify that extraData is set to the hash of attToBeSigned using
       -- the hash algorithm employed in "alg".
-      case hashWithCorrectAlgorithm alg attToBeSigned of
+      case hashWithCorrectAlgorithm (Cose.signAlg aikPubKeyAndAlg) attToBeSigned of
         Just attHash -> do
           let extraData = tpmsaExtraData certInfo
           unless (attHash == extraData) . failure $ HashMismatch attHash extraData
@@ -580,22 +585,19 @@ instance M.AttestationStatementFormat Format where
 
       -- 4.8 Verify the sig is a valid signature over certInfo using the
       -- attestation public key in aikCert with the algorithm specified in alg.
-      let unsignedAikCert = X509.getCertificate aikCert
-      case Cose.fromX509 $ X509.certPubKey unsignedAikCert of
-        Right certPubKey -> case Cose.verify alg certPubKey certInfoRaw sig of
-          Right () -> pure ()
-          Left err -> failure $ VerificationFailure err
-        Left err -> failure $ PublicKeyInvalid err
+      case Cose.verify aikPubKeyAndAlg certInfoRaw sig of
+        Right () -> pure ()
+        Left err -> failure $ VerificationFailure err
 
       -- 4.9 Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation
       -- Statement Certificate Requirements.
 
       -- 4.9.1 Version MUST be set to 3.
       -- Version ::= INTEGER { v1(0), v2(1), v3(2) }, see https://datatracker.ietf.org/doc/html/rfc5280.html#section-4.1
-      let version = X509.certVersion unsignedAikCert
+      let version = X509.certVersion aikCert
       unless (version == 2) . failure $ CertificateVersionInvalid version
       -- 4.9.2. Subject field MUST be set to empty.
-      let subject = X509.getDistinguishedElements $ X509.certSubjectDN unsignedAikCert
+      let subject = X509.getDistinguishedElements $ X509.certSubjectDN aikCert
       unless (null subject) . failure $ SubjectFieldNotEmpty subject
       -- 4.9.3 The Subject Alternative Name extension MUST be set as defined in
       -- [TPMv2-EK-Profile] section 3.2.9.

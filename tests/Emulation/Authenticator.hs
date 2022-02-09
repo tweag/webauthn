@@ -252,7 +252,7 @@ authenticatorMakeCredential
             M.AttestedCredentialData
               { M.acdAaguid = aAAGUID,
                 M.acdCredentialId = credentialId,
-                M.acdCredentialPublicKey = pubKey, -- This is selfsigned
+                M.acdCredentialPublicKey = cosePubKey, -- This is selfsigned
                 M.acdCredentialPublicKeyBytes = M.NoRaw
               }
 

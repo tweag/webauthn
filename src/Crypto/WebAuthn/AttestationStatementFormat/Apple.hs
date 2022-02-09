@@ -22,6 +22,8 @@ import Control.Monad (forM)
 import Control.Monad.Cont (unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
+import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Data.ASN1.Parse as ASN1
@@ -161,7 +163,7 @@ instance M.AttestationStatementFormat Format where
 
       -- 5. Verify that the credential public key equals the Subject Public Key
       -- of credCert.
-      let credentialPublicKey = Cose.fromCose $ M.acdCredentialPublicKey credData
+      let credentialPublicKey = Cose.publicKey $ M.acdCredentialPublicKey credData
       unless (credentialPublicKey == pubKey) . failure $ PublicKeyMismatch credentialPublicKey pubKey
 
       -- 6. If successful, return implementation-specific values representing

@@ -141,12 +141,12 @@ instance M.AttestationStatementFormat Format where
         Nothing -> do
           -- Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
           let key = M.acdCredentialPublicKey credData
-              signAlg = Cose.keySignAlg key
+              signAlg = Cose.signAlg key
           when (stmtAlg /= signAlg) . failure $ AlgorithmMismatch stmtAlg signAlg
 
           -- Verify that sig is a valid signature over the concatenation of
           -- authenticatorData and clientDataHash using the credential public key with alg.
-          case Cose.verify signAlg (Cose.fromCose key) signedData stmtSig of
+          case Cose.verify key signedData stmtSig of
             Right () -> pure ()
             Left err -> failure $ InvalidSignature err
 

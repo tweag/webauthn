@@ -80,7 +80,7 @@ data RegistrationError
     -- expected by the Relying party
     RegistrationRpIdHashMismatch
       { -- | The RP ID hash explicitly passed to the
-        -- `verifyAuthenticationResponse` response, set by the RP
+        -- `verifyRegistrationResponse` response, set by the RP
         reExpectedRpIdHash :: M.RpIdHash,
         -- | The RP ID hash received from the client as part of the authenticator
         -- data
@@ -388,7 +388,7 @@ verifyRegistrationResponse
       -- 16. Verify that the "alg" parameter in the credential public key in
       -- authData matches the alg attribute of one of the items in
       -- options.pubKeyCredParams.
-      let acdAlg = Cose.keySignAlg acdCredentialPublicKey
+      let acdAlg = Cose.signAlg acdCredentialPublicKey
           desiredAlgs = map M.cpAlg corPubKeyCredParams
       unless (acdAlg `elem` desiredAlgs) $
         failure $ RegistrationPublicKeyAlgorithmDisallowed desiredAlgs acdAlg
