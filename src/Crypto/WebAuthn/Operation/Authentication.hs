@@ -28,7 +28,6 @@ import Control.Exception (Exception)
 import Control.Monad (unless)
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Operation.CredentialEntry (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle))
@@ -339,10 +338,8 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
       message = rawData <> convert (M.unClientDataHash hash)
   case CBOR.deserialiseFromBytes decode pubKeyBytes of
     Left err -> failure $ AuthenticationSignatureDecodingError err
-    Right (_, coseKey) -> do
-      let signAlg = Cose.keySignAlg coseKey
-          publicKey = Cose.fromCose coseKey
-      case Cose.verify signAlg publicKey message (M.unAssertionSignature sig) of
+    Right (_, coseKey) ->
+      case Cose.verify coseKey message (M.unAssertionSignature sig) of
         Right () -> pure ()
         Left err -> failure $ AuthenticationSignatureInvalid err
 

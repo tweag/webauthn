@@ -10,7 +10,7 @@ where
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operation as O

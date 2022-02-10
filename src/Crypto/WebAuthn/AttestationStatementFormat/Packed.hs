@@ -15,9 +15,9 @@ where
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (forM, unless, when)
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import Crypto.WebAuthn.Model (AAGUID)
 import qualified Crypto.WebAuthn.Model.Types as M
@@ -141,12 +141,12 @@ instance M.AttestationStatementFormat Format where
         Nothing -> do
           -- Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
           let key = M.acdCredentialPublicKey credData
-              signAlg = Cose.keySignAlg key
+              signAlg = Cose.signAlg key
           when (stmtAlg /= signAlg) . failure $ AlgorithmMismatch stmtAlg signAlg
 
           -- Verify that sig is a valid signature over the concatenation of
           -- authenticatorData and clientDataHash using the credential public key with alg.
-          case Cose.verify signAlg (Cose.fromCose key) signedData stmtSig of
+          case Cose.verify key signedData stmtSig of
             Right () -> pure ()
             Left err -> failure $ InvalidSignature err
 

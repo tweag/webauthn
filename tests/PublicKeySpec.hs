@@ -7,7 +7,8 @@ where
 
 import Codec.Serialise.Properties (serialiseIdentity)
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Data.ByteString as BS
 import qualified Spec.Key as Key
 import Spec.Types ()
@@ -28,18 +29,18 @@ spec = do
     property prop_signverify
 
 prop_x509PublicKeyRoundtrip :: Cose.PublicKey -> Bool
-prop_x509PublicKeyRoundtrip pubKey =
+prop_x509PublicKeyRoundtrip (Cose.PublicKey pubKey) =
   case Cose.fromX509 (Key.toX509 pubKey) of
-    Right pubKey'
+    Right (Cose.PublicKey pubKey')
       | pubKey == pubKey' -> True
       | otherwise -> False
     Left _ -> False
 
 prop_signverify :: Integer -> Key.KeyPair -> BS.ByteString -> Bool
 prop_signverify seed Key.KeyPair {..} msg = do
-  let signAlg = Cose.keySignAlg pubKey
+  let signAlg = Cose.signAlg cosePubKey
       sig = runSeededMonadRandom seed $ Key.sign signAlg privKey msg
-      valid = Cose.verify signAlg (Cose.fromCose pubKey) msg sig
+      valid = Cose.verify cosePubKey msg sig
    in case valid of
         Left _ -> False
         Right () -> True

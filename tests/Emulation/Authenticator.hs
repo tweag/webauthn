@@ -19,7 +19,7 @@ import Crypto.Hash (hash)
 import Crypto.Random (MonadRandom)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as ME
 import qualified Data.ByteArray as BA
@@ -252,7 +252,7 @@ authenticatorMakeCredential
             M.AttestedCredentialData
               { M.acdAaguid = aAAGUID,
                 M.acdCredentialId = credentialId,
-                M.acdCredentialPublicKey = pubKey, -- This is selfsigned
+                M.acdCredentialPublicKey = cosePubKey, -- This is selfsigned
                 M.acdCredentialPublicKeyBytes = M.NoRaw
               }
 

@@ -12,17 +12,19 @@ module Crypto.WebAuthn.AttestationStatementFormat.FidoU2F
   )
 where
 
+import qualified Codec.CBOR.Read as CBOR
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
-import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict ((!?))
 import qualified Data.Text as Text
 import qualified Data.X509 as X509
@@ -40,9 +42,9 @@ instance Show Format where
 data VerificationError
   = -- | The public key in the certificate was not an EC Key or the curve was not the p256 curve
     CertificatePublicKeyInvalid X509.PubKey
-  | -- | The credential public key is not an ECDSA key
-    CredentialPublicKeyNotECDSA Cose.PublicKey
-  | -- | The x and/or y coordinates of the credential public key don't have a length of 32 bytes
+  | -- | The COSE encoding of the credential public key does not have key type EC2
+    CredentialPublicKeyNotCoseEC2 Cose.CosePublicKey
+  | -- | The x and/or y coordinates of the credential public key are longer than 32 bytes
     CoordinateSizeInvalid
       { -- | Actual length in bytes of the x coordinate
         xLength :: Int,
@@ -129,12 +131,12 @@ instance M.AttestationStatementFormat Format where
       -- If size differs or "-3" key is not found, terminate this algorithm and
       -- return an appropriate error.
       -- NOTE: Already done during decoding of the COSE public key
-      case Cose.fromCose acdCredentialPublicKey of
-        Cose.PublicKeyECDSA {ecdsaX = xb, ecdsaY = yb} -> do
-          let xlen = BS.length xb
-              ylen = BS.length yb
-          unless (xlen == 32 && ylen == 32) $ failure $ CoordinateSizeInvalid xlen ylen
-
+      case extractPublicKey . M.unRaw $ acdCredentialPublicKeyBytes of
+        Nothing -> failure $ CredentialPublicKeyNotCoseEC2 acdCredentialPublicKey
+        Just (xb, yb) -> do
+          -- We decode the x and y values in an earlier stage of the process. In order to construct the publicKeyU2F, we have to reencode the value.
+          unless (BS.length xb == 32 && BS.length yb == 32) $
+            failure $ CoordinateSizeInvalid (BS.length xb) (BS.length yb)
           -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
           let publicKeyU2F = BS.singleton 0x04 <> xb <> yb
 
@@ -155,7 +157,6 @@ instance M.AttestationStatementFormat Format where
             X509.SignaturePass -> pure ()
             X509.SignatureFailed e -> failure $ SignatureInvalid e
           pure ()
-        key -> failure $ CredentialPublicKeyNotECDSA key
 
       -- 7. Optionally, inspect x5c and consult externally provided knowledge to
       -- determine whether attStmt conveys a Basic or AttCA attestation.
@@ -172,3 +173,21 @@ instance M.AttestationStatementFormat Format where
 -- SomeAttestationStatementFormat type.
 format :: M.SomeAttestationStatementFormat
 format = M.SomeAttestationStatementFormat Format
+
+-- [(spec)](https://www.iana.org/assignments/cose/cose.xhtml)
+-- This function assumes the provided key is an ECC key, which is a valid
+-- assumption as we have already verified that in step 2.b
+-- Any non ECC key would result in another error here, which is fine.
+extractPublicKey :: BS.ByteString -> Maybe (BS.ByteString, BS.ByteString)
+extractPublicKey keyBS = do
+  (rest, result) <- either (const Nothing) pure $ CBOR.deserialiseFromBytes CBOR.decodeTerm $ LBS.fromStrict keyBS
+  unless (LBS.null rest) Nothing
+  pairs <- case result of
+    CBOR.TMap pairs -> return pairs
+    _ -> Nothing
+  let xKey = -2
+  let yKey = -3
+  case (CBOR.TInt xKey `lookup` pairs, CBOR.TInt yKey `lookup` pairs) of
+    (Just (CBOR.TBytes x), Just (CBOR.TBytes y)) -> do
+      pure (x, y)
+    _ -> Nothing

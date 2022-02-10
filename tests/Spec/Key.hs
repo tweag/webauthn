@@ -19,14 +19,16 @@ import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 import Crypto.Random (MonadRandom)
-import qualified Crypto.WebAuthn.Cose.Algorithm as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.Key as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
+import Data.Either (fromRight)
 import qualified Data.X509 as X509
 import Test.QuickCheck.Instances.ByteString ()
 
@@ -47,7 +49,7 @@ data PrivateKey
   deriving (Eq, Show)
 
 data KeyPair = KeyPair
-  { pubKey :: Cose.CosePublicKey,
+  { cosePubKey :: Cose.CosePublicKey,
     privKey :: PrivateKey
   }
   deriving (Eq, Show)
@@ -61,11 +63,13 @@ newKeyPair Cose.CoseSignAlgEdDSA = do
             eddsaBytes = convert privKey'
           }
       pubKey' = Ed25519.toPublic privKey'
-      pubKey =
-        Cose.CosePublicKeyEdDSA
+      unchecked =
+        Cose.PublicKeyEdDSA
           { eddsaCurve = Cose.CoseCurveEd25519,
             eddsaX = convert pubKey'
           }
+      pubKey = fromRight (error "unreachable") $ Cose.checkPublicKey unchecked
+      cosePubKey = fromRight (error "unreachable") $ Cose.makePublicKeyWithSignAlg pubKey Cose.CoseSignAlgEdDSA
   pure KeyPair {..}
 newKeyPair (Cose.CoseSignAlgECDSA hash) = do
   let coseCurve = case hash of
@@ -74,33 +78,33 @@ newKeyPair (Cose.CoseSignAlgECDSA hash) = do
         Cose.CoseHashAlgECDSASHA512 -> Cose.CoseCurveP521
       curveName = Cose.toCryptCurveECDSA coseCurve
       curve = ECC.getCurveByName curveName
-      byteSize = (ECC.curveSizeBits curve + 7) `div` 8
   (ECDSA.PublicKey {public_q = point}, ECDSA.PrivateKey {private_d = d}) <- ECC.generate curve
   let (x, y) = case point of
         ECC.Point x y -> (x, y)
         ECC.PointO -> error "newKeyPair: infinity point not supported"
 
-      pubKey =
-        Cose.CosePublicKeyECDSA
-          { ecdsaHash = hash,
-            ecdsaCurve = coseCurve,
-            ecdsaX = i2ospOf_ byteSize x,
-            ecdsaY = i2ospOf_ byteSize y
+      unchecked =
+        Cose.PublicKeyECDSA
+          { ecdsaCurve = coseCurve,
+            ecdsaX = x,
+            ecdsaY = y
           }
       privKey =
         PrivateKeyECDSA
           { ecdsaCurve = coseCurve,
             ecdsaD = d
           }
+      pubKey = fromRight (error "unreachable") $ Cose.checkPublicKey unchecked
+      cosePubKey = fromRight (error "unreachable") $ Cose.makePublicKeyWithSignAlg pubKey (Cose.CoseSignAlgECDSA hash)
   pure KeyPair {..}
 newKeyPair (Cose.CoseSignAlgRSA hash) = do
   -- https://www.rfc-editor.org/rfc/rfc8812.html#section-2
   -- > A key of size 2048 bits or larger MUST be used with these algorithms.
   let publicSizeBytes = 2048 `div` 8
   (RSA.PublicKey {..}, RSA.PrivateKey {..}) <- RSA.generate publicSizeBytes 65537
-  let pubKey =
-        Cose.CosePublicKeyRSA
-          { rsaHash = hash,
+  let unchecked =
+        Cose.PublicKeyRSA
+          { -- rsaHash = hash,
             rsaN = public_n,
             rsaE = public_e
           }
@@ -110,6 +114,8 @@ newKeyPair (Cose.CoseSignAlgRSA hash) = do
             rsaE = public_e,
             rsaD = private_d
           }
+      pubKey = fromRight (error "unreachable") $ Cose.checkPublicKey unchecked
+      cosePubKey = fromRight (error "unreachable") $ Cose.makePublicKeyWithSignAlg pubKey (Cose.CoseSignAlgRSA hash)
   pure KeyPair {..}
 
 sign :: MonadRandom m => Cose.CoseSignAlg -> PrivateKey -> BS.ByteString -> m BS.ByteString
@@ -149,7 +155,7 @@ sign (Cose.CoseSignAlgRSA (Cose.toCryptHashRSA -> Cose.SomeHashAlgorithmASN1 has
     Right res -> pure res
 sign signAlg privKey _ = error $ "sign: Combination of signature algorithm " <> show signAlg <> " and private key " <> show privKey <> " is not valid or supported"
 
-toX509 :: Cose.PublicKey -> X509.PubKey
+toX509 :: Cose.UncheckedPublicKey -> X509.PubKey
 toX509 Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
   let key = case Ed25519.publicKey eddsaX of
         CryptoFailed err -> error $ "Failed to create a cryptonite Ed25519 public key of a bytestring with size " <> show (BS.length eddsaX) <> ": " <> show err
@@ -157,7 +163,8 @@ toX509 Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
    in X509.PubKeyEd25519 key
 toX509 Cose.PublicKeyECDSA {..} =
   let curveName = Cose.toCryptCurveECDSA ecdsaCurve
-      serialisedPoint = X509.SerializedPoint $ BS.singleton 0x04 <> ecdsaX <> ecdsaY
+      size = Cose.coordinateSizeECDSA ecdsaCurve
+      serialisedPoint = X509.SerializedPoint $ BS.singleton 0x04 <> i2ospOf_ size ecdsaX <> i2ospOf_ size ecdsaY
       key = X509.PubKeyEC_Named curveName serialisedPoint
    in X509.PubKeyEC key
 toX509 Cose.PublicKeyRSA {..} =

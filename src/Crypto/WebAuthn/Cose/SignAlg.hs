@@ -9,7 +9,7 @@
 -- This modules sometimes uses this
 -- [CBOR Grammar](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-struct-13#section-1.4)
 -- to describe CBOR value types corresponding to CBOR parameters
-module Crypto.WebAuthn.Cose.Algorithm
+module Crypto.WebAuthn.Cose.SignAlg
   ( -- * COSE Algorithms
     CoseSignAlg
       ( ..,
