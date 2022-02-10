@@ -23,7 +23,6 @@ module Crypto.WebAuthn.Model
   ( module Crypto.WebAuthn.Model.Identifier,
     module Crypto.WebAuthn.Model.Kinds,
     module Crypto.WebAuthn.Model.Types,
-    module Crypto.WebAuthn.Model.WebIDL,
     module Crypto.WebAuthn.Cose.SignAlg,
     module Crypto.WebAuthn.Cose.PublicKeyWithSignAlg,
     module Crypto.WebAuthn.Cose.PublicKey,
@@ -36,4 +35,3 @@ import Crypto.WebAuthn.Cose.SignAlg
 import Crypto.WebAuthn.Model.Identifier
 import Crypto.WebAuthn.Model.Kinds
 import Crypto.WebAuthn.Model.Types
-import Crypto.WebAuthn.Model.WebIDL

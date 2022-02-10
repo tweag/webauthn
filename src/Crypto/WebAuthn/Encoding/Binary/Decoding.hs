@@ -8,7 +8,7 @@
 -- | Stability: internal
 -- Certain parts of the specification require that data is decoded from a
 -- binary form. This module holds such functions.
-module Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Decoding
+module Crypto.WebAuthn.Encoding.Binary.Decoding
   ( -- * Decoding from bytes
     decodeAuthenticatorData,
     decodeAttestationObject,

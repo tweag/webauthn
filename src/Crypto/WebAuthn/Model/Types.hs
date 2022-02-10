@@ -176,7 +176,8 @@ data AuthenticatorTransport
     -- transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators).
     -- These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
     AuthenticatorTransportInternal
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  | AuthenticatorTransportUnknown Text
+  deriving (Eq, Show, Ord, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
 -- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)'
