@@ -111,6 +111,7 @@ module Crypto.WebAuthn
     -- for [step 2](#step-2) and to deconstruct the request in
     -- [step 4](#step-4) respectively.
     module Crypto.WebAuthn.Model,
+    module Crypto.WebAuthn.Encoding,
 
     -- * Attestation Statement Formats
 
@@ -159,6 +160,7 @@ module Crypto.WebAuthn
 where
 
 import Crypto.WebAuthn.AttestationStatementFormat
+import Crypto.WebAuthn.Encoding
 import Crypto.WebAuthn.Metadata
 import Crypto.WebAuthn.Model
 import Crypto.WebAuthn.Operation

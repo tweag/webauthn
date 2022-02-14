@@ -13,7 +13,7 @@ where
 import qualified Crypto.WebAuthn.Metadata.Service.Types as ServiceTypes
 import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import Crypto.WebAuthn.Metadata.Statement.Decode (decodeAAGUID, decodeCertificate, decodeMetadataStatement, decodeSubjectKeyIdentifier)
-import qualified Crypto.WebAuthn.WebIDL as IDL
+import qualified Crypto.WebAuthn.Metadata.WebIDL as IDL
 import Data.Bifunctor (first)
 import Data.Hourglass (Date, DateTime (dtDate), ISO8601_Date (ISO8601_Date), timeParse)
 import Data.List.NonEmpty (NonEmpty)

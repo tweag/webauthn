@@ -27,10 +27,13 @@ module Database
   )
 where
 
+import Codec.Serialise (deserialiseOrFail, serialise)
+import Control.Exception (throwIO)
 import Crypto.Random (MonadRandom, getRandomBytes)
 import qualified Crypto.WebAuthn as WA
-import qualified Data.Bits as Bits
+import Crypto.WebAuthn.Encoding.Strings (decodeAuthenticatorTransport, encodeAuthenticatorTransport)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
 import Data.Word (Word32)
 import qualified Database.SQLite.Simple as Sqlite
@@ -140,7 +143,7 @@ insertCredentialEntry
       WA.ceCredentialId = WA.CredentialId credentialId,
       WA.cePublicKeyBytes = WA.PublicKeyBytes publicKey,
       WA.ceSignCounter = WA.SignatureCounter signCounter,
-      WA.ceTransports = transportsToBits -> transportBits
+      WA.ceTransports = encodeTransports -> transports
     } =
     do
       Sqlite.execute
@@ -153,7 +156,7 @@ insertCredentialEntry
           userHandle,
           publicKey,
           signCounter,
-          transportBits
+          transports
         )
 
 -- | Find a credential entry in the database
@@ -168,7 +171,7 @@ queryCredentialEntryByCredential (Transaction conn) (WA.CredentialId credentialI
       [credentialId]
   case entries of
     [] -> pure Nothing
-    [entry] -> pure $ Just $ toCredentialEntry entry
+    [entry] -> Just <$> toCredentialEntry entry
     _ -> fail "Unreachable: credential_entries.credential_id has a unique index."
 
 -- | Retrieve the credential entries belonging to the specified user. In
@@ -184,7 +187,7 @@ queryCredentialEntriesByUser (Transaction conn) (WA.UserAccountName accountName)
       \ join users on users.handle = credential_entries.user_handle \
       \ where account_name = ?;                                             "
       [accountName]
-  pure $ map toCredentialEntry entries
+  traverse toCredentialEntry entries
 
 -- | Set the new signature counter for the specified credential. Used to check
 -- if the authenticator wasn't cloned.
@@ -197,29 +200,25 @@ updateSignatureCounter (Transaction conn) (WA.CredentialId credentialId) (WA.Sig
     \ where credential_id = ?;  "
     (counter, credentialId)
 
-transportsToBits :: [WA.AuthenticatorTransport] -> Word32
-transportsToBits [] = Bits.zeroBits
-transportsToBits (WA.AuthenticatorTransportInternal : xs) = transportsToBits xs `Bits.setBit` 0
-transportsToBits (WA.AuthenticatorTransportUSB : xs) = transportsToBits xs `Bits.setBit` 1
-transportsToBits (WA.AuthenticatorTransportBLE : xs) = transportsToBits xs `Bits.setBit` 2
-transportsToBits (WA.AuthenticatorTransportNFC : xs) = transportsToBits xs `Bits.setBit` 3
+encodeTransports :: [WA.AuthenticatorTransport] -> BS.ByteString
+encodeTransports transports = LBS.toStrict $ serialise $ map encodeAuthenticatorTransport transports
 
-transportsFromBits :: Word32 -> [WA.AuthenticatorTransport]
-transportsFromBits bits =
-  [WA.AuthenticatorTransportInternal | Bits.testBit bits 0]
-    ++ [WA.AuthenticatorTransportUSB | Bits.testBit bits 1]
-    ++ [WA.AuthenticatorTransportBLE | Bits.testBit bits 2]
-    ++ [WA.AuthenticatorTransportNFC | Bits.testBit bits 3]
+decodeTransports :: BS.ByteString -> IO [WA.AuthenticatorTransport]
+decodeTransports bytes = case deserialiseOrFail $ LBS.fromStrict bytes of
+  Left err -> throwIO err
+  Right result -> pure $ decodeAuthenticatorTransport <$> result
 
-toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32, Word32) -> WA.CredentialEntry
-toCredentialEntry (credentialId, userHandle, publicKey, signCounter, transportBits) =
-  WA.CredentialEntry
-    { WA.ceCredentialId = WA.CredentialId credentialId,
-      WA.ceUserHandle = WA.UserHandle userHandle,
-      WA.cePublicKeyBytes = WA.PublicKeyBytes publicKey,
-      WA.ceSignCounter = WA.SignatureCounter signCounter,
-      WA.ceTransports = transportsFromBits transportBits
-    }
+toCredentialEntry :: (BS.ByteString, BS.ByteString, BS.ByteString, Word32, BS.ByteString) -> IO WA.CredentialEntry
+toCredentialEntry (credentialId, userHandle, publicKey, signCounter, transportBytes) = do
+  transports <- decodeTransports transportBytes
+  pure
+    WA.CredentialEntry
+      { WA.ceCredentialId = WA.CredentialId credentialId,
+        WA.ceUserHandle = WA.UserHandle userHandle,
+        WA.cePublicKeyBytes = WA.PublicKeyBytes publicKey,
+        WA.ceSignCounter = WA.SignatureCounter signCounter,
+        WA.ceTransports = transports
+      }
 
 newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
 

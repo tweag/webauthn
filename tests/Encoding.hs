@@ -2,11 +2,11 @@
 
 module Encoding (spec) where
 
+import Control.Monad.Reader (runReaderT)
 import Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats)
+import Crypto.WebAuthn.Encoding.Binary (encodeRawCredential)
+import Crypto.WebAuthn.Encoding.Internal.WebAuthnJson (Decode (decode), Encode (encode))
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding (encodeRawCredential)
-import Crypto.WebAuthn.Model.WebIDL.Internal.Decoding (Decode (decode), DecodeCreated (decodeCreated))
-import Crypto.WebAuthn.Model.WebIDL.Internal.Encoding (Encode (encode))
 import Spec.Types ()
 import Test.Hspec (Expectation, SpecWith, describe, expectationFailure, shouldBe)
 import Test.Hspec.QuickCheck (prop)
@@ -40,7 +40,7 @@ prop_createdCredentialRoundtrip :: M.Credential 'M.Registration 'False -> Expect
 prop_createdCredentialRoundtrip options = do
   let withRaw = encodeRawCredential options
       encoded = encode withRaw
-  case decodeCreated allSupportedFormats encoded of
+  case runReaderT (decode encoded) allSupportedFormats of
     Right decoded -> do
       decoded `shouldBe` withRaw
     Left err -> expectationFailure $ show err

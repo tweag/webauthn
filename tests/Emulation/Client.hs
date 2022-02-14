@@ -17,8 +17,8 @@ where
 
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn.Encoding.Binary as ME
 import qualified Crypto.WebAuthn.Model as M
-import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as ME
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Emulation.Authenticator

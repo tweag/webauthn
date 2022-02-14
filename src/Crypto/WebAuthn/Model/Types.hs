@@ -7,11 +7,40 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Stability: experimental
--- This module contains the same top-level definitions as 'Crypto.WebAuthn.Client.JavaScript',
--- but with the types containing a more Haskell-friendly structure.
+-- This module contains Haskell-friendly types for structures used in WebAuthn
+-- that are used throughout this library. These types are modelled according to
+-- the following conventions:
 --
--- Note: The 'ToJSON' instances of these types are for pretty-printing purposes
--- only.
+-- * If a structure has the same semantics for both the
+--   [registration](https://www.w3.org/TR/webauthn-2/#registration) and
+--   [authentication](https://www.w3.org/TR/webauthn-2/#authentication) WebAuthn
+--   [ceremonies](https://www.w3.org/TR/webauthn-2/#ceremony), then its type is
+--   parametrized by a @c@ parameter of kind 'CeremonyKind'. If such types have
+--   differing fields,
+--   [GADTs](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/gadt.html)
+--   are used to distinguish between them, where the constructor name is the
+--   type name with a @...Registration@ or @...Authentication@ suffix
+-- * If the raw bytes are needed for verification purposes of a structure, then
+--   its type is parametrized by a @raw@ parameter of kind 'Bool'. Only if @raw
+--   ~ 'True'@, the raw bytes of the necessary structures has to be present in
+--   the type. The type 'RawField' is used as a helper type for this.
+-- * In order to avoid duplicate record fields, all fields are prefixed with
+--   the initials of the constructor name.
+-- * Every type should have a 'ToJSON' instance for pretty-printing purposes.
+--   This JSON encoding doesn't correspond to any encoding used for
+--   sending/receiving these structures, it's only used for pretty-printing,
+--   which is why it doesn't need to be standardized. For encoding these
+--   structures from/to JSON for sending/receiving, see the
+--   'Crypto.WebAuthn.Encoding.WebAuthnJson' module
+-- * Fields of the WebAuthn standard that are optional (for writing) but have
+--   defaults (making them non-optional for reading) are encoded as
+--   non-optional fields, while the defaults are exposed in the
+--   'Crypto.WebAuthn.Model.Defaults' module. The alternative of making these
+--   fields optional would allow RP not having to specify them, which seems
+--   like a less safer option, since the defaults might not be what is really
+--   needed, and they might change. The root cause why this decision had to be
+--   made is that such assymetrical reading/writing fields don't map nicely to
+--   Haskell's records.
 --
 -- #extensions#
 -- TODO:
@@ -86,7 +115,6 @@ module Crypto.WebAuthn.Model.Types
     -- * Top-level types
     CredentialOptions (..),
     Credential (..),
-    stripRawCredential,
   )
 where
 
@@ -103,7 +131,6 @@ import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
     CeremonyKind (Authentication, Registration),
     ProtocolKind (Fido2, FidoU2F),
-    SCeremonyKind (SAuthentication, SRegistration),
   )
 import Data.Aeson (ToJSON, Value (Null, String), object, (.=))
 import Data.Aeson.Types (toJSON)
@@ -176,7 +203,12 @@ data AuthenticatorTransport
     -- transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators).
     -- These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
     AuthenticatorTransportInternal
-  | AuthenticatorTransportUnknown Text
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-transports)
+    -- An unknown authenticator transport. Note that according to the current
+    -- version 2 of the WebAuthn standard, unknown fields must be ignored,
+    -- which is a bit misleading because such unknown values still need to be
+    -- stored. Draft version 3 of the standard fixes this.
+    AuthenticatorTransportUnknown Text
   deriving (Eq, Show, Ord, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
@@ -1331,54 +1363,3 @@ data Credential (c :: CeremonyKind) raw = Credential
     cClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
   deriving (Eq, Show, Generic, ToJSON)
-
--- | Removes all raw fields from a 'Credential', useful for
--- e.g. pretty-printing only the desired fields. This is the counterpart to
--- 'Crypto.WebAuthn.Model.Binary.Encoding.encodeRawCredential'
-stripRawCredential :: forall c raw. SingI c => Credential c raw -> Credential c 'False
-stripRawCredential Credential {..} =
-  Credential
-    { cResponse = case sing @c of
-        SRegistration -> stripRawAuthenticatorResponseRegistration cResponse
-        SAuthentication -> stripRawAuthenticatorResponseAuthentication cResponse,
-      ..
-    }
-  where
-    stripRawAuthenticatorResponseAuthentication :: AuthenticatorResponse 'Authentication raw -> AuthenticatorResponse 'Authentication 'False
-    stripRawAuthenticatorResponseAuthentication AuthenticatorResponseAuthentication {..} =
-      AuthenticatorResponseAuthentication
-        { araClientData = stripRawCollectedClientData araClientData,
-          araAuthenticatorData = stripRawAuthenticatorData araAuthenticatorData,
-          ..
-        }
-
-    stripRawAuthenticatorResponseRegistration :: AuthenticatorResponse 'Registration raw -> AuthenticatorResponse 'Registration 'False
-    stripRawAuthenticatorResponseRegistration AuthenticatorResponseRegistration {..} =
-      AuthenticatorResponseRegistration
-        { arrClientData = stripRawCollectedClientData arrClientData,
-          arrAttestationObject = stripRawAttestationObject arrAttestationObject,
-          ..
-        }
-
-    stripRawAttestationObject :: AttestationObject raw -> AttestationObject 'False
-    stripRawAttestationObject AttestationObject {..} =
-      AttestationObject
-        { aoAuthData = stripRawAuthenticatorData aoAuthData,
-          ..
-        }
-
-    stripRawAuthenticatorData :: forall c raw. SingI c => AuthenticatorData c raw -> AuthenticatorData c 'False
-    stripRawAuthenticatorData AuthenticatorData {..} =
-      AuthenticatorData
-        { adRawData = NoRaw,
-          adAttestedCredentialData = stripRawAttestedCredentialData adAttestedCredentialData,
-          ..
-        }
-
-    stripRawAttestedCredentialData :: forall c raw. SingI c => AttestedCredentialData c raw -> AttestedCredentialData c 'False
-    stripRawAttestedCredentialData = case sing @c of
-      SRegistration -> \AttestedCredentialData {..} -> AttestedCredentialData {acdCredentialPublicKeyBytes = NoRaw, ..}
-      SAuthentication -> \NoAttestedCredentialData -> NoAttestedCredentialData
-
-    stripRawCollectedClientData :: forall c raw. SingI c => CollectedClientData c raw -> CollectedClientData c 'False
-    stripRawCollectedClientData CollectedClientData {..} = CollectedClientData {ccdRawData = NoRaw, ..}

@@ -20,7 +20,7 @@ where
 import Crypto.WebAuthn.Internal.Utils (jsonEncodingOptions)
 import Crypto.WebAuthn.Metadata.Statement.WebIDL (AAGUID, MetadataStatement)
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
-import qualified Crypto.WebAuthn.WebIDL as IDL
+import qualified Crypto.WebAuthn.Metadata.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.List.NonEmpty (NonEmpty)
 import GHC.Generics (Generic)

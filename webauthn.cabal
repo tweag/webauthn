@@ -122,8 +122,10 @@ library
     Crypto.WebAuthn.Cose.PublicKey,
     Crypto.WebAuthn.Cose.PublicKeyWithSignAlg,
     Crypto.WebAuthn.Cose.SignAlg,
-    Crypto.WebAuthn.Encoding.Binary.Decoding,
-    Crypto.WebAuthn.Encoding.Binary.Encoding,
+    Crypto.WebAuthn.Encoding,
+    Crypto.WebAuthn.Encoding.Binary,
+    Crypto.WebAuthn.Encoding.Internal.WebAuthnJson,
+    Crypto.WebAuthn.Encoding.Strings,
     Crypto.WebAuthn.Encoding.WebAuthnJson,
     Crypto.WebAuthn.Internal.DateOrphans,
     Crypto.WebAuthn.Internal.ToJSONOrphans,
@@ -138,12 +140,12 @@ library
     Crypto.WebAuthn.Metadata.Statement.Types,
     Crypto.WebAuthn.Metadata.Statement.WebIDL,
     Crypto.WebAuthn.Metadata.UAF,
+    Crypto.WebAuthn.Metadata.WebIDL,
     Crypto.WebAuthn.Model,
     Crypto.WebAuthn.Model.Defaults,
     Crypto.WebAuthn.Model.Identifier,
     Crypto.WebAuthn.Model.Kinds,
-    Crypto.WebAuthn.Model.Types,
-    Crypto.WebAuthn.WebIDL
+    Crypto.WebAuthn.Model.Types
 
 test-suite tests
   import: sanity
