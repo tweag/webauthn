@@ -172,6 +172,9 @@ instance ToJSON (RawField raw) where
 -- values can be added to it in the future, as more credential types are defined.
 -- The values of this enumeration are used for versioning the Authentication Assertion
 -- and attestation structures according to the type of the authenticator.
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeCredentialType'/'Crypto.WebAuthn.Encoding.Strings.encodeCredentialType'.
 data CredentialType = CredentialTypePublicKey
   deriving (Eq, Show, Bounded, Enum, Ord, Generic)
 
@@ -188,6 +191,9 @@ instance ToJSON CredentialType where
 -- best belief as to how an authenticator may be reached. A [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
 -- will typically learn of the supported transports for a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
 -- via [getTransports()](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports).
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeAuthenticatorTransport'/'Crypto.WebAuthn.Encoding.Strings.encodeAuthenticatorTransport'.
 data AuthenticatorTransport
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-usb)
     -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
@@ -216,6 +222,9 @@ data AuthenticatorTransport
 -- express a preferred [authenticator attachment modality](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality)
 -- when calling [@navigator.credentials.create()@](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- to [create a credential](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeAuthenticatorAttachment'/'Crypto.WebAuthn.Encoding.Strings.encodeAuthenticatorAttachment'.
 data AuthenticatorAttachment
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattachment-platform)
     -- This value indicates [platform attachment](https://www.w3.org/TR/webauthn-2/#platform-attachment).
@@ -230,6 +239,9 @@ data AuthenticatorAttachment
 -- requirements for [client-side discoverable credentials](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential)
 -- (formerly known as [resident credentials](https://www.w3.org/TR/webauthn-2/#resident-credential)
 -- or [resident keys](https://www.w3.org/TR/webauthn-2/#resident-key)):
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeResidentKeyRequirement'/'Crypto.WebAuthn.Encoding.Strings.encodeResidentKeyRequirement'.
 data ResidentKeyRequirement
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-discouraged)
     -- This value indicates the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -256,6 +268,9 @@ data ResidentKeyRequirement
 -- A [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may
 -- require [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for some
 -- of its operations but not for others, and may use this type to express its needs.
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeUserVerificationRequirement'/'Crypto.WebAuthn.Encoding.Strings.encodeUserVerificationRequirement'.
 data UserVerificationRequirement
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-userverificationrequirement-required)
     -- This value indicates that the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -281,6 +296,9 @@ data UserVerificationRequirement
 -- [AttestationConveyancePreference](https://www.w3.org/TR/webauthn-2/#enumdef-attestationconveyancepreference)
 -- to specify their preference regarding
 -- [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance) during credential generation.
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeAttestationConveyancePreference'/'Crypto.WebAuthn.Encoding.Strings.encodeAttestationConveyancePreference'.
 data AttestationConveyancePreference
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-attestationconveyancepreference-none)
     -- This value indicates that the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)

@@ -22,6 +22,7 @@ module Crypto.WebAuthn.Model.WebIDL.Internal.Decoding
 where
 
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
+import qualified Crypto.WebAuthn.Encoding.Strings as S
 import qualified Crypto.WebAuthn.Model.Defaults as D
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
@@ -119,24 +120,7 @@ instance Decode M.Timeout
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
 instance Decode M.AuthenticatorTransport where
-  decode "usb" = pure M.AuthenticatorTransportUSB
-  decode "nfc" = pure M.AuthenticatorTransportNFC
-  decode "ble" = pure M.AuthenticatorTransportBLE
-  decode "internal" = pure M.AuthenticatorTransportInternal
-  -- FIXME: <https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot>
-  -- mentions:
-  --
-  -- > The values SHOULD be members of AuthenticatorTransport but Relying Parties
-  -- > MUST ignore unknown values.
-  --
-  -- This is a small bug in the standard however, see
-  -- https://github.com/w3c/webauthn/pull/1654 which changes it to
-  --
-  -- > The values SHOULD be members of AuthenticatorTransport but Relying
-  -- > Parties SHOULD accept and store unknown values.
-  --
-  -- This code currently thrown an error which is wrong
-  decode str = Left $ "Unknown AuthenticatorTransport string: " <> str
+  decode = S.decodeAuthenticatorTransport
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-descriptor)
 instance Decode M.CredentialDescriptor where
@@ -148,23 +132,15 @@ instance Decode M.CredentialDescriptor where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement)
 instance Decode M.UserVerificationRequirement where
-  decode "discouraged" = pure M.UserVerificationRequirementDiscouraged
-  decode "preferred" = pure M.UserVerificationRequirementPreferred
-  decode "required" = pure M.UserVerificationRequirementRequired
-  decode str = Left $ "Unknown UserVerificationRequirement string: " <> str
+  decode = S.decodeUserVerificationRequirement
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-attachment)
 instance Decode M.AuthenticatorAttachment where
-  decode "platform" = pure M.AuthenticatorAttachmentPlatform
-  decode "cross-platform" = pure M.AuthenticatorAttachmentCrossPlatform
-  decode str = Left $ "Unknown AuthenticatorAttachment string: " <> str
+  decode = S.decodeAuthenticatorAttachment
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-residentkey)
 instance Decode M.ResidentKeyRequirement where
-  decode "discouraged" = pure M.ResidentKeyRequirementDiscouraged
-  decode "preferred" = pure M.ResidentKeyRequirementPreferred
-  decode "required" = pure M.ResidentKeyRequirementRequired
-  decode str = Left $ "Unknown ResidentKeyRequirement string: " <> str
+  decode = S.decodeResidentKeyRequirement
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-authenticatorSelection)
 instance Decode M.AuthenticatorSelectionCriteria where
@@ -176,15 +152,10 @@ instance Decode M.AuthenticatorSelectionCriteria where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-attestationconveyancepreference)
 instance Decode M.AttestationConveyancePreference where
-  decode "none" = Right M.AttestationConveyancePreferenceNone
-  decode "indirect" = Right M.AttestationConveyancePreferenceIndirect
-  decode "direct" = Right M.AttestationConveyancePreferenceDirect
-  decode "enterprise" = Right M.AttestationConveyancePreferenceEnterprise
-  decode str = Left $ "Unknown AttestationConveyancePreference string: " <> str
+  decode = S.decodeAttestationConveyancePreference
 
 instance Decode M.CredentialType where
-  decode "public-key" = pure M.CredentialTypePublicKey
-  decode str = Left $ "Unknown PublicKeyCredentialType string: " <> str
+  decode = S.decodeCredentialType
 
 -- [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialparameters)
 instance Decode M.CredentialParameters where

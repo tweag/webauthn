@@ -112,6 +112,12 @@ module Crypto.WebAuthn
     -- [step 4](#step-4) respectively.
     module Crypto.WebAuthn.Model,
 
+    -- * WebAuthn Encoding
+
+    -- | Includes everything needed to encode\/decode WebAuthn types between
+    -- serializations and Haskell types defined in "Crypto.WebAuthn.Model"
+    module Crypto.WebAuthn.Encoding,
+
     -- * Attestation Statement Formats
 
     -- | In case of a [registration ceremony](https://www.w3.org/TR/webauthn-2/#registration),
@@ -159,6 +165,7 @@ module Crypto.WebAuthn
 where
 
 import Crypto.WebAuthn.AttestationStatementFormat
+import Crypto.WebAuthn.Encoding
 import Crypto.WebAuthn.Metadata
 import Crypto.WebAuthn.Model
 import Crypto.WebAuthn.Operation

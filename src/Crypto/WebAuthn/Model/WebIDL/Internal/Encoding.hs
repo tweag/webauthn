@@ -17,6 +17,7 @@ module Crypto.WebAuthn.Model.WebIDL.Internal.Encoding
 where
 
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
+import qualified Crypto.WebAuthn.Encoding.Strings as S
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as B
@@ -64,38 +65,27 @@ instance Encode Cose.CoseSignAlg where
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-credentialType>
 instance Encode M.CredentialType where
-  encode M.CredentialTypePublicKey = "public-key"
+  encode = S.encodeCredentialType
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport>
 instance Encode M.AuthenticatorTransport where
-  encode M.AuthenticatorTransportUSB = "usb"
-  encode M.AuthenticatorTransportNFC = "nfc"
-  encode M.AuthenticatorTransportBLE = "ble"
-  encode M.AuthenticatorTransportInternal = "internal"
+  encode = S.encodeAuthenticatorTransport
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment>
 instance Encode M.AuthenticatorAttachment where
-  encode M.AuthenticatorAttachmentPlatform = "platform"
-  encode M.AuthenticatorAttachmentCrossPlatform = "cross-platform"
+  encode = S.encodeAuthenticatorAttachment
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-residentKeyRequirement>
 instance Encode M.ResidentKeyRequirement where
-  encode M.ResidentKeyRequirementDiscouraged = "discouraged"
-  encode M.ResidentKeyRequirementPreferred = "preferred"
-  encode M.ResidentKeyRequirementRequired = "required"
+  encode = S.encodeResidentKeyRequirement
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement>
 instance Encode M.UserVerificationRequirement where
-  encode M.UserVerificationRequirementRequired = "required"
-  encode M.UserVerificationRequirementPreferred = "preferred"
-  encode M.UserVerificationRequirementDiscouraged = "discouraged"
+  encode = S.encodeUserVerificationRequirement
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-attestation-convey>
 instance Encode M.AttestationConveyancePreference where
-  encode M.AttestationConveyancePreferenceNone = "none"
-  encode M.AttestationConveyancePreferenceIndirect = "indirect"
-  encode M.AttestationConveyancePreferenceDirect = "direct"
-  encode M.AttestationConveyancePreferenceEnterprise = "enterprise"
+  encode = S.encodeAttestationConveyancePreference
 
 instance Encode M.CredentialRpEntity where
   encode M.CredentialRpEntity {..} =

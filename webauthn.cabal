@@ -113,6 +113,8 @@ library
     Crypto.WebAuthn.AttestationStatementFormat.None,
     Crypto.WebAuthn.AttestationStatementFormat.Packed,
     Crypto.WebAuthn.AttestationStatementFormat.TPM,
+    Crypto.WebAuthn.Encoding,
+    Crypto.WebAuthn.Encoding.Strings,
     Crypto.WebAuthn.Operation,
     Crypto.WebAuthn.Operation.Authentication,
     Crypto.WebAuthn.Operation.CredentialEntry,
