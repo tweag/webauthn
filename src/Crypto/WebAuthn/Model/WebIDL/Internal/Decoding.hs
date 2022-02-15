@@ -120,7 +120,7 @@ instance Decode M.Timeout
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
 instance Decode M.AuthenticatorTransport where
-  decode = S.decodeAuthenticatorTransport
+  decode = pure . S.decodeAuthenticatorTransport
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-descriptor)
 instance Decode M.CredentialDescriptor where

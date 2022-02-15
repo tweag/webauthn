@@ -104,16 +104,22 @@ encodeAuthenticatorTransport T.AuthenticatorTransportUSB = "usb"
 encodeAuthenticatorTransport T.AuthenticatorTransportNFC = "nfc"
 encodeAuthenticatorTransport T.AuthenticatorTransportBLE = "ble"
 encodeAuthenticatorTransport T.AuthenticatorTransportInternal = "internal"
+encodeAuthenticatorTransport (T.AuthenticatorTransportUnknown str) = str
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport)
--- Decodes a string into a 'T.AuthenticatorTransport', returning 'Left' when
--- the string isn't known to be an enum value.
-decodeAuthenticatorTransport :: Text -> Either Text T.AuthenticatorTransport
-decodeAuthenticatorTransport "usb" = pure T.AuthenticatorTransportUSB
-decodeAuthenticatorTransport "nfc" = pure T.AuthenticatorTransportNFC
-decodeAuthenticatorTransport "ble" = pure T.AuthenticatorTransportBLE
-decodeAuthenticatorTransport "internal" = pure T.AuthenticatorTransportInternal
--- FIXME: <https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot>
+-- Decodes a string into a 'T.AuthenticatorTransport', returning
+-- 'T.AuthenticatorTransportUnknown' when the string isn't known to be an enum
+-- value. This is required so that relying parties can still store unknown
+-- values, see
+-- [transports](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot)
+-- and the clarification to that section
+-- [here](https://github.com/w3c/webauthn/pull/1654)
+decodeAuthenticatorTransport :: Text -> T.AuthenticatorTransport
+decodeAuthenticatorTransport "usb" = T.AuthenticatorTransportUSB
+decodeAuthenticatorTransport "nfc" = T.AuthenticatorTransportNFC
+decodeAuthenticatorTransport "ble" = T.AuthenticatorTransportBLE
+decodeAuthenticatorTransport "internal" = T.AuthenticatorTransportInternal
+-- <https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot>
 -- mentions:
 --
 -- > The values SHOULD be members of AuthenticatorTransport but Relying Parties
@@ -124,6 +130,4 @@ decodeAuthenticatorTransport "internal" = pure T.AuthenticatorTransportInternal
 --
 -- > The values SHOULD be members of AuthenticatorTransport but Relying
 -- > Parties SHOULD accept and store unknown values.
---
--- This code currently thrown an error which is wrong
-decodeAuthenticatorTransport str = Left $ "Unknown AuthenticatorTransport string: " <> str
+decodeAuthenticatorTransport str = T.AuthenticatorTransportUnknown str

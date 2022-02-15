@@ -213,7 +213,15 @@ data AuthenticatorTransport
     -- transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators).
     -- These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
     AuthenticatorTransportInternal
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-transports)
+    -- An unknown authenticator transport. Note that according to the current
+    -- version 2 of the WebAuthn standard, unknown fields [must be
+    -- ignored](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot),
+    -- which is a bit misleading because such unknown values still need to be
+    -- stored. Draft version 3 of the standard [fixes
+    -- this](https://github.com/w3c/webauthn/pull/1654).
+    AuthenticatorTransportUnknown Text
+  deriving (Eq, Show, Ord, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
 -- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)'

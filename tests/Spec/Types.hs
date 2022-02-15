@@ -75,7 +75,16 @@ instance Arbitrary M.CredentialType where
   arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary M.AuthenticatorTransport where
-  arbitrary = arbitraryBoundedEnum
+  arbitrary = elements authenticatorTransportsList
+
+authenticatorTransportsList :: [M.AuthenticatorTransport]
+authenticatorTransportsList =
+  [ M.AuthenticatorTransportBLE,
+    M.AuthenticatorTransportInternal,
+    M.AuthenticatorTransportNFC,
+    M.AuthenticatorTransportUSB,
+    M.AuthenticatorTransportUnknown "unknown"
+  ]
 
 instance Arbitrary M.AuthenticatorAttachment where
   arbitrary = arbitraryBoundedEnum
@@ -211,7 +220,7 @@ instance Arbitrary M.CredentialDescriptor where
   arbitrary =
     M.CredentialDescriptor M.CredentialTypePublicKey
       <$> arbitrary
-      <*> liftArbitrary shuffledSubset
+      <*> liftArbitrary (shuffledSubsetWith $ Set.fromList authenticatorTransportsList)
 
 instance Arbitrary M.AuthenticatorSelectionCriteria where
   arbitrary =
@@ -263,14 +272,8 @@ instance Arbitrary (M.Credential 'M.Authentication 'False) where
       <*> arbitrary
       <*> arbitrary
 
-shuffledSubset :: (Ord a, Bounded a, Enum a) => Gen [a]
-shuffledSubset = subset >>= shuffle . Set.toList
-
 shuffledSubsetWith :: Ord a => Set a -> Gen [a]
 shuffledSubsetWith set = subsetWith set >>= shuffle . Set.toList
-
-subset :: (Ord a, Bounded a, Enum a) => Gen (Set a)
-subset = Set.fromList <$> sublistOf (Set.toList completeSet)
 
 subsetWith :: Ord a => Set a -> Gen (Set a)
 subsetWith set = Set.fromList <$> sublistOf (Set.toList set)
@@ -279,9 +282,6 @@ parameters :: Gen [M.CredentialParameters]
 parameters = do
   algs <- shuffledSubsetWith $ Set.fromList allCoseAlgs
   pure $ M.CredentialParameters M.CredentialTypePublicKey <$> algs
-
-completeSet :: (Ord a, Bounded a, Enum a) => Set a
-completeSet = Set.fromList [minBound .. maxBound]
 
 allCoseAlgs :: [Cose.CoseSignAlg]
 allCoseAlgs =
