@@ -12,9 +12,9 @@ module Spec.Types () where
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
-import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Model as M
 import qualified Data.ByteString.Lazy as LBS
 import Data.Maybe (fromJust)

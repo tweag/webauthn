@@ -11,6 +11,10 @@
 -- and [get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)
 -- methods while [Registering a New Credential](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- and [Verifying an Authentication Assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion) respectively.
+--
+-- Note: The spec often mentions that _client platforms_ must ignore unknown
+-- values, but since we implement only relying party code, we don't need to
+-- concern ourselves with that.
 module Crypto.WebAuthn.Model.WebIDL.Internal.Decoding
   ( Decode (..),
     DecodeCreated (..),
@@ -18,6 +22,7 @@ module Crypto.WebAuthn.Model.WebIDL.Internal.Decoding
 where
 
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
+import qualified Crypto.WebAuthn.Model.Defaults as D
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
 import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Decoding as B
@@ -25,7 +30,6 @@ import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (IDL))
 import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Coerce (Coercible, coerce)
-import Data.Maybe (catMaybes, mapMaybe)
 import Data.Singletons (SingI)
 import Data.Text (Text)
 
@@ -42,9 +46,12 @@ class Convert a => Decode a where
 class Convert a => DecodeCreated a where
   decodeCreated :: M.SupportedAttestationStatementFormats -> IDL a -> Either Text a
 
-instance Decode a => Decode (Maybe a) where
-  decode Nothing = pure Nothing
-  decode (Just a) = Just <$> decode a
+decodeWithDefault :: Decode a => a -> Maybe (IDL a) -> Either Text a
+decodeWithDefault def Nothing = pure def
+decodeWithDefault _ (Just value) = decode value
+
+instance (Traversable f, Decode a) => Decode (f a) where
+  decode = traverse decode
 
 instance Decode M.CredentialId
 
@@ -111,93 +118,80 @@ instance Decode Cose.CoseSignAlg where
 instance Decode M.Timeout
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-transport)
-instance Decode [M.AuthenticatorTransport] where
-  decode = pure . mapMaybe decodeTransport
-    where
-      decodeTransport "usb" = Just M.AuthenticatorTransportUSB
-      decodeTransport "nfc" = Just M.AuthenticatorTransportNFC
-      decodeTransport "ble" = Just M.AuthenticatorTransportBLE
-      decodeTransport "internal" = Just M.AuthenticatorTransportInternal
-      decodeTransport _ = Nothing
+instance Decode M.AuthenticatorTransport where
+  decode "usb" = pure M.AuthenticatorTransportUSB
+  decode "nfc" = pure M.AuthenticatorTransportNFC
+  decode "ble" = pure M.AuthenticatorTransportBLE
+  decode "internal" = pure M.AuthenticatorTransportInternal
+  -- FIXME: <https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot>
+  -- mentions:
+  --
+  -- > The values SHOULD be members of AuthenticatorTransport but Relying Parties
+  -- > MUST ignore unknown values.
+  --
+  -- This is a small bug in the standard however, see
+  -- https://github.com/w3c/webauthn/pull/1654 which changes it to
+  --
+  -- > The values SHOULD be members of AuthenticatorTransport but Relying
+  -- > Parties SHOULD accept and store unknown values.
+  --
+  -- This code currently thrown an error which is wrong
+  decode str = Left $ "Unknown AuthenticatorTransport string: " <> str
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-descriptor)
--- [The type] member contains the type of the public key credential the caller
--- is referring to. The value SHOULD be a member of
--- PublicKeyCredentialType but client platforms MUST ignore any
--- PublicKeyCredentialDescriptor with an unknown type.
-instance Decode [M.CredentialDescriptor] where
-  decode Nothing = pure []
-  decode (Just xs) = catMaybes <$> traverse decodeDescriptor xs
-    where
-      decodeDescriptor :: IDL.PublicKeyCredentialDescriptor -> Either Text (Maybe M.CredentialDescriptor)
-      decodeDescriptor IDL.PublicKeyCredentialDescriptor {littype = "public-key", ..} = do
-        let cdTyp = M.CredentialTypePublicKey
-        cdId <- decode id
-        cdTransports <- decode transports
-        pure . Just $ M.CredentialDescriptor {..}
-      decodeDescriptor _ = pure Nothing
+instance Decode M.CredentialDescriptor where
+  decode IDL.PublicKeyCredentialDescriptor {..} = do
+    cdTyp <- decode littype
+    cdId <- decode id
+    cdTransports <- decode transports
+    pure M.CredentialDescriptor {..}
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement)
--- The value SHOULD be a member of UserVerificationRequirement but client
--- platforms MUST ignore unknown values, treating an unknown value as if the
--- member does not exist. The default is "preferred".
 instance Decode M.UserVerificationRequirement where
-  decode (Just "discouraged") = Right M.UserVerificationRequirementDiscouraged
-  decode (Just "preferred") = Right M.UserVerificationRequirementPreferred
-  decode (Just "required") = Right M.UserVerificationRequirementRequired
-  decode _ = Right M.UserVerificationRequirementPreferred
+  decode "discouraged" = pure M.UserVerificationRequirementDiscouraged
+  decode "preferred" = pure M.UserVerificationRequirementPreferred
+  decode "required" = pure M.UserVerificationRequirementRequired
+  decode str = Left $ "Unknown UserVerificationRequirement string: " <> str
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-attachment)
+instance Decode M.AuthenticatorAttachment where
+  decode "platform" = pure M.AuthenticatorAttachmentPlatform
+  decode "cross-platform" = pure M.AuthenticatorAttachmentCrossPlatform
+  decode str = Left $ "Unknown AuthenticatorAttachment string: " <> str
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-residentkey)
+instance Decode M.ResidentKeyRequirement where
+  decode "discouraged" = pure M.ResidentKeyRequirementDiscouraged
+  decode "preferred" = pure M.ResidentKeyRequirementPreferred
+  decode "required" = pure M.ResidentKeyRequirementRequired
+  decode str = Left $ "Unknown ResidentKeyRequirement string: " <> str
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-authenticatorSelection)
 instance Decode M.AuthenticatorSelectionCriteria where
   decode IDL.AuthenticatorSelectionCriteria {..} = do
-    let ascAuthenticatorAttachment = decodeAttachment =<< authenticatorAttachment
-        ascResidentKey = decodeResidentKey residentKey
-    ascUserVerification <- decode userVerification
+    ascAuthenticatorAttachment <- decode authenticatorAttachment
+    ascResidentKey <- decodeWithDefault (D.ascResidentKeyDefault requireResidentKey) residentKey
+    ascUserVerification <- decodeWithDefault D.ascUserVerificationDefault userVerification
     pure $ M.AuthenticatorSelectionCriteria {..}
-    where
-      -- Any unknown values must be ignored, treating them as if the member does not exist
-      decodeAttachment "platform" = Just M.AuthenticatorAttachmentPlatform
-      decodeAttachment "cross-platform" = Just M.AuthenticatorAttachmentCrossPlatform
-      decodeAttachment _ = Nothing
-
-      -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-residentkey)
-      -- The value SHOULD be a member of ResidentKeyRequirement but client platforms
-      -- MUST ignore unknown values, treating an unknown value as if the member does not
-      -- exist. If no value is given then the effective value is required if
-      -- requireResidentKey is true or discouraged if it is false or absent.
-      decodeResidentKey :: Maybe IDL.DOMString -> M.ResidentKeyRequirement
-      decodeResidentKey (Just "discouraged") = M.ResidentKeyRequirementDiscouraged
-      decodeResidentKey (Just "preferred") = M.ResidentKeyRequirementPreferred
-      decodeResidentKey (Just "required") = M.ResidentKeyRequirementRequired
-      decodeResidentKey _ = case requireResidentKey of
-        Just True -> M.ResidentKeyRequirementRequired
-        _ -> M.ResidentKeyRequirementDiscouraged
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-attestationconveyancepreference)
--- Its values SHOULD be members of AttestationConveyancePreference. Client
--- platforms MUST ignore unknown values, treating an unknown value as if the
--- member does not exist. Its default value is "none".
 instance Decode M.AttestationConveyancePreference where
-  decode (Just "none") = Right M.AttestationConveyancePreferenceNone
-  decode (Just "indirect") = Right M.AttestationConveyancePreferenceIndirect
-  decode (Just "direct") = Right M.AttestationConveyancePreferenceDirect
-  decode (Just "enterprise") = Right M.AttestationConveyancePreferenceEnterprise
-  decode _ = Right M.AttestationConveyancePreferenceNone
+  decode "none" = Right M.AttestationConveyancePreferenceNone
+  decode "indirect" = Right M.AttestationConveyancePreferenceIndirect
+  decode "direct" = Right M.AttestationConveyancePreferenceDirect
+  decode "enterprise" = Right M.AttestationConveyancePreferenceEnterprise
+  decode str = Left $ "Unknown AttestationConveyancePreference string: " <> str
+
+instance Decode M.CredentialType where
+  decode "public-key" = pure M.CredentialTypePublicKey
+  decode str = Left $ "Unknown PublicKeyCredentialType string: " <> str
 
 -- [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialparameters)
--- [The type] member specifies the type of credential to be created. The value SHOULD
--- be a member of PublicKeyCredentialType but client platforms MUST ignore
--- unknown values, ignoring any PublicKeyCredentialParameters with an unknown
--- type.
-instance Decode [M.CredentialParameters] where
-  decode xs = catMaybes <$> traverse decodeParam xs
-    where
-      decodeParam :: IDL.PublicKeyCredentialParameters -> Either Text (Maybe M.CredentialParameters)
-      decodeParam IDL.PublicKeyCredentialParameters {littype = "public-key", ..} = do
-        let cpTyp = M.CredentialTypePublicKey
-        cpAlg <- decode alg
-        pure . Just $ M.CredentialParameters {..}
-      decodeParam _ = pure Nothing
+instance Decode M.CredentialParameters where
+  decode IDL.PublicKeyCredentialParameters {..} = do
+    cpTyp <- decode littype
+    cpAlg <- decode alg
+    pure M.CredentialParameters {..}
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
 instance Decode (M.CredentialOptions 'K.Registration) where
@@ -207,9 +201,9 @@ instance Decode (M.CredentialOptions 'K.Registration) where
     corChallenge <- decode challenge
     corPubKeyCredParams <- decode pubKeyCredParams
     corTimeout <- decode timeout
-    corExcludeCredentials <- decode excludeCredentials
+    corExcludeCredentials <- decodeWithDefault D.corExcludeCredentialsDefault excludeCredentials
     corAuthenticatorSelection <- decode authenticatorSelection
-    corAttestation <- decode attestation
+    corAttestation <- decodeWithDefault D.corAttestationDefault attestation
     let corExtensions = M.AuthenticationExtensionsClientInputs {} <$ extensions
     pure $ M.CredentialOptionsRegistration {..}
 
@@ -219,8 +213,8 @@ instance Decode (M.CredentialOptions 'K.Authentication) where
     coaChallenge <- decode challenge
     coaTimeout <- decode timeout
     coaRpId <- decode rpId
-    coaAllowCredentials <- decode allowCredentials
-    coaUserVerification <- decode userVerification
+    coaAllowCredentials <- decodeWithDefault D.coaAllowCredentialsDefault allowCredentials
+    coaUserVerification <- decodeWithDefault D.coaUserVerificationDefault userVerification
     let coaExtensions = M.AuthenticationExtensionsClientInputs {} <$ extensions
     pure $ M.CredentialOptionsAuthentication {..}
 
@@ -233,9 +227,7 @@ instance DecodeCreated (M.AuthenticatorResponse 'K.Registration 'True) where
   decodeCreated supportedFormats IDL.AuthenticatorAttestationResponse {..} = do
     arrClientData <- decode clientDataJSON
     arrAttestationObject <- decodeCreated supportedFormats attestationObject
-    arrTransports <- case transports of
-      Nothing -> pure []
-      Just t -> decode t
+    arrTransports <- decodeWithDefault [] transports
     pure $ M.AuthenticatorResponseRegistration {..}
 
 instance DecodeCreated (M.Credential 'K.Registration 'True) where

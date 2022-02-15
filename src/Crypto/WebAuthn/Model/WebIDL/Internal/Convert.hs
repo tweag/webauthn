@@ -26,8 +26,8 @@ import Data.Text (Text)
 class Convert hs where
   type IDL hs :: Type
 
-instance Convert hs => Convert (Maybe hs) where
-  type IDL (Maybe hs) = Maybe (IDL hs)
+instance (Functor f, Convert a) => Convert (f a) where
+  type IDL (f a) = f (IDL a)
 
 instance Convert M.RpId where
   type IDL M.RpId = IDL.DOMString
@@ -59,8 +59,8 @@ instance Convert M.CredentialType where
 instance Convert Cose.CoseSignAlg where
   type IDL Cose.CoseSignAlg = IDL.COSEAlgorithmIdentifier
 
-instance Convert [M.CredentialParameters] where
-  type IDL [M.CredentialParameters] = [IDL.PublicKeyCredentialParameters]
+instance Convert M.CredentialParameters where
+  type IDL M.CredentialParameters = IDL.PublicKeyCredentialParameters
 
 instance Convert M.Timeout where
   type IDL M.Timeout = IDL.UnsignedLong
@@ -68,29 +68,26 @@ instance Convert M.Timeout where
 instance Convert M.CredentialId where
   type IDL M.CredentialId = IDL.BufferSource
 
-instance Convert [M.AuthenticatorTransport] where
-  type IDL [M.AuthenticatorTransport] = [IDL.DOMString]
+instance Convert M.AuthenticatorTransport where
+  type IDL M.AuthenticatorTransport = IDL.DOMString
 
 instance Convert M.CredentialDescriptor where
   type IDL M.CredentialDescriptor = IDL.PublicKeyCredentialDescriptor
-
-instance Convert [M.CredentialDescriptor] where
-  type IDL [M.CredentialDescriptor] = Maybe [IDL.PublicKeyCredentialDescriptor]
 
 instance Convert M.AuthenticatorAttachment where
   type IDL M.AuthenticatorAttachment = IDL.DOMString
 
 instance Convert M.ResidentKeyRequirement where
-  type IDL M.ResidentKeyRequirement = Maybe IDL.DOMString
+  type IDL M.ResidentKeyRequirement = IDL.DOMString
 
 instance Convert M.UserVerificationRequirement where
-  type IDL M.UserVerificationRequirement = Maybe IDL.DOMString
+  type IDL M.UserVerificationRequirement = IDL.DOMString
 
 instance Convert M.AuthenticatorSelectionCriteria where
   type IDL M.AuthenticatorSelectionCriteria = IDL.AuthenticatorSelectionCriteria
 
 instance Convert M.AttestationConveyancePreference where
-  type IDL M.AttestationConveyancePreference = Maybe IDL.DOMString
+  type IDL M.AttestationConveyancePreference = IDL.DOMString
 
 instance Convert M.AuthenticationExtensionsClientInputs where
   type IDL M.AuthenticationExtensionsClientInputs = Map Text Aeson.Value

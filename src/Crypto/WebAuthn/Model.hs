@@ -20,7 +20,8 @@
 -- This module is reexported by the "Crypto.WebAuthn" module, which is the
 -- preferred way of using it.
 module Crypto.WebAuthn.Model
-  ( module Crypto.WebAuthn.Model.Identifier,
+  ( module Crypto.WebAuthn.Model.Defaults,
+    module Crypto.WebAuthn.Model.Identifier,
     module Crypto.WebAuthn.Model.Kinds,
     module Crypto.WebAuthn.Model.Types,
     module Crypto.WebAuthn.Model.WebIDL,
@@ -33,6 +34,7 @@ where
 import Crypto.WebAuthn.Cose.PublicKey
 import Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
 import Crypto.WebAuthn.Cose.SignAlg
+import Crypto.WebAuthn.Model.Defaults
 import Crypto.WebAuthn.Model.Identifier
 import Crypto.WebAuthn.Model.Kinds
 import Crypto.WebAuthn.Model.Types

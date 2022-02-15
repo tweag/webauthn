@@ -34,9 +34,8 @@ class Convert a => Encode a where
   default encode :: Coercible a (IDL a) => a -> IDL a
   encode = coerce
 
-instance Encode hs => Encode (Maybe hs) where
-  encode Nothing = Nothing
-  encode (Just hs) = Just $ encode hs
+instance (Functor f, Encode a) => Encode (f a) where
+  encode = fmap encode
 
 instance Encode M.RpId
 
@@ -68,13 +67,11 @@ instance Encode M.CredentialType where
   encode M.CredentialTypePublicKey = "public-key"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatortransport>
-instance Encode [M.AuthenticatorTransport] where
-  encode = map encodeTransport
-    where
-      encodeTransport M.AuthenticatorTransportUSB = "usb"
-      encodeTransport M.AuthenticatorTransportNFC = "nfc"
-      encodeTransport M.AuthenticatorTransportBLE = "ble"
-      encodeTransport M.AuthenticatorTransportInternal = "internal"
+instance Encode M.AuthenticatorTransport where
+  encode M.AuthenticatorTransportUSB = "usb"
+  encode M.AuthenticatorTransportNFC = "nfc"
+  encode M.AuthenticatorTransportBLE = "ble"
+  encode M.AuthenticatorTransportInternal = "internal"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment>
 instance Encode M.AuthenticatorAttachment where
@@ -83,22 +80,22 @@ instance Encode M.AuthenticatorAttachment where
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-residentKeyRequirement>
 instance Encode M.ResidentKeyRequirement where
-  encode M.ResidentKeyRequirementDiscouraged = Just "discouraged"
-  encode M.ResidentKeyRequirementPreferred = Just "preferred"
-  encode M.ResidentKeyRequirementRequired = Just "required"
+  encode M.ResidentKeyRequirementDiscouraged = "discouraged"
+  encode M.ResidentKeyRequirementPreferred = "preferred"
+  encode M.ResidentKeyRequirementRequired = "required"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement>
 instance Encode M.UserVerificationRequirement where
-  encode M.UserVerificationRequirementRequired = Just "required"
-  encode M.UserVerificationRequirementPreferred = Just "preferred"
-  encode M.UserVerificationRequirementDiscouraged = Just "discouraged"
+  encode M.UserVerificationRequirementRequired = "required"
+  encode M.UserVerificationRequirementPreferred = "preferred"
+  encode M.UserVerificationRequirementDiscouraged = "discouraged"
 
 -- | <https://www.w3.org/TR/webauthn-2/#enum-attestation-convey>
 instance Encode M.AttestationConveyancePreference where
-  encode M.AttestationConveyancePreferenceNone = Just "none"
-  encode M.AttestationConveyancePreferenceIndirect = Just "indirect"
-  encode M.AttestationConveyancePreferenceDirect = Just "direct"
-  encode M.AttestationConveyancePreferenceEnterprise = Just "enterprise"
+  encode M.AttestationConveyancePreferenceNone = "none"
+  encode M.AttestationConveyancePreferenceIndirect = "indirect"
+  encode M.AttestationConveyancePreferenceDirect = "direct"
+  encode M.AttestationConveyancePreferenceEnterprise = "enterprise"
 
 instance Encode M.CredentialRpEntity where
   encode M.CredentialRpEntity {..} =
@@ -115,14 +112,12 @@ instance Encode M.CredentialUserEntity where
         name = encode cueName
       }
 
-instance Encode [M.CredentialParameters] where
-  encode = map encodeParameters
-    where
-      encodeParameters M.CredentialParameters {..} =
-        IDL.PublicKeyCredentialParameters
-          { littype = encode cpTyp,
-            alg = encode cpAlg
-          }
+instance Encode M.CredentialParameters where
+  encode M.CredentialParameters {..} =
+    IDL.PublicKeyCredentialParameters
+      { littype = encode cpTyp,
+        alg = encode cpAlg
+      }
 
 instance Encode M.CredentialDescriptor where
   encode M.CredentialDescriptor {..} =
@@ -136,15 +131,12 @@ instance Encode M.AuthenticatorSelectionCriteria where
   encode M.AuthenticatorSelectionCriteria {..} =
     IDL.AuthenticatorSelectionCriteria
       { authenticatorAttachment = encode ascAuthenticatorAttachment,
-        residentKey = encode ascResidentKey,
+        residentKey = Just $ encode ascResidentKey,
         -- [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-requireresidentkey)
         -- Relying Parties SHOULD set it to true if, and only if, residentKey is set to required.
         requireResidentKey = Just (ascResidentKey == M.ResidentKeyRequirementRequired),
-        userVerification = encode ascUserVerification
+        userVerification = Just $ encode ascUserVerification
       }
-
-instance Encode [M.CredentialDescriptor] where
-  encode = Just . map encode
 
 instance Encode (M.CredentialOptions 'K.Registration) where
   encode M.CredentialOptionsRegistration {..} =
@@ -154,9 +146,9 @@ instance Encode (M.CredentialOptions 'K.Registration) where
         challenge = encode corChallenge,
         pubKeyCredParams = encode corPubKeyCredParams,
         timeout = encode corTimeout,
-        excludeCredentials = encode corExcludeCredentials,
+        excludeCredentials = Just $ encode corExcludeCredentials,
         authenticatorSelection = encode corAuthenticatorSelection,
-        attestation = encode corAttestation,
+        attestation = Just $ encode corAttestation,
         extensions = encode corExtensions
       }
 
@@ -166,8 +158,8 @@ instance Encode (M.CredentialOptions 'K.Authentication) where
       { challenge = encode coaChallenge,
         timeout = encode coaTimeout,
         rpId = encode coaRpId,
-        allowCredentials = encode coaAllowCredentials,
-        userVerification = encode coaUserVerification,
+        allowCredentials = Just $ encode coaAllowCredentials,
+        userVerification = Just $ encode coaUserVerification,
         extensions = encode coaExtensions
       }
 

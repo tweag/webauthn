@@ -7,11 +7,42 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Stability: experimental
--- This module contains the same top-level definitions as 'Crypto.WebAuthn.Client.JavaScript',
--- but with the types containing a more Haskell-friendly structure.
 --
--- Note: The 'ToJSON' instances of these types are for pretty-printing purposes
--- only.
+-- This module contains Haskell-friendly types for structures used in WebAuthn
+-- that are used throughout this library. These types are modelled according to
+-- the following conventions:
+--
+-- * If a structure has the same semantics for both the
+--   [registration](https://www.w3.org/TR/webauthn-2/#registration) and
+--   [authentication](https://www.w3.org/TR/webauthn-2/#authentication) WebAuthn
+--   [ceremonies](https://www.w3.org/TR/webauthn-2/#ceremony), then its type is
+--   parametrized by a @c@ parameter of kind 'CeremonyKind'. If such types have
+--   differing fields,
+--   [GADTs](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/gadt.html)
+--   are used to distinguish between them, where the constructor name is the
+--   type name with a @...Registration@ or @...Authentication@ suffix
+-- * If the raw bytes are needed for verification purposes of a structure, then
+--   its type is parametrized by a @raw@ parameter of kind 'Bool'. Only if @raw
+--   ~ 'True'@, the raw bytes of the necessary structures has to be present in
+--   the type. The type 'RawField' is used as a helper type for this.
+-- * In order to avoid duplicate record fields, all fields are prefixed with
+--   the initials of the constructor name.
+-- * Every type should have a 'ToJSON' instance for pretty-printing purposes.
+--   This JSON encoding doesn't correspond to any encoding used for
+--   sending/receiving these structures, it's only used for pretty-printing,
+--   which is why it doesn't need to be standardized. For encoding these
+--   structures from/to JSON for sending/receiving, see the
+--   'Crypto.WebAuthn.Model.WebIDL' module
+-- #defaultFields#
+-- * Fields of the WebAuthn standard that are optional (for writing) but have
+--   defaults (making them non-optional for reading) are encoded as
+--   non-optional fields, while the defaults are exposed in the
+--   'Crypto.WebAuthn.Model.Defaults' module. The alternative of making these
+--   fields optional would allow RP not having to specify them, which seems
+--   like a less safer option, since the defaults might not be what is really
+--   needed, and they might change. The root cause why this decision had to be
+--   made is that such assymetrical reading/writing fields don't map nicely to
+--   Haskell's records.
 --
 -- #extensions#
 -- TODO:
@@ -604,7 +635,7 @@ newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+-- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
 data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
   {
   }
@@ -616,7 +647,7 @@ instance ToJSON AuthenticationExtensionsClientInputs where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- This is a dictionary containing the [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+-- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
 data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
   {
   }
@@ -710,7 +741,6 @@ data CredentialDescriptor = CredentialDescriptor
     -- This OPTIONAL member contains a hint as to how the [client](https://www.w3.org/TR/webauthn-2/#client)
     -- might communicate with the [managing authenticator](https://www.w3.org/TR/webauthn-2/#public-key-credential-source-managing-authenticator)
     -- of the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) the caller is referring to.
-    -- The values SHOULD be members of 'AuthenticatorTransport' but [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values.
     cdTransports :: Maybe [AuthenticatorTransport]
   }
   deriving (Eq, Show, Generic, ToJSON)
@@ -729,15 +759,14 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- Specifies the extent to which the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- desires to create a [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential).
     -- For historical reasons the naming retains the deprecated “resident” terminology.
+    -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.ascResidentKeyDefault'.
     ascResidentKey :: ResidentKeyRequirement,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-userverification)
     -- This member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
     -- requirements regarding [user verification](https://www.w3.org/TR/webauthn-2/#user-verification)
     -- for the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
     -- operation. Eligible authenticators are filtered to only those capable of satisfying this requirement.
-    -- The value SHOULD be a member of 'UserVerificationRequirement' but
-    -- [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values,
-    -- treating an unknown value as if the [member does not exist](https://infra.spec.whatwg.org/#map-exists).
+    -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.ascUserVerificationDefault'.
     ascUserVerification :: UserVerificationRequirement
   }
   deriving (Eq, Show, Generic, ToJSON)
@@ -818,6 +847,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
       -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.corExcludeCredentials'.
       corExcludeCredentials :: [CredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -827,6 +857,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.corAttestationDefault'.
       corAttestation :: AttestationConveyancePreference,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
       -- This member contains additional parameters requesting additional processing by the client and authenticator.
@@ -836,7 +867,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- consult the IANA "WebAuthn Extension Identifiers" registry [IANA-WebAuthn-Registries](https://www.w3.org/TR/webauthn-2/#biblio-iana-webauthn-registries)
       -- established by [RFC8809](https://www.w3.org/TR/webauthn-2/#biblio-rfc8809) for an up-to-date
       -- list of registered [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
-      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
       corExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     CredentialOptions 'Registration
@@ -864,16 +895,18 @@ data CredentialOptions (c :: CeremonyKind) where
       -- This OPTIONAL member contains a list of 'CredentialDescriptor'
       -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
       -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.coaAllowCredentialsDefault'.
       coaAllowCredentials :: [CredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
       -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
       -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
       -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.coaUserVerificationDefault'.
       coaUserVerification :: UserVerificationRequirement,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
-      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
       coaExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     CredentialOptions 'Authentication
