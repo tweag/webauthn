@@ -3,8 +3,8 @@
 module Encoding (spec) where
 
 import Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats)
+import Crypto.WebAuthn.Encoding.Binary (encodeRawCredential)
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding (encodeRawCredential)
 import Crypto.WebAuthn.Model.WebIDL.Internal.Decoding (Decode (decode), DecodeCreated (decodeCreated))
 import Crypto.WebAuthn.Model.WebIDL.Internal.Encoding (Encode (encode))
 import Spec.Types ()

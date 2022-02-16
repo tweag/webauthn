@@ -116,7 +116,14 @@ instance Arbitrary (M.RawField 'False) where
   arbitrary = pure M.NoRaw
 
 instance Arbitrary (M.CollectedClientData c 'False) where
-  arbitrary = M.CollectedClientData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary =
+    M.CollectedClientData
+      <$> arbitrary
+        <*> arbitrary
+        -- The crossOrigin value can't be roundtripped with Nothing values,
+        -- so let's just not generate Nothing values here
+        <*> (Just <$> arbitrary)
+        <*> arbitrary
 
 instance Arbitrary (M.AttestationObject 'False) where
   arbitrary = do

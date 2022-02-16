@@ -117,7 +117,6 @@ module Crypto.WebAuthn.Model.Types
     -- * Top-level types
     CredentialOptions (..),
     Credential (..),
-    stripRawCredential,
   )
 where
 
@@ -134,7 +133,6 @@ import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
     CeremonyKind (Authentication, Registration),
     ProtocolKind (Fido2, FidoU2F),
-    SCeremonyKind (SAuthentication, SRegistration),
   )
 import Data.Aeson (ToJSON, Value (Null, String), object, (.=))
 import Data.Aeson.Types (toJSON)
@@ -970,6 +968,23 @@ instance ToJSON (CredentialOptions c) where
 -- The client data represents the contextual bindings of both the
 -- [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)
 -- and the [client](https://www.w3.org/TR/webauthn-2/#client).
+--
+-- For binary serialization of thes type, see
+-- "Crypto.WebAuthn.Encoding.Binary". If decoded with
+-- 'Crypto.WebAuthn.Encoding.Binary.decodeCollectedClientData', the
+-- 'ccdRawData' field is filled out with the raw bytes, while
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCollectedClientData' can be used
+-- to fill out this field when constructing this value otherwise. Unchecked
+-- invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCollectedClientData c = c',
+-- ensuring that the 'ccdRawData' field should always correspond to its
+-- encoding. This means that if @raw ~ 'True'@, it's not safe to modify
+-- individual fields. To make changes, first use
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawCollectedClientData', make the
+-- changes on the result, then call
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCollectedClientData' on that. Note
+-- however that any modifications also invalidate signatures over the binary
+-- data, specifically 'araSignature' and 'aoAttStmt'.
 data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
     -- This member contains the challenge provided by the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
@@ -983,8 +998,8 @@ data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-crossorigin)
     -- This member contains the inverse of the @sameOriginWithAncestors@ araument value
     -- that was passed into the [internal method](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots).
-    ccdCrossOrigin :: Bool,
-    -- | Raw data of the client data, for verification purposes
+    ccdCrossOrigin :: Maybe Bool,
+    -- | Raw data of the client data, for verification purposes.
     ccdRawData :: RawField raw
     -- TODO: This library does not implement token binding, this is in
     -- anticipation of version 3 of the webauthn spec that likely removes this
@@ -1054,6 +1069,24 @@ instance ToJSON (AttestedCredentialData c raw) where
 -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
 -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
+--
+-- For the binary serialization of this type, see
+-- "Crypto.WebAuthn.Encoding.Binary". If decoded with
+-- 'Crypto.WebAuthn.Encoding.Binary.decodeAuthenticatorData', the 'adRawData'
+-- field is filled out with the binary serialization, while
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAuthenticatorData' can be used to
+-- fill out this field when constructing this value otherwise. This also
+-- applies to raw 'acdCredentialPublicKeyBytes' field in
+-- 'adAttestedCredentialData'. Unchecked invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAuthenticatorData d = d', ensuring
+-- that the 'adRawData' and 'acdCredentialPublicKeyBytes' fields should always
+-- correspond to their respective binary serializations. This means that if
+-- @raw ~ 'True'@, it's not safe to modify individual fields. To make changes,
+-- first use 'Crypto.WebAuthn.Encoding.Binary.stripRawAuthenticatorData', make
+-- the changes on the result, then call
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAuthenticatorData' on that. Note
+-- however that any modifications also invalidate signatures over the binary
+-- data, specifically 'araSignature' and 'aoAttStmt'.
 data AuthenticatorData (c :: CeremonyKind) raw = AuthenticatorData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rpidhash)
     -- SHA-256 hash of the [RP ID](https://www.w3.org/TR/webauthn-2/#rp-id) the
@@ -1212,6 +1245,26 @@ lookupAttestationStatementFormat ::
 lookupAttestationStatementFormat id (SupportedAttestationStatementFormats sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
+--
+-- For the [binary
+-- serialization](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
+-- of this type, see "Crypto.WebAuthn.Encoding.Binary". If decoded with
+-- 'Crypto.WebAuthn.Encoding.Binary.decodeAttestationObject', the 'aoAuthData'
+-- field is filled out with the binary serialization of its fields, while
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAttestationObject' can be used to
+-- fill out this field when constructing this value otherwise. Unchecked
+-- invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAttestationObject o = o', ensuring
+-- that the binary fields of the 'aoAuthData' field should always correspond to
+-- their respective serializations. This means that if @raw ~ 'True'@, it's not
+-- safe to modify individual fields. To make changes, first use
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawAttestationObject', make the
+-- changes on the result, then call
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAttestationObject' on that. Note
+-- however that any modifications also invalidate signatures over the binary
+-- data, specifically 'aoAttStmt'. The
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeAttestationObject' can be used to get
+-- the binary encoding of this type when @raw ~ 'True'@.
 data AttestationObject raw = forall a.
   AttestationStatementFormat a =>
   AttestationObject
@@ -1230,8 +1283,38 @@ data AttestationObject raw = forall a.
     -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
     aoAuthData :: AuthenticatorData 'Registration raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)
+    -- The attestation statement format is the manner in which the signature is
+    -- represented and the various contextual bindings are incorporated into
+    -- the attestation statement by the
+    -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator). In
+    -- other words, this defines the syntax of the statement. Various existing
+    -- components and OS platforms (such as TPMs and the Android OS) have
+    -- previously defined [attestation statement
+    -- formats](https://www.w3.org/TR/webauthn-2/#attestation-statement-format).
+    -- This specification supports a variety of such formats in an extensible
+    -- way, as defined in [§ 6.5.2 Attestation Statement
+    -- Formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+    -- The formats themselves are identified by strings, as described in [§ 8.1
+    -- Attestation Statement Format
+    -- Identifiers](https://www.w3.org/TR/webauthn-2/#sctn-attstn-fmt-ids).
+    --
+    -- This value is of a type that's an instance of
+    -- 'AttestationStatementFormat', which encodes everything needed about the
+    -- attestation statement.
     aoFmt :: a,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+    -- The [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement) is
+    -- a specific type of signed data object, containing statements about a
+    -- [public key
+    -- credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
+    -- itself and the
+    -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) that
+    -- created it. It contains an [attestation
+    -- signature](https://www.w3.org/TR/webauthn-2/#attestation-signature)
+    -- created using the key of the attesting authority (except for the case of
+    -- [self attestation](https://www.w3.org/TR/webauthn-2/#self-attestation),
+    -- when it is created using the [credential private
+    -- key](https://www.w3.org/TR/webauthn-2/#credential-private-key)).
     aoAttStmt :: AttStmt a
   }
 
@@ -1330,7 +1413,9 @@ data AuthenticatorResponse (c :: CeremonyKind) raw where
       -- returned by the authenticator. See [§ 6.1 Authenticator Data](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data).
       araAuthenticatorData :: AuthenticatorData 'Authentication raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-signature)
-      -- This attribute contains the raw signature returned from the authenticator.
+      -- This attribute contains the raw [assertion
+      -- signature](https://www.w3.org/TR/webauthn-2/#assertion-signature)
+      -- returned from the authenticator.
       -- See [§ 6.3.3 The authenticatorGetAssertion Operation](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion).
       araSignature :: AssertionSignature,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-userhandle)
@@ -1362,6 +1447,22 @@ instance ToJSON (AuthenticatorResponse c raw) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- The 'Credential' interface contains the attributes that are returned to the caller when a new credential is created, or a new assertion is requested.
+--
+-- This type has nested fields which use a binary encoding that needs to be
+-- preserved for verification purposes. The binary encoding of these fields can
+-- be removed or recomputed using functions from
+-- "Crypto.WebAuthn.Encoding.Binary". Specifically
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawCredential' and
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCredential' respectively.
+-- Unchecked invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCredential c = c', ensuring that
+-- the binary fields should always correspond to the values respective
+-- serializations. This means that if @raw ~ 'True'@, it's not safe to modify
+-- individual fields. To make changes, first use
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawCredential', make the changes on
+-- the result, then call 'Crypto.WebAuthn.Encoding.Binary.encodeRawCredential'
+-- on that. Note however that any modifications also invalidate signatures over
+-- the binary data, specifically 'araSignature' and 'aoAttStmt'.
 data Credential (c :: CeremonyKind) raw = Credential
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-identifier-slot)
     -- Contains the [credential ID](https://www.w3.org/TR/webauthn-2/#credential-id),
@@ -1389,54 +1490,3 @@ data Credential (c :: CeremonyKind) raw = Credential
     cClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
   deriving (Eq, Show, Generic, ToJSON)
-
--- | Removes all raw fields from a 'Credential', useful for
--- e.g. pretty-printing only the desired fields. This is the counterpart to
--- 'Crypto.WebAuthn.Model.Binary.Encoding.encodeRawCredential'
-stripRawCredential :: forall c raw. SingI c => Credential c raw -> Credential c 'False
-stripRawCredential Credential {..} =
-  Credential
-    { cResponse = case sing @c of
-        SRegistration -> stripRawAuthenticatorResponseRegistration cResponse
-        SAuthentication -> stripRawAuthenticatorResponseAuthentication cResponse,
-      ..
-    }
-  where
-    stripRawAuthenticatorResponseAuthentication :: AuthenticatorResponse 'Authentication raw -> AuthenticatorResponse 'Authentication 'False
-    stripRawAuthenticatorResponseAuthentication AuthenticatorResponseAuthentication {..} =
-      AuthenticatorResponseAuthentication
-        { araClientData = stripRawCollectedClientData araClientData,
-          araAuthenticatorData = stripRawAuthenticatorData araAuthenticatorData,
-          ..
-        }
-
-    stripRawAuthenticatorResponseRegistration :: AuthenticatorResponse 'Registration raw -> AuthenticatorResponse 'Registration 'False
-    stripRawAuthenticatorResponseRegistration AuthenticatorResponseRegistration {..} =
-      AuthenticatorResponseRegistration
-        { arrClientData = stripRawCollectedClientData arrClientData,
-          arrAttestationObject = stripRawAttestationObject arrAttestationObject,
-          ..
-        }
-
-    stripRawAttestationObject :: AttestationObject raw -> AttestationObject 'False
-    stripRawAttestationObject AttestationObject {..} =
-      AttestationObject
-        { aoAuthData = stripRawAuthenticatorData aoAuthData,
-          ..
-        }
-
-    stripRawAuthenticatorData :: forall c raw. SingI c => AuthenticatorData c raw -> AuthenticatorData c 'False
-    stripRawAuthenticatorData AuthenticatorData {..} =
-      AuthenticatorData
-        { adRawData = NoRaw,
-          adAttestedCredentialData = stripRawAttestedCredentialData adAttestedCredentialData,
-          ..
-        }
-
-    stripRawAttestedCredentialData :: forall c raw. SingI c => AttestedCredentialData c raw -> AttestedCredentialData c 'False
-    stripRawAttestedCredentialData = case sing @c of
-      SRegistration -> \AttestedCredentialData {..} -> AttestedCredentialData {acdCredentialPublicKeyBytes = NoRaw, ..}
-      SAuthentication -> \NoAttestedCredentialData -> NoAttestedCredentialData
-
-    stripRawCollectedClientData :: forall c raw. SingI c => CollectedClientData c raw -> CollectedClientData c 'False
-    stripRawCollectedClientData CollectedClientData {..} = CollectedClientData {ccdRawData = NoRaw, ..}

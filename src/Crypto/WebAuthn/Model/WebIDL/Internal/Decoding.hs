@@ -22,11 +22,11 @@ module Crypto.WebAuthn.Model.WebIDL.Internal.Decoding
 where
 
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
+import qualified Crypto.WebAuthn.Encoding.Binary as B
 import qualified Crypto.WebAuthn.Encoding.Strings as S
 import qualified Crypto.WebAuthn.Model.Defaults as D
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Decoding as B
 import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (IDL))
 import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL

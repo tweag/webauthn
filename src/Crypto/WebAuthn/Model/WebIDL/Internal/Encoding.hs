@@ -17,10 +17,10 @@ module Crypto.WebAuthn.Model.WebIDL.Internal.Encoding
 where
 
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
+import qualified Crypto.WebAuthn.Encoding.Binary as B
 import qualified Crypto.WebAuthn.Encoding.Strings as S
 import qualified Crypto.WebAuthn.Model.Kinds as K
 import qualified Crypto.WebAuthn.Model.Types as M
-import qualified Crypto.WebAuthn.Model.WebIDL.Internal.Binary.Encoding as B
 import Crypto.WebAuthn.Model.WebIDL.Internal.Convert (Convert (IDL))
 import qualified Crypto.WebAuthn.Model.WebIDL.Types as IDL
 import qualified Crypto.WebAuthn.WebIDL as IDL
@@ -168,7 +168,7 @@ instance Encode (M.Credential 'K.Registration 'True) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorresponse-clientdatajson)
 instance SingI c => Encode (M.CollectedClientData (c :: K.CeremonyKind) 'True) where
-  encode ccd = IDL.URLEncodedBase64 $ B.encodeCollectedClientData ccd
+  encode ccd = IDL.URLEncodedBase64 $ M.unRaw $ M.ccdRawData ccd
 
 instance Encode (M.AuthenticatorResponse 'K.Authentication 'True) where
   encode M.AuthenticatorResponseAuthentication {..} =
