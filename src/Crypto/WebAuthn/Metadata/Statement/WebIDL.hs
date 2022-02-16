@@ -28,7 +28,7 @@ where
 import Crypto.WebAuthn.Internal.Utils (enumJSONEncodingOptions, jsonEncodingOptions)
 import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
-import qualified Crypto.WebAuthn.WebIDL as IDL
+import qualified Crypto.WebAuthn.Metadata.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)

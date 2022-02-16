@@ -140,12 +140,12 @@ library
     Crypto.WebAuthn.Metadata.Statement.Types,
     Crypto.WebAuthn.Metadata.Statement.WebIDL,
     Crypto.WebAuthn.Metadata.UAF,
+    Crypto.WebAuthn.Metadata.WebIDL,
     Crypto.WebAuthn.Model,
     Crypto.WebAuthn.Model.Defaults,
     Crypto.WebAuthn.Model.Identifier,
     Crypto.WebAuthn.Model.Kinds,
-    Crypto.WebAuthn.Model.Types,
-    Crypto.WebAuthn.WebIDL
+    Crypto.WebAuthn.Model.Types
 
 test-suite tests
   import: sanity

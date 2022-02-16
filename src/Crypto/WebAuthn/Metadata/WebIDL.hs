@@ -1,6 +1,6 @@
 -- | Stability: experimental
 -- | This module defines some types from the [Web IDL](https://webidl.spec.whatwg.org/) specification
-module Crypto.WebAuthn.WebIDL
+module Crypto.WebAuthn.Metadata.WebIDL
   ( DOMString,
     USVString,
     UnsignedLongLong,
@@ -9,7 +9,7 @@ module Crypto.WebAuthn.WebIDL
     UnsignedShort,
     Octet,
     Boolean,
-    Crypto.WebAuthn.WebIDL.Double,
+    Crypto.WebAuthn.Metadata.WebIDL.Double,
   )
 where
 
