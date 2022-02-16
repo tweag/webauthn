@@ -100,22 +100,22 @@ module Crypto.WebAuthn
     -- | A set of types representing credential options ('CredentialOptions')
     -- and their resulting credentials responses ('Credential'), used in
     -- [step 2](#step-2) and [step 4](#step-4#) respectively.
-    --
-    -- Also includes a set of functions for indirectly encoding credential
-    -- options to JSON ('encodeCredentialOptionsRegistration',
-    -- 'encodeCredentialOptionsAuthentication') and indirectly decoding
-    -- credential responses from JSON ('decodeCredentialRegistration',
-    -- 'decodeCredentialAuthentication'), using the same encoding as
-    -- [webauthn-json](https://github.com/github/webauthn-json) which can be
-    -- used on the JavaScript side. This is needed to construct the response
-    -- for [step 2](#step-2) and to deconstruct the request in
-    -- [step 4](#step-4) respectively.
     module Crypto.WebAuthn.Model,
 
     -- * WebAuthn Encoding
 
     -- | Includes everything needed to encode\/decode WebAuthn types between
-    -- serializations and Haskell types defined in "Crypto.WebAuthn.Model"
+    -- serializations and Haskell types defined in "Crypto.WebAuthn.Model".
+    -- Most notably this includes encoding and decoding functions for messages
+    -- exchanged with the
+    -- [webauthn-json](https://github.com/github/webauthn-json) JavaScript
+    -- library: Encoding 'CredentialOptions' to intermediate JSON-serializable
+    -- types using 'wjEncodeCredentialOptionsRegistration' and
+    -- 'wjEncodeCredentialOptionsAuthentication', which can be used for [step
+    -- 2](#step-2). Also decoding 'Credential's from intermediate
+    -- JSON-deserializable types using 'wjDecodeCredentialRegistration' and
+    -- 'wjDecodeCredentialAuthentication', which can be used for [step
+    -- 4](#step-4).
     module Crypto.WebAuthn.Encoding,
 
     -- * Attestation Statement Formats
@@ -128,8 +128,9 @@ module Crypto.WebAuthn
     --
     -- This module contains the 'allSupportedFormats' value, which contains
     -- implementations of all standard attestation statement formats supported
-    -- by this library. It can be passed to the 'decodeCredentialRegistration'
-    -- to enable all these formats.
+    -- by this library. It can be manually passed to the
+    -- 'wjDecodeCredentialRegistration'' to enable only specific formats or add
+    -- support for additional ones.
     module Crypto.WebAuthn.AttestationStatementFormat,
 
     -- * Operations

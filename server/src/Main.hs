@@ -224,7 +224,7 @@ beginRegistration db pending = do
           }
   options <- Scotty.liftAndCatchIO $ insertPendingRegistration pending $ defaultPkcco user
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin => " <> jsonText options
-  Scotty.json $ WA.encodeCredentialOptionsRegistration options
+  Scotty.json $ WA.wjEncodeCredentialOptionsRegistration options
 
 -- | Completes the relying party's responsibilities of the registration
 -- ceremony. Receives the credential from the client and performs the
@@ -241,7 +241,7 @@ completeRegistration ::
 completeRegistration origin rpIdHash db pending registryVar = do
   credential <- Scotty.jsonData
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Raw register complete <= " <> jsonText credential
-  cred <- case WA.decodeCredentialRegistration WA.allSupportedFormats credential of
+  cred <- case WA.wjDecodeCredentialRegistration credential of
     Left err -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete failed to decode raw request: " <> Text.pack (show err)
       fail $ show err
@@ -325,7 +325,7 @@ beginLogin db pending = do
 
   -- Send credential options to the client
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login begin => " <> jsonText options
-  Scotty.json $ WA.encodeCredentialOptionsAuthentication options
+  Scotty.json $ WA.wjEncodeCredentialOptionsAuthentication options
   where
     mkCredentialDescriptor :: WA.CredentialEntry -> WA.CredentialDescriptor
     mkCredentialDescriptor WA.CredentialEntry {WA.ceCredentialId, WA.ceTransports} =
@@ -347,7 +347,7 @@ completeLogin origin rpIdHash db pending = do
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Raw login complete <= " <> jsonText credential
 
   -- Decode credential
-  cred <- case WA.decodeCredentialAuthentication credential of
+  cred <- case WA.wjDecodeCredentialAuthentication credential of
     Left err -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete failed to decode request: " <> Text.pack (show err)
       fail $ show err

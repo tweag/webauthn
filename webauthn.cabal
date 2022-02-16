@@ -115,7 +115,9 @@ library
     Crypto.WebAuthn.AttestationStatementFormat.TPM,
     Crypto.WebAuthn.Encoding,
     Crypto.WebAuthn.Encoding.Binary,
+    Crypto.WebAuthn.Encoding.Internal.WebAuthnJson,
     Crypto.WebAuthn.Encoding.Strings,
+    Crypto.WebAuthn.Encoding.WebAuthnJson,
     Crypto.WebAuthn.Operation,
     Crypto.WebAuthn.Operation.Authentication,
     Crypto.WebAuthn.Operation.CredentialEntry,
@@ -143,11 +145,6 @@ library
     Crypto.WebAuthn.Model.Identifier,
     Crypto.WebAuthn.Model.Kinds,
     Crypto.WebAuthn.Model.Types,
-    Crypto.WebAuthn.Model.WebIDL,
-    Crypto.WebAuthn.Model.WebIDL.Internal.Decoding,
-    Crypto.WebAuthn.Model.WebIDL.Internal.Encoding,
-    Crypto.WebAuthn.Model.WebIDL.Internal.Convert,
-    Crypto.WebAuthn.Model.WebIDL.Types,
     Crypto.WebAuthn.WebIDL
 
 test-suite tests
