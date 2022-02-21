@@ -1,4 +1,4 @@
-### Next version (0.4.0.0)
+### 0.4.0.0
 
 * [#129](https://github.com/tweag/webauthn/pull/129) Rename and expand
   documentation for authentication/registration errors.
