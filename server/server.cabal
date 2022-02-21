@@ -49,6 +49,7 @@ executable server
     http-types            >= 0.12.3 && < 0.13,
     http-client-tls       >= 0.3.5 && < 0.4,
     scotty                >= 0.11.6 && < 0.13,
+    serialise             >= 0.2.3 && < 0.3,
     sqlite-simple         >= 0.4.18 && < 0.5,
     validation            >= 1.1 && < 1.2,
     wai-middleware-static >= 0.8.3 && < 0.10,

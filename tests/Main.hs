@@ -10,8 +10,8 @@ module Main
 where
 
 import Crypto.Hash (hash)
-import Crypto.WebAuthn.AttestationStatementFormat (allSupportedFormats)
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
+import qualified Crypto.WebAuthn.Encoding.WebAuthnJson as WJ
 import qualified Crypto.WebAuthn.Metadata as Meta
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import qualified Crypto.WebAuthn.Model as M
@@ -80,7 +80,7 @@ registryFromBlobFile = do
 registerTestFromFile :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
 registerTestFromFile fp origin rpId verifiable service now = do
   pkCredential <-
-    either (error . show) id . M.decodeCredentialRegistration allSupportedFormats
+    either (error . show) id . WJ.wjDecodeCredentialRegistration
       <$> decodeFile fp
   let options = defaultPublicKeyCredentialCreationOptions pkCredential
   let registerResult =
@@ -101,12 +101,12 @@ main = Hspec.hspec $ do
     -- Check if all attestation responses can be decoded
     describe "attestation responses" $
       canDecodeAllToJSRepr
-        @M.IDLCredentialRegistration
+        @WJ.WJCredentialRegistration
         "tests/responses/attestation/"
     -- Check if all assertion responses can be decoded
     describe "assertion responses" $
       canDecodeAllToJSRepr
-        @M.IDLCredentialAuthentication
+        @WJ.WJCredentialAuthentication
         "tests/responses/assertion/"
   -- Test public key related tests
   describe "PublicKey" PublicKeySpec.spec
@@ -124,7 +124,7 @@ main = Hspec.hspec $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
-          either (error . show) id . M.decodeCredentialRegistration allSupportedFormats
+          either (error . show) id . WJ.wjDecodeCredentialRegistration
             <$> decodeFile
               "tests/responses/attestation/01-none.json"
         let options = defaultPublicKeyCredentialCreationOptions pkCredential
@@ -140,9 +140,9 @@ main = Hspec.hspec $ do
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
         loginReq <-
-          either (error . show) id . M.decodeCredentialAuthentication
+          either (error . show) id . WJ.wjDecodeCredentialAuthentication
             <$> decodeFile
-              @M.IDLCredentialAuthentication
+              @WJ.WJCredentialAuthentication
               "tests/responses/assertion/01-none.json"
         let M.Credential {M.cResponse = cResponse} = loginReq
             signInResult =

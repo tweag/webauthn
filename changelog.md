@@ -5,6 +5,33 @@
 * [#136](https://github.com/tweag/webauthn/pull/136) Improve the safety and
   remove duplication of the public key interface. More checks are being done
   now, preventing invalid public keys from being constructed.
+* [#140](https://github.com/tweag/webauthn/pull/140) Introduction of new
+  serialization-related modules, all reexported via `Crypto.WebAuthn`:
+  - `Crypto.WebAuthn.Model.Defaults` for defaults of optional fields
+  - `Crypto.WebAuthn.Encoding.Strings` for string serializations of enumerations
+  - `Crypto.WebAuthn.Encoding.Binary` for binary serializations
+* [#140](https://github.com/tweag/webauthn/pull/140) Backwards-incompatible
+  changes/fixes regarding serialization:
+  - Fix unknown `AuthenticatorTransport` values being ignored. This breaks
+    backwards compatibility when the received `AuthenticatorTransport`s are
+    inspected and stored in the database. Users are encouraged to serialize
+    individual `AuthenticatorTransport`s to strings using the new
+    `encodeAuthenticatorTransport`. The [example
+    server](https://github.com/tweag/webauthn/tree/master/server) has been
+    updated to store all encoded `AuthenticatorTransport`s as a CBOR-encoded
+    bytestring in the database, but other schemes to store multiple transports
+    can also be employed.
+  - Rename webauthn-json decoding/encoding functions to have a "wj" prefix like
+    `wjEncodeCredentialOptionsRegistration`. The types they interact with have
+    changed their prefix from `IDL` to `WJ` as well
+  - Introduce `wjDecodeCredentialRegistration'` (with a tick) to take a
+    `SupportedAttestationStatementFormats` argument, while the unticked version
+    doesn't take such an argument anymore. In the future only the unticked
+    version is expected to stay backwards-compatible.
+  - `ccdCrossOrigin`s type was corrected from `Bool` to `Maybe Bool`, where
+    `Nothing` has the same semantics as `Just False`. This is necessary for
+    compatibility with WebAuthn Level 1 clients, which don't set this field
+
 
 ### 0.3.0.0
 

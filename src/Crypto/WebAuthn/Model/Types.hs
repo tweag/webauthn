@@ -7,11 +7,42 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Stability: experimental
--- This module contains the same top-level definitions as 'Crypto.WebAuthn.Client.JavaScript',
--- but with the types containing a more Haskell-friendly structure.
 --
--- Note: The 'ToJSON' instances of these types are for pretty-printing purposes
--- only.
+-- This module contains Haskell-friendly types for structures used in WebAuthn
+-- that are used throughout this library. These types are modelled according to
+-- the following conventions:
+--
+-- * If a structure has the same semantics for both the
+--   [registration](https://www.w3.org/TR/webauthn-2/#registration) and
+--   [authentication](https://www.w3.org/TR/webauthn-2/#authentication) WebAuthn
+--   [ceremonies](https://www.w3.org/TR/webauthn-2/#ceremony), then its type is
+--   parametrized by a @c@ parameter of kind 'CeremonyKind'. If such types have
+--   differing fields,
+--   [GADTs](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/gadt.html)
+--   are used to distinguish between them, where the constructor name is the
+--   type name with a @...Registration@ or @...Authentication@ suffix
+-- * If the raw bytes are needed for verification purposes of a structure, then
+--   its type is parametrized by a @raw@ parameter of kind 'Bool'. Only if @raw
+--   ~ 'True'@, the raw bytes of the necessary structures has to be present in
+--   the type. The type 'RawField' is used as a helper type for this.
+-- * In order to avoid duplicate record fields, all fields are prefixed with
+--   the initials of the constructor name.
+-- * Every type should have a 'ToJSON' instance for pretty-printing purposes.
+--   This JSON encoding doesn't correspond to any encoding used for
+--   sending/receiving these structures, it's only used for pretty-printing,
+--   which is why it doesn't need to be standardized. For encoding these
+--   structures from/to JSON for sending/receiving, see the
+--   'Crypto.WebAuthn.Model.WebIDL' module
+-- #defaultFields#
+-- * Fields of the WebAuthn standard that are optional (for writing) but have
+--   defaults (making them non-optional for reading) are encoded as
+--   non-optional fields, while the defaults are exposed in the
+--   'Crypto.WebAuthn.Model.Defaults' module. The alternative of making these
+--   fields optional would allow RP not having to specify them, which seems
+--   like a less safer option, since the defaults might not be what is really
+--   needed, and they might change. The root cause why this decision had to be
+--   made is that such assymetrical reading/writing fields don't map nicely to
+--   Haskell's records.
 --
 -- #extensions#
 -- TODO:
@@ -86,7 +117,6 @@ module Crypto.WebAuthn.Model.Types
     -- * Top-level types
     CredentialOptions (..),
     Credential (..),
-    stripRawCredential,
   )
 where
 
@@ -103,7 +133,6 @@ import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
     CeremonyKind (Authentication, Registration),
     ProtocolKind (Fido2, FidoU2F),
-    SCeremonyKind (SAuthentication, SRegistration),
   )
 import Data.Aeson (ToJSON, Value (Null, String), object, (.=))
 import Data.Aeson.Types (toJSON)
@@ -141,6 +170,9 @@ instance ToJSON (RawField raw) where
 -- values can be added to it in the future, as more credential types are defined.
 -- The values of this enumeration are used for versioning the Authentication Assertion
 -- and attestation structures according to the type of the authenticator.
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeCredentialType'/'Crypto.WebAuthn.Encoding.Strings.encodeCredentialType'.
 data CredentialType = CredentialTypePublicKey
   deriving (Eq, Show, Bounded, Enum, Ord, Generic)
 
@@ -157,6 +189,9 @@ instance ToJSON CredentialType where
 -- best belief as to how an authenticator may be reached. A [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
 -- will typically learn of the supported transports for a [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
 -- via [getTransports()](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-gettransports).
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeAuthenticatorTransport'/'Crypto.WebAuthn.Encoding.Strings.encodeAuthenticatorTransport'.
 data AuthenticatorTransport
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatortransport-usb)
     -- Indicates the respective [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
@@ -176,7 +211,15 @@ data AuthenticatorTransport
     -- transport, i.e., it is a [platform authenticator](https://www.w3.org/TR/webauthn-2/#platform-authenticators).
     -- These authenticators are not removable from the [client device](https://www.w3.org/TR/webauthn-2/#client-device).
     AuthenticatorTransportInternal
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialdescriptor-transports)
+    -- An unknown authenticator transport. Note that according to the current
+    -- version 2 of the WebAuthn standard, unknown fields [must be
+    -- ignored](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattestationresponse-transports-slot),
+    -- which is a bit misleading because such unknown values still need to be
+    -- stored. Draft version 3 of the standard [fixes
+    -- this](https://github.com/w3c/webauthn/pull/1654).
+    AuthenticatorTransportUnknown Text
+  deriving (Eq, Show, Ord, Generic, ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
 -- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)'
@@ -185,6 +228,9 @@ data AuthenticatorTransport
 -- express a preferred [authenticator attachment modality](https://www.w3.org/TR/webauthn-2/#authenticator-attachment-modality)
 -- when calling [@navigator.credentials.create()@](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
 -- to [create a credential](https://www.w3.org/TR/webauthn-2/#sctn-createCredential).
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeAuthenticatorAttachment'/'Crypto.WebAuthn.Encoding.Strings.encodeAuthenticatorAttachment'.
 data AuthenticatorAttachment
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattachment-platform)
     -- This value indicates [platform attachment](https://www.w3.org/TR/webauthn-2/#platform-attachment).
@@ -199,6 +245,9 @@ data AuthenticatorAttachment
 -- requirements for [client-side discoverable credentials](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential)
 -- (formerly known as [resident credentials](https://www.w3.org/TR/webauthn-2/#resident-credential)
 -- or [resident keys](https://www.w3.org/TR/webauthn-2/#resident-key)):
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeResidentKeyRequirement'/'Crypto.WebAuthn.Encoding.Strings.encodeResidentKeyRequirement'.
 data ResidentKeyRequirement
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-discouraged)
     -- This value indicates the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -225,6 +274,9 @@ data ResidentKeyRequirement
 -- A [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may
 -- require [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for some
 -- of its operations but not for others, and may use this type to express its needs.
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeUserVerificationRequirement'/'Crypto.WebAuthn.Encoding.Strings.encodeUserVerificationRequirement'.
 data UserVerificationRequirement
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-userverificationrequirement-required)
     -- This value indicates that the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -250,6 +302,9 @@ data UserVerificationRequirement
 -- [AttestationConveyancePreference](https://www.w3.org/TR/webauthn-2/#enumdef-attestationconveyancepreference)
 -- to specify their preference regarding
 -- [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance) during credential generation.
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodeAttestationConveyancePreference'/'Crypto.WebAuthn.Encoding.Strings.encodeAttestationConveyancePreference'.
 data AttestationConveyancePreference
   = -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-attestationconveyancepreference-none)
     -- This value indicates that the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -604,7 +659,7 @@ newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+-- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
 data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
   {
   }
@@ -616,7 +671,7 @@ instance ToJSON AuthenticationExtensionsClientInputs where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- This is a dictionary containing the [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+-- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
 data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
   {
   }
@@ -710,7 +765,6 @@ data CredentialDescriptor = CredentialDescriptor
     -- This OPTIONAL member contains a hint as to how the [client](https://www.w3.org/TR/webauthn-2/#client)
     -- might communicate with the [managing authenticator](https://www.w3.org/TR/webauthn-2/#public-key-credential-source-managing-authenticator)
     -- of the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) the caller is referring to.
-    -- The values SHOULD be members of 'AuthenticatorTransport' but [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values.
     cdTransports :: Maybe [AuthenticatorTransport]
   }
   deriving (Eq, Show, Generic, ToJSON)
@@ -729,15 +783,14 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- Specifies the extent to which the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- desires to create a [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential).
     -- For historical reasons the naming retains the deprecated “resident” terminology.
+    -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.ascResidentKeyDefault'.
     ascResidentKey :: ResidentKeyRequirement,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-userverification)
     -- This member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
     -- requirements regarding [user verification](https://www.w3.org/TR/webauthn-2/#user-verification)
     -- for the [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create)
     -- operation. Eligible authenticators are filtered to only those capable of satisfying this requirement.
-    -- The value SHOULD be a member of 'UserVerificationRequirement' but
-    -- [client platforms](https://www.w3.org/TR/webauthn-2/#client-platform) MUST ignore unknown values,
-    -- treating an unknown value as if the [member does not exist](https://infra.spec.whatwg.org/#map-exists).
+    -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.ascUserVerificationDefault'.
     ascUserVerification :: UserVerificationRequirement
   }
   deriving (Eq, Show, Generic, ToJSON)
@@ -818,6 +871,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
       -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.corExcludeCredentials'.
       corExcludeCredentials :: [CredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
@@ -827,6 +881,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.corAttestationDefault'.
       corAttestation :: AttestationConveyancePreference,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
       -- This member contains additional parameters requesting additional processing by the client and authenticator.
@@ -836,7 +891,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- consult the IANA "WebAuthn Extension Identifiers" registry [IANA-WebAuthn-Registries](https://www.w3.org/TR/webauthn-2/#biblio-iana-webauthn-registries)
       -- established by [RFC8809](https://www.w3.org/TR/webauthn-2/#biblio-rfc8809) for an up-to-date
       -- list of registered [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
-      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
       corExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     CredentialOptions 'Registration
@@ -864,16 +919,18 @@ data CredentialOptions (c :: CeremonyKind) where
       -- This OPTIONAL member contains a list of 'CredentialDescriptor'
       -- objects representing [public key credentials](https://www.w3.org/TR/webauthn-2/#public-key-credential) acceptable to the caller,
       -- in descending order of the caller’s preference (the first item in the list is the most preferred credential, and so on down the list).
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.coaAllowCredentialsDefault'.
       coaAllowCredentials :: [CredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
       -- This OPTIONAL member describes the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s requirements regarding
       -- [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) for the
       -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.coaUserVerificationDefault'.
       coaUserVerification :: UserVerificationRequirement,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
-      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model#extensions".
+      -- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
       coaExtensions :: Maybe AuthenticationExtensionsClientInputs
     } ->
     CredentialOptions 'Authentication
@@ -911,6 +968,23 @@ instance ToJSON (CredentialOptions c) where
 -- The client data represents the contextual bindings of both the
 -- [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)
 -- and the [client](https://www.w3.org/TR/webauthn-2/#client).
+--
+-- For binary serialization of thes type, see
+-- "Crypto.WebAuthn.Encoding.Binary". If decoded with
+-- 'Crypto.WebAuthn.Encoding.Binary.decodeCollectedClientData', the
+-- 'ccdRawData' field is filled out with the raw bytes, while
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCollectedClientData' can be used
+-- to fill out this field when constructing this value otherwise. Unchecked
+-- invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCollectedClientData c = c',
+-- ensuring that the 'ccdRawData' field should always correspond to its
+-- encoding. This means that if @raw ~ 'True'@, it's not safe to modify
+-- individual fields. To make changes, first use
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawCollectedClientData', make the
+-- changes on the result, then call
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCollectedClientData' on that. Note
+-- however that any modifications also invalidate signatures over the binary
+-- data, specifically 'araSignature' and 'aoAttStmt'.
 data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-challenge)
     -- This member contains the challenge provided by the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
@@ -924,8 +998,8 @@ data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-collectedclientdata-crossorigin)
     -- This member contains the inverse of the @sameOriginWithAncestors@ araument value
     -- that was passed into the [internal method](https://tc39.github.io/ecma262/#sec-object-internal-methods-and-internal-slots).
-    ccdCrossOrigin :: Bool,
-    -- | Raw data of the client data, for verification purposes
+    ccdCrossOrigin :: Maybe Bool,
+    -- | Raw data of the client data, for verification purposes.
     ccdRawData :: RawField raw
     -- TODO: This library does not implement token binding, this is in
     -- anticipation of version 3 of the webauthn spec that likely removes this
@@ -995,6 +1069,24 @@ instance ToJSON (AttestedCredentialData c raw) where
 -- the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party) receives
 -- the [authenticator data](https://www.w3.org/TR/webauthn-2/#authenticator-data)
 -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
+--
+-- For the binary serialization of this type, see
+-- "Crypto.WebAuthn.Encoding.Binary". If decoded with
+-- 'Crypto.WebAuthn.Encoding.Binary.decodeAuthenticatorData', the 'adRawData'
+-- field is filled out with the binary serialization, while
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAuthenticatorData' can be used to
+-- fill out this field when constructing this value otherwise. This also
+-- applies to raw 'acdCredentialPublicKeyBytes' field in
+-- 'adAttestedCredentialData'. Unchecked invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAuthenticatorData d = d', ensuring
+-- that the 'adRawData' and 'acdCredentialPublicKeyBytes' fields should always
+-- correspond to their respective binary serializations. This means that if
+-- @raw ~ 'True'@, it's not safe to modify individual fields. To make changes,
+-- first use 'Crypto.WebAuthn.Encoding.Binary.stripRawAuthenticatorData', make
+-- the changes on the result, then call
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAuthenticatorData' on that. Note
+-- however that any modifications also invalidate signatures over the binary
+-- data, specifically 'araSignature' and 'aoAttStmt'.
 data AuthenticatorData (c :: CeremonyKind) raw = AuthenticatorData
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rpidhash)
     -- SHA-256 hash of the [RP ID](https://www.w3.org/TR/webauthn-2/#rp-id) the
@@ -1153,6 +1245,26 @@ lookupAttestationStatementFormat ::
 lookupAttestationStatementFormat id (SupportedAttestationStatementFormats sasf) = sasf !? id
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-object)
+--
+-- For the [binary
+-- serialization](https://www.w3.org/TR/webauthn-2/#sctn-generating-an-attestation-object)
+-- of this type, see "Crypto.WebAuthn.Encoding.Binary". If decoded with
+-- 'Crypto.WebAuthn.Encoding.Binary.decodeAttestationObject', the 'aoAuthData'
+-- field is filled out with the binary serialization of its fields, while
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAttestationObject' can be used to
+-- fill out this field when constructing this value otherwise. Unchecked
+-- invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAttestationObject o = o', ensuring
+-- that the binary fields of the 'aoAuthData' field should always correspond to
+-- their respective serializations. This means that if @raw ~ 'True'@, it's not
+-- safe to modify individual fields. To make changes, first use
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawAttestationObject', make the
+-- changes on the result, then call
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawAttestationObject' on that. Note
+-- however that any modifications also invalidate signatures over the binary
+-- data, specifically 'aoAttStmt'. The
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeAttestationObject' can be used to get
+-- the binary encoding of this type when @raw ~ 'True'@.
 data AttestationObject raw = forall a.
   AttestationStatementFormat a =>
   AttestationObject
@@ -1171,8 +1283,38 @@ data AttestationObject raw = forall a.
     -- in the same format, and uses its knowledge of the authenticator to make trust decisions.
     aoAuthData :: AuthenticatorData 'Registration raw,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement-format)
+    -- The attestation statement format is the manner in which the signature is
+    -- represented and the various contextual bindings are incorporated into
+    -- the attestation statement by the
+    -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator). In
+    -- other words, this defines the syntax of the statement. Various existing
+    -- components and OS platforms (such as TPMs and the Android OS) have
+    -- previously defined [attestation statement
+    -- formats](https://www.w3.org/TR/webauthn-2/#attestation-statement-format).
+    -- This specification supports a variety of such formats in an extensible
+    -- way, as defined in [§ 6.5.2 Attestation Statement
+    -- Formats](https://www.w3.org/TR/webauthn-2/#sctn-attestation-formats).
+    -- The formats themselves are identified by strings, as described in [§ 8.1
+    -- Attestation Statement Format
+    -- Identifiers](https://www.w3.org/TR/webauthn-2/#sctn-attstn-fmt-ids).
+    --
+    -- This value is of a type that's an instance of
+    -- 'AttestationStatementFormat', which encodes everything needed about the
+    -- attestation statement.
     aoFmt :: a,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement)
+    -- The [(spec)](https://www.w3.org/TR/webauthn-2/#attestation-statement) is
+    -- a specific type of signed data object, containing statements about a
+    -- [public key
+    -- credential](https://www.w3.org/TR/webauthn-2/#public-key-credential)
+    -- itself and the
+    -- [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator) that
+    -- created it. It contains an [attestation
+    -- signature](https://www.w3.org/TR/webauthn-2/#attestation-signature)
+    -- created using the key of the attesting authority (except for the case of
+    -- [self attestation](https://www.w3.org/TR/webauthn-2/#self-attestation),
+    -- when it is created using the [credential private
+    -- key](https://www.w3.org/TR/webauthn-2/#credential-private-key)).
     aoAttStmt :: AttStmt a
   }
 
@@ -1271,7 +1413,9 @@ data AuthenticatorResponse (c :: CeremonyKind) raw where
       -- returned by the authenticator. See [§ 6.1 Authenticator Data](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-data).
       araAuthenticatorData :: AuthenticatorData 'Authentication raw,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-signature)
-      -- This attribute contains the raw signature returned from the authenticator.
+      -- This attribute contains the raw [assertion
+      -- signature](https://www.w3.org/TR/webauthn-2/#assertion-signature)
+      -- returned from the authenticator.
       -- See [§ 6.3.3 The authenticatorGetAssertion Operation](https://www.w3.org/TR/webauthn-2/#sctn-op-get-assertion).
       araSignature :: AssertionSignature,
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorassertionresponse-userhandle)
@@ -1303,6 +1447,22 @@ instance ToJSON (AuthenticatorResponse c raw) where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
 -- The 'Credential' interface contains the attributes that are returned to the caller when a new credential is created, or a new assertion is requested.
+--
+-- This type has nested fields which use a binary encoding that needs to be
+-- preserved for verification purposes. The binary encoding of these fields can
+-- be removed or recomputed using functions from
+-- "Crypto.WebAuthn.Encoding.Binary". Specifically
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawCredential' and
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCredential' respectively.
+-- Unchecked invariant: If @raw ~ 'True'@, then
+-- 'Crypto.WebAuthn.Encoding.Binary.encodeRawCredential c = c', ensuring that
+-- the binary fields should always correspond to the values respective
+-- serializations. This means that if @raw ~ 'True'@, it's not safe to modify
+-- individual fields. To make changes, first use
+-- 'Crypto.WebAuthn.Encoding.Binary.stripRawCredential', make the changes on
+-- the result, then call 'Crypto.WebAuthn.Encoding.Binary.encodeRawCredential'
+-- on that. Note however that any modifications also invalidate signatures over
+-- the binary data, specifically 'araSignature' and 'aoAttStmt'.
 data Credential (c :: CeremonyKind) raw = Credential
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-identifier-slot)
     -- Contains the [credential ID](https://www.w3.org/TR/webauthn-2/#credential-id),
@@ -1330,54 +1490,3 @@ data Credential (c :: CeremonyKind) raw = Credential
     cClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
   deriving (Eq, Show, Generic, ToJSON)
-
--- | Removes all raw fields from a 'Credential', useful for
--- e.g. pretty-printing only the desired fields. This is the counterpart to
--- 'Crypto.WebAuthn.Model.Binary.Encoding.encodeRawCredential'
-stripRawCredential :: forall c raw. SingI c => Credential c raw -> Credential c 'False
-stripRawCredential Credential {..} =
-  Credential
-    { cResponse = case sing @c of
-        SRegistration -> stripRawAuthenticatorResponseRegistration cResponse
-        SAuthentication -> stripRawAuthenticatorResponseAuthentication cResponse,
-      ..
-    }
-  where
-    stripRawAuthenticatorResponseAuthentication :: AuthenticatorResponse 'Authentication raw -> AuthenticatorResponse 'Authentication 'False
-    stripRawAuthenticatorResponseAuthentication AuthenticatorResponseAuthentication {..} =
-      AuthenticatorResponseAuthentication
-        { araClientData = stripRawCollectedClientData araClientData,
-          araAuthenticatorData = stripRawAuthenticatorData araAuthenticatorData,
-          ..
-        }
-
-    stripRawAuthenticatorResponseRegistration :: AuthenticatorResponse 'Registration raw -> AuthenticatorResponse 'Registration 'False
-    stripRawAuthenticatorResponseRegistration AuthenticatorResponseRegistration {..} =
-      AuthenticatorResponseRegistration
-        { arrClientData = stripRawCollectedClientData arrClientData,
-          arrAttestationObject = stripRawAttestationObject arrAttestationObject,
-          ..
-        }
-
-    stripRawAttestationObject :: AttestationObject raw -> AttestationObject 'False
-    stripRawAttestationObject AttestationObject {..} =
-      AttestationObject
-        { aoAuthData = stripRawAuthenticatorData aoAuthData,
-          ..
-        }
-
-    stripRawAuthenticatorData :: forall c raw. SingI c => AuthenticatorData c raw -> AuthenticatorData c 'False
-    stripRawAuthenticatorData AuthenticatorData {..} =
-      AuthenticatorData
-        { adRawData = NoRaw,
-          adAttestedCredentialData = stripRawAttestedCredentialData adAttestedCredentialData,
-          ..
-        }
-
-    stripRawAttestedCredentialData :: forall c raw. SingI c => AttestedCredentialData c raw -> AttestedCredentialData c 'False
-    stripRawAttestedCredentialData = case sing @c of
-      SRegistration -> \AttestedCredentialData {..} -> AttestedCredentialData {acdCredentialPublicKeyBytes = NoRaw, ..}
-      SAuthentication -> \NoAttestedCredentialData -> NoAttestedCredentialData
-
-    stripRawCollectedClientData :: forall c raw. SingI c => CollectedClientData c raw -> CollectedClientData c 'False
-    stripRawCollectedClientData CollectedClientData {..} = CollectedClientData {ccdRawData = NoRaw, ..}

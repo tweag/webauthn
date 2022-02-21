@@ -12,9 +12,9 @@ module Spec.Types () where
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.AttestationStatementFormat.None as None
-import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Model as M
 import qualified Data.ByteString.Lazy as LBS
 import Data.Maybe (fromJust)
@@ -75,7 +75,16 @@ instance Arbitrary M.CredentialType where
   arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary M.AuthenticatorTransport where
-  arbitrary = arbitraryBoundedEnum
+  arbitrary = elements authenticatorTransportsList
+
+authenticatorTransportsList :: [M.AuthenticatorTransport]
+authenticatorTransportsList =
+  [ M.AuthenticatorTransportBLE,
+    M.AuthenticatorTransportInternal,
+    M.AuthenticatorTransportNFC,
+    M.AuthenticatorTransportUSB,
+    M.AuthenticatorTransportUnknown "unknown"
+  ]
 
 instance Arbitrary M.AuthenticatorAttachment where
   arbitrary = arbitraryBoundedEnum
@@ -107,7 +116,14 @@ instance Arbitrary (M.RawField 'False) where
   arbitrary = pure M.NoRaw
 
 instance Arbitrary (M.CollectedClientData c 'False) where
-  arbitrary = M.CollectedClientData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary =
+    M.CollectedClientData
+      <$> arbitrary
+        <*> arbitrary
+        -- The crossOrigin value can't be roundtripped with Nothing values,
+        -- so let's just not generate Nothing values here
+        <*> (Just <$> arbitrary)
+        <*> arbitrary
 
 instance Arbitrary (M.AttestationObject 'False) where
   arbitrary = do
@@ -211,7 +227,7 @@ instance Arbitrary M.CredentialDescriptor where
   arbitrary =
     M.CredentialDescriptor M.CredentialTypePublicKey
       <$> arbitrary
-      <*> liftArbitrary shuffledSubset
+      <*> liftArbitrary (shuffledSubsetWith $ Set.fromList authenticatorTransportsList)
 
 instance Arbitrary M.AuthenticatorSelectionCriteria where
   arbitrary =
@@ -263,14 +279,8 @@ instance Arbitrary (M.Credential 'M.Authentication 'False) where
       <*> arbitrary
       <*> arbitrary
 
-shuffledSubset :: (Ord a, Bounded a, Enum a) => Gen [a]
-shuffledSubset = subset >>= shuffle . Set.toList
-
 shuffledSubsetWith :: Ord a => Set a -> Gen [a]
 shuffledSubsetWith set = subsetWith set >>= shuffle . Set.toList
-
-subset :: (Ord a, Bounded a, Enum a) => Gen (Set a)
-subset = Set.fromList <$> sublistOf (Set.toList completeSet)
 
 subsetWith :: Ord a => Set a -> Gen (Set a)
 subsetWith set = Set.fromList <$> sublistOf (Set.toList set)
@@ -279,9 +289,6 @@ parameters :: Gen [M.CredentialParameters]
 parameters = do
   algs <- shuffledSubsetWith $ Set.fromList allCoseAlgs
   pure $ M.CredentialParameters M.CredentialTypePublicKey <$> algs
-
-completeSet :: (Ord a, Bounded a, Enum a) => Set a
-completeSet = Set.fromList [minBound .. maxBound]
 
 allCoseAlgs :: [Cose.CoseSignAlg]
 allCoseAlgs =

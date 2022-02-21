@@ -39,6 +39,9 @@ import GHC.Generics (Generic)
 data PublicKeyWithSignAlg = PublicKeyWithSignAlgInternal
   { publicKeyInternal :: P.PublicKey,
     signAlgInternal :: A.CoseSignAlg
+    -- TODO: Consider adding a RawField here to replace
+    -- acdCredentialPublicKeyBytes. This would then require parametrizing
+    -- 'PublicKeyWithSignAlg' with 'raw :: Bool'
   }
   deriving (Eq, Show, Generic, Aeson.ToJSON)
 

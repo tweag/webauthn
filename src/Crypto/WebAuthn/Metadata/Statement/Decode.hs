@@ -19,9 +19,9 @@ import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import Crypto.WebAuthn.Metadata.Statement.Types (WebauthnAttestationType (WebauthnAttestationAttCA, WebauthnAttestationBasic))
 import qualified Crypto.WebAuthn.Metadata.Statement.Types as StatementTypes
 import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
+import qualified Crypto.WebAuthn.Metadata.WebIDL as IDL
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Identifier (AAGUID (AAGUID), AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F), SubjectKeyIdentifier (SubjectKeyIdentifier))
-import qualified Crypto.WebAuthn.WebIDL as IDL
 import Data.Bifunctor (first)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16

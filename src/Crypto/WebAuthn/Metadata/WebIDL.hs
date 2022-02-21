@@ -1,6 +1,6 @@
 -- | Stability: experimental
 -- | This module defines some types from the [Web IDL](https://webidl.spec.whatwg.org/) specification
-module Crypto.WebAuthn.WebIDL
+module Crypto.WebAuthn.Metadata.WebIDL
   ( DOMString,
     USVString,
     UnsignedLongLong,
@@ -9,18 +9,12 @@ module Crypto.WebAuthn.WebIDL
     UnsignedShort,
     Octet,
     Boolean,
-    Crypto.WebAuthn.WebIDL.Double,
-    BufferSource (..),
-    ArrayBuffer,
+    Crypto.WebAuthn.Metadata.WebIDL.Double,
   )
 where
 
-import qualified Data.Aeson as Aeson
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base64.URL as Base64
 import Data.Int (Int32)
 import Data.Text (Text)
-import qualified Data.Text.Encoding as Text
 import Data.Word (Word16, Word32, Word64, Word8)
 
 -- | [(spec)](https://webidl.spec.whatwg.org/#idl-DOMString)
@@ -63,18 +57,3 @@ type Boolean = Bool
 
 -- | [(spec)](https://webidl.spec.whatwg.org/#idl-double)
 type Double = Prelude.Double
-
--- | [(spec)](https://webidl.spec.whatwg.org/#BufferSource)
-newtype BufferSource = -- | base64url encoded buffersource as done by https://github.com/github/webauthn-json
-  URLEncodedBase64 {unUrlEncodedBase64 :: BS.ByteString}
-  deriving (Show, Eq)
-
-instance Aeson.FromJSON BufferSource where
-  parseJSON = Aeson.withText "base64url" $ \t ->
-    either fail (pure . URLEncodedBase64) (Base64.decode $ Text.encodeUtf8 t)
-
-instance Aeson.ToJSON BufferSource where
-  toJSON (URLEncodedBase64 bs) = Aeson.String . Text.decodeUtf8 . Base64.encodeUnpadded $ bs
-
--- | [(spec)](https://webidl.spec.whatwg.org/#idl-ArrayBuffer)
-type ArrayBuffer = BufferSource

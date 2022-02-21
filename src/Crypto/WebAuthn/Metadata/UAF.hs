@@ -9,7 +9,7 @@ module Crypto.WebAuthn.Metadata.UAF
 where
 
 import Crypto.WebAuthn.Internal.Utils (jsonEncodingOptions)
-import qualified Crypto.WebAuthn.WebIDL as IDL
+import qualified Crypto.WebAuthn.Metadata.WebIDL as IDL
 import qualified Data.Aeson as Aeson
 import Data.Text (Text)
 import GHC.Generics (Generic)
