@@ -68,7 +68,7 @@ initialize conn = do
     \ , user_handle      blob    not null                                      \
     \ , public_key       blob    not null                                      \
     \ , sign_counter     integer not null                                      \
-    \ , transports       integer not null                                      \
+    \ , transports       blob    not null                                      \
     \ , created          text    not null                                      \
     \                    default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))       \
     \ , foreign key (user_handle) references users (handle)                    \
