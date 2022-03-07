@@ -25,7 +25,12 @@ import Data.UUID (UUID)
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#aaguid)
 newtype AAGUID = AAGUID {unAAGUID :: UUID}
   deriving (Eq, Show)
-  deriving newtype (Hashable, ToJSON)
+  deriving newtype (Hashable)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON AAGUID
 
 -- | A way to identify an authenticator
 data AuthenticatorIdentifier (p :: M.ProtocolKind) where
@@ -51,6 +56,9 @@ deriving instance Show (AuthenticatorIdentifier p)
 
 deriving instance Eq (AuthenticatorIdentifier p)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (AuthenticatorIdentifier p) where
   toJSON (AuthenticatorIdentifierFido2 aaguid) =
     object
@@ -70,6 +78,9 @@ instance ToJSON (AuthenticatorIdentifier p) where
 newtype SubjectKeyIdentifier = SubjectKeyIdentifier {unSubjectKeyIdentifier :: Digest SHA1}
   deriving (Eq, Show)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON SubjectKeyIdentifier where
   toJSON = toJSON @BS.ByteString . convert . unSubjectKeyIdentifier
 

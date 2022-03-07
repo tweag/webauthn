@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
 -- | Stability: experimental
@@ -43,7 +44,12 @@ data PublicKeyWithSignAlg = PublicKeyWithSignAlgInternal
     -- acdCredentialPublicKeyBytes. This would then require parametrizing
     -- 'PublicKeyWithSignAlg' with 'raw :: Bool'
   }
-  deriving (Eq, Show, Generic, Aeson.ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance Aeson.ToJSON PublicKeyWithSignAlg
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
 -- A structured and checked representation of a

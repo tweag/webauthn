@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Stability: experimental
 -- This module contains a partial implementation of the
@@ -113,12 +114,22 @@ data UncheckedPublicKey
         -- GCD(e,\\lambda(n)) = 1, where \\lambda(n) = LCM(r_1 - 1, ..., r_u - 1)
         rsaE :: Integer
       }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON UncheckedPublicKey
 
 -- | Same as 'UncheckedPublicKey', but checked to be valid using
 -- 'checkPublicKey'.
 newtype PublicKey = CheckedPublicKey UncheckedPublicKey
-  deriving newtype (Eq, Show, ToJSON)
+  deriving newtype (Eq, Show)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON PublicKey
 
 -- | Returns the 'UncheckedPublicKey' for a t'PublicKey'
 pattern PublicKey :: UncheckedPublicKey -> PublicKey
@@ -161,7 +172,12 @@ data CoseCurveEdDSA
   = -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
     -- Ed25519 for use w/ EdDSA only
     CoseCurveEd25519
-  deriving (Eq, Show, Enum, Bounded, Generic, ToJSON)
+  deriving (Eq, Show, Enum, Bounded, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CoseCurveEdDSA
 
 -- | Returns the size of a coordinate point for a specific EdDSA curve in bytes.
 coordinateSizeEdDSA :: CoseCurveEdDSA -> Int
@@ -178,7 +194,12 @@ data CoseCurveECDSA
   | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
     -- NIST P-521 also known as secp521r1
     CoseCurveP521
-  deriving (Eq, Show, Enum, Bounded, Generic, ToJSON)
+  deriving (Eq, Show, Enum, Bounded, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CoseCurveECDSA
 
 -- | Converts a 'Cose.CoseCurveECDSA' to an 'ECC.CurveName'. The inverse
 -- function is 'fromCryptCurveECDSA'
