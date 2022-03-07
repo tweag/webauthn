@@ -29,9 +29,9 @@
 --   the initials of the constructor name.
 -- * Every type should have a 'ToJSON' instance for pretty-printing purposes.
 --   This JSON encoding doesn't correspond to any encoding used for
---   sending/receiving these structures, it's only used for pretty-printing,
+--   sending\/receiving these structures, it's only used for pretty-printing,
 --   which is why it doesn't need to be standardized. For encoding these
---   structures from/to JSON for sending/receiving, see the
+--   structures from\/to JSON for sending/receiving, see the
 --   'Crypto.WebAuthn.Model.WebIDL' module
 -- #defaultFields#
 -- * Fields of the WebAuthn standard that are optional (for writing) but have

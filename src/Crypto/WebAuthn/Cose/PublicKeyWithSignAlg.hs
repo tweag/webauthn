@@ -60,7 +60,7 @@ deriving instance Aeson.ToJSON PublicKeyWithSignAlg
 type CosePublicKey = PublicKeyWithSignAlg
 
 -- | Deconstructs a 'makePublicKeyWithSignAlg' into its t'P.PublicKey' and
--- 'A.CoseSignAlg'. Since 'makePublicKeyWithSignAlg' can only be constructed
+-- 'A.CoseSignAlg'. Since 'PublicKeyWithSignAlg' can only be constructed
 -- using 'makePublicKeyWithSignAlg', we can be sure that the signature scheme
 -- of t'P.PublicKey' and 'A.CoseSignAlg' matches.
 pattern PublicKeyWithSignAlg :: P.PublicKey -> A.CoseSignAlg -> PublicKeyWithSignAlg
