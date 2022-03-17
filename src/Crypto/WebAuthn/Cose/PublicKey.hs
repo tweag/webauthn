@@ -11,6 +11,7 @@ module Crypto.WebAuthn.Cose.PublicKey
     UncheckedPublicKey (..),
     checkPublicKey,
     PublicKey (PublicKey),
+    EdDSAKeyBytes (..),
 
     -- * COSE Elliptic Curves
     CoseCurveEdDSA (..),
@@ -25,14 +26,16 @@ where
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
-import Crypto.WebAuthn.Internal.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
 import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base16 as Base16
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 import GHC.Generics (Generic)
+
+newtype EdDSAKeyBytes = EdDSAKeyBytes {unEdDSAKeyBytes :: BS.ByteString}
+  deriving newtype (Eq)
+  deriving (Show, ToJSON) via Base16ByteString
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
 -- A structured representation of a [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7)
@@ -66,7 +69,7 @@ data UncheckedPublicKey
         eddsaCurve :: CoseCurveEdDSA,
         -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
         -- This contains the public key bytes.
-        eddsaX :: BS.ByteString
+        eddsaX :: EdDSAKeyBytes
       }
   | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1)
     -- ECDSA Signature Algorithm
@@ -150,9 +153,9 @@ checkPublicKey key@PublicKeyEdDSA {..}
         <> " bytes, it has "
         <> Text.pack (show actualSize)
         <> " bytes instead: "
-        <> Text.decodeUtf8 (Base16.encode eddsaX)
+        <> Text.pack (show eddsaX)
   where
-    actualSize = BS.length eddsaX
+    actualSize = BS.length $ unEdDSAKeyBytes eddsaX
     expectedSize = coordinateSizeEdDSA eddsaCurve
 checkPublicKey key@PublicKeyECDSA {..}
   | ECC.isPointValid curve point = Right $ CheckedPublicKey key

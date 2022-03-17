@@ -6,10 +6,12 @@
 -- specification
 module Crypto.WebAuthn.Metadata.Statement.Types
   ( MetadataStatement (..),
+    JPEGBytes (..),
     WebauthnAttestationType (..),
   )
 where
 
+import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
 import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
@@ -70,7 +72,7 @@ data MetadataStatement = MetadataStatement
     -- msEcdaaTrustAnchors, not needed for the subset we implement, FIDO 2 and FIDO U2F
 
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-icon)
-    msIcon :: Maybe BS.ByteString,
+    msIcon :: Maybe JPEGBytes,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-supportedextensions)
     msSupportedExtensions :: Maybe (NonEmpty StatementIDL.ExtensionDescriptor),
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-authenticatorgetinfo)
@@ -82,6 +84,10 @@ data MetadataStatement = MetadataStatement
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
 deriving instance ToJSON MetadataStatement
+
+newtype JPEGBytes = JPEGBytes {unJPEGBytes :: BS.ByteString}
+  deriving newtype (Eq)
+  deriving (Show, ToJSON) via Base16ByteString
 
 -- | Values of 'Registry.AuthenticatorAttestationType' but limited to the ones possible with Webauthn, see https://www.w3.org/TR/webauthn-2/#sctn-attestation-types
 data WebauthnAttestationType

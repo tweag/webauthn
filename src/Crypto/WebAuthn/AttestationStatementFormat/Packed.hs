@@ -1,6 +1,7 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | Stability: experimental
 -- This module implements the
@@ -25,7 +26,6 @@ import qualified Data.ASN1.OID as OID
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.ByteArray (convert)
-import qualified Data.ByteString as BS
 import Data.HashMap.Strict ((!?))
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
@@ -45,7 +45,7 @@ instance Show Format where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation)
 data Statement = Statement
   { alg :: Cose.CoseSignAlg,
-    sig :: BS.ByteString,
+    sig :: Cose.CoseSignature,
     x5c :: Maybe (NE.NonEmpty X509.SignedCertificate, IdFidoGenCeAAGUID)
   }
   deriving (Eq, Show)
@@ -97,7 +97,7 @@ instance M.AttestationStatementFormat Format where
 
   asfDecode _ xs =
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
-      (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), Just (CBOR.TList x5cRaw)) -> do
+      (Just (CBOR.TInt algId), Just (CBOR.TBytes (Cose.CoseSignature -> sig)), Just (CBOR.TList x5cRaw)) -> do
         alg <- Cose.toCoseSignAlg algId
         x5c <- case NE.nonEmpty x5cRaw of
           Nothing -> pure Nothing
@@ -122,7 +122,7 @@ instance M.AttestationStatementFormat Format where
           Nothing -> []
           Just (certChain, _) -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
      in CBOR.TMap
-          [ (CBOR.TString "sig", CBOR.TBytes sig),
+          [ (CBOR.TString "sig", CBOR.TBytes $ Cose.unCoseSignature sig),
             (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
             (CBOR.TString "x5c", CBOR.TList encodedx5c)
           ]
@@ -135,7 +135,7 @@ instance M.AttestationStatementFormat Format where
     Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c}
     M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
-      let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
+      let signedData = Cose.CoseMessage $ rawData <> convert (M.unClientDataHash clientDataHash)
       case stmtx5c of
         -- Self attestation
         Nothing -> do
@@ -158,7 +158,8 @@ instance M.AttestationStatementFormat Format where
               pubKey = X509.certPubKey cert
           -- Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using
           -- the attestation public key in attestnCert with the algorithm specified in alg.
-          case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) pubKey signedData stmtSig of
+          -- FIXME: This is wrong, we should use alg!
+          case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) pubKey (Cose.unCoseMessage signedData) (Cose.unCoseSignature stmtSig) of
             X509.SignaturePass -> pure ()
             X509.SignatureFailed err -> failure $ VerificationFailure err
 

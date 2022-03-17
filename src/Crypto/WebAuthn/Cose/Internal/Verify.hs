@@ -25,6 +25,8 @@ module Crypto.WebAuthn.Cose.Internal.Verify
     fromX509,
 
     -- * Signature verification
+    CoseMessage (..),
+    CoseSignature (..),
     verify,
 
     -- * Hash Conversions to cryptonite types
@@ -46,10 +48,11 @@ import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
-import Crypto.WebAuthn.Internal.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Types as ASN1
+import Data.Aeson (ToJSON)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as BS
 import Data.Text (Text)
@@ -63,7 +66,7 @@ fromX509 (X509.PubKeyEd25519 key) =
   Cose.checkPublicKey
     Cose.PublicKeyEdDSA
       { eddsaCurve = Cose.CoseCurveEd25519,
-        eddsaX = convert key
+        eddsaX = Cose.EdDSAKeyBytes $ convert key
       }
 fromX509 (X509.PubKeyEC X509.PubKeyEC_Named {..}) = do
   let curve = ECC.getCurveByName pubkeyEC_name
@@ -87,7 +90,8 @@ fromX509 key = Left $ "X509 public key algorithm is not supported: " <> Text.pac
 -- 'Cose.PublicKeyWithSignAlg' Returns an error if the signature algorithm
 -- doesn't match. Also returns an error if the signature wasn't valid or for
 -- other errors.
-verify :: Cose.PublicKeyWithSignAlg -> BS.ByteString -> BS.ByteString -> Either Text ()
+-- FIXME: https://w3c.github.io/webauthn/#sctn-signature-attestation-types kind of documents this, but not for all formats. This is notably not really related to COSE, but rather webauthn's own definitions. The spec should be made less ambiguous, file upstream issues and refactor this code
+verify :: Cose.PublicKeyWithSignAlg -> CoseMessage -> CoseSignature -> Either Text ()
 verify
   Cose.PublicKeyWithSignAlg
     { publicKey = Cose.PublicKey Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..},
@@ -95,13 +99,13 @@ verify
     }
   msg
   sig = do
-    key <- case Ed25519.publicKey eddsaX of
+    key <- case Ed25519.publicKey $ Cose.unEdDSAKeyBytes eddsaX of
       CryptoFailed err -> Left $ "Failed to create Ed25519 public key: " <> Text.pack (show err)
       CryptoPassed res -> pure res
-    sig <- case Ed25519.signature sig of
+    sig <- case Ed25519.signature (unCoseSignature sig) of
       CryptoFailed err -> Left $ "Failed to create Ed25519 signature: " <> Text.pack (show err)
       CryptoPassed res -> pure res
-    if Ed25519.verify key msg sig
+    if Ed25519.verify key (unCoseMessage msg) sig
       then Right ()
       else Left "EdDSA Signature invalid"
 verify
@@ -124,14 +128,14 @@ verify
     -- > For COSEAlgorithmIdentifier -7 (ES256), and other ECDSA-based algorithms,
     -- the `sig` value MUST be encoded as an ASN.1 DER Ecdsa-Sig-Value, as defined
     -- in [RFC3279](https://www.w3.org/TR/webauthn-2/#biblio-rfc3279) section 2.2.3.
-    sig <- case ASN1.decodeASN1' ASN1.DER sig of
+    sig <- case ASN1.decodeASN1' ASN1.DER (unCoseSignature sig) of
       Left err -> Left $ "Failed to decode ECDSA DER value: " <> Text.pack (show err)
       -- Ecdsa-Sig-Value in https://datatracker.ietf.org/doc/html/rfc3279#section-2.2.3
       Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
         pure $ ECDSA.Signature r s
       Right asns -> Left $ "Unexpected ECDSA ASN.1 structure: " <> Text.pack (show asns)
 
-    if ECDSA.verify hash key sig msg
+    if ECDSA.verify hash key sig (unCoseMessage msg)
       then Right ()
       else Left "ECDSA Signature invalid"
 verify
@@ -153,7 +157,7 @@ verify
               public_n = rsaN,
               public_e = rsaE
             }
-    if RSA.verify (Just hash) key msg sig
+    if RSA.verify (Just hash) key (unCoseMessage msg) (unCoseSignature sig)
       then Right ()
       else Left "RSA Signature invalid"
 verify key _ _ = error $ "PublicKeyWithSignAlg invariant violated for public key " <> show key <> ". This should not occur unless the PublicKeyWithSignAlg module has a bug"

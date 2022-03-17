@@ -81,8 +81,7 @@ newtype SubjectKeyIdentifier = SubjectKeyIdentifier {unSubjectKeyIdentifier :: D
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-instance ToJSON SubjectKeyIdentifier where
-  toJSON = toJSON @BS.ByteString . convert . unSubjectKeyIdentifier
+deriving newtype instance ToJSON SubjectKeyIdentifier
 
 instance Hashable SubjectKeyIdentifier where
   hashWithSalt = hashUsing @BS.ByteString (convert . unSubjectKeyIdentifier)

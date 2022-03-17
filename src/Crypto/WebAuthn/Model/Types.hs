@@ -127,7 +127,7 @@ import Crypto.Hash.Algorithms (SHA256)
 import Crypto.Random (MonadRandom, getRandomBytes)
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
-import Crypto.WebAuthn.Internal.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
 import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
@@ -166,7 +166,7 @@ deriving instance Show (RawField raw)
 -- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (RawField raw) where
   toJSON NoRaw = "<none>"
-  toJSON (WithRaw bytes) = toJSON bytes
+  toJSON (WithRaw bytes) = toJSON $ Base16ByteString bytes
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-publickeycredentialtype)
 -- This enumeration defines the valid credential types. It is an extension point;
@@ -580,7 +580,7 @@ newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-deriving newtype instance ToJSON UserHandle
+deriving via Base16ByteString instance ToJSON UserHandle
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
@@ -643,7 +643,7 @@ newtype CredentialId = CredentialId {unCredentialId :: BS.ByteString}
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-deriving newtype instance ToJSON CredentialId
+deriving via Base16ByteString instance ToJSON CredentialId
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credential-id)
 -- Generates a random 'CredentialId' using 16 random bytes.
@@ -662,7 +662,7 @@ newtype Challenge = Challenge {unChallenge :: BS.ByteString}
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-deriving newtype instance ToJSON Challenge
+deriving via Base16ByteString instance ToJSON Challenge
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
 -- In order to prevent replay attacks, the challenges MUST contain enough entropy
@@ -705,7 +705,7 @@ newtype AssertionSignature = AssertionSignature {unAssertionSignature :: BS.Byte
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-deriving newtype instance ToJSON AssertionSignature
+deriving via Base16ByteString instance ToJSON AssertionSignature
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rpidhash)
 -- SHA-256 hash of the [RP ID](https://www.w3.org/TR/webauthn-2/#rp-id) the
@@ -758,7 +758,7 @@ newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-deriving newtype instance ToJSON PublicKeyBytes
+deriving via Base16ByteString instance ToJSON PublicKeyBytes
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
