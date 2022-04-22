@@ -232,7 +232,13 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- initiated, verify that response.userHandle is present, and that the user
   -- identified by this value is the owner of credentialSource.
   let owner = ceUserHandle entry
-  case (midentifiedUser, M.araUserHandle response) of
+  
+  -- Safari returns an empty string instead of null.
+  let mUserHandler = case M.araUserHandle response of
+        Just (M.UserHandle "") -> Nothing
+        userHandle -> userHandle
+
+  case (midentifiedUser, mUserHandler) of
     (Just identifiedUser, Just userHandle)
       | identifiedUser /= owner ->
         failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
