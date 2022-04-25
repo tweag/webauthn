@@ -233,7 +233,10 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- identified by this value is the owner of credentialSource.
   let owner = ceUserHandle entry
   
-  -- Safari returns an empty string instead of null.
+  -- Accoridng to the [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-id)
+  -- The user handle MUST NOT be empty, though it MAY be null.
+  -- However, Safari returns an empty string instead of null, see the bug report:
+  -- https://bugs.webkit.org/show_bug.cgi?id=239737
   let mUserHandler = case M.araUserHandle response of
         Just (M.UserHandle "") -> Nothing
         userHandle -> userHandle
