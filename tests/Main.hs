@@ -120,7 +120,7 @@ main = Hspec.hspec $ do
     "Encoding"
     Encoding.spec
   -- We test assertion only for none attestation, this is because the type of attestation has no influence on assertion.
-  describe "RegisterAndLogin" $
+  describe "RegisterAndLogin" $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
@@ -144,6 +144,44 @@ main = Hspec.hspec $ do
             <$> decodeFile
               @WJ.WJCredentialAuthentication
               "tests/responses/assertion/01-none.json"
+        let M.Credential {M.cResponse = cResponse} = loginReq
+            signInResult =
+              toEither $
+                O.verifyAuthenticationResponse
+                  (M.Origin "http://localhost:8080")
+                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
+                  (Just (M.UserHandle "UserId"))
+                  credentialEntry
+                  (defaultPublicKeyCredentialRequestOptions loginReq)
+                  M.Credential
+                    { M.cIdentifier = O.ceCredentialId credentialEntry,
+                      M.cResponse = cResponse,
+                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+                    }
+        signInResult `shouldSatisfy` isRight
+    it "tests whether the fixed register and login responses are matching with empty user handle" $
+      do
+        pkCredential <-
+          either (error . show) id . WJ.wjDecodeCredentialRegistration
+            <$> decodeFile
+              "tests/responses/attestation/01-none.json"
+        let options = defaultPublicKeyCredentialCreationOptions pkCredential
+            registerResult =
+              toEither $
+                O.verifyRegistrationResponse
+                  (M.Origin "http://localhost:8080")
+                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
+                  registry
+                  predeterminedDateTime
+                  options
+                  pkCredential
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
+        let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
+        loginReq <-
+          either (error . show) id . WJ.wjDecodeCredentialAuthentication
+            <$> decodeFile
+              @WJ.WJCredentialAuthentication
+              "tests/responses/assertion/01-none-empty-user-handle.json"
         let M.Credential {M.cResponse = cResponse} = loginReq
             signInResult =
               toEither $
