@@ -186,6 +186,9 @@ deriving instance Show (AuthenticatorModel k)
 
 deriving instance Eq (AuthenticatorModel k)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (AuthenticatorModel k) where
   toJSON UnknownAuthenticator =
     object
@@ -234,6 +237,9 @@ data SomeAttestationStatement = forall k.
 
 deriving instance Show SomeAttestationStatement
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON SomeAttestationStatement where
   toJSON SomeAttestationStatement {..} =
     object
@@ -250,7 +256,12 @@ data RegistrationResult = RegistrationResult
     -- | Information about the attestation statement
     rrAttestationStatement :: SomeAttestationStatement
   }
-  deriving (Show, Generic, ToJSON)
+  deriving (Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON RegistrationResult
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- The resulting 'rrEntry' of this call should be stored in a database by the

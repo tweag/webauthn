@@ -1,3 +1,5 @@
+{-# LANGUAGE StandaloneDeriving #-}
+
 -- | Stability: experimental
 -- This module represents all the information the Relying Party must store in
 -- the database for every credential.
@@ -19,4 +21,9 @@ data CredentialEntry = CredentialEntry
     ceSignCounter :: M.SignatureCounter,
     ceTransports :: [M.AuthenticatorTransport]
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CredentialEntry

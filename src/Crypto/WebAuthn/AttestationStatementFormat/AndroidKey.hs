@@ -29,7 +29,6 @@ import Data.ASN1.Types (ASN1 (IntVal, OctetString), ASN1Class (Context), ASN1Con
 import Data.Aeson (ToJSON, object, toJSON, (.=))
 import Data.Bifunctor (first)
 import Data.ByteArray (convert)
-import Data.ByteString (ByteString)
 import Data.HashMap.Strict ((!?))
 import Data.List.NonEmpty (NonEmpty ((:|)), toList)
 import qualified Data.List.NonEmpty as NE
@@ -155,7 +154,7 @@ instance Show Format where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-android-key-attestation)
 data Statement = Statement
-  { sig :: ByteString,
+  { sig :: Cose.CoseSignature,
     x5c :: NonEmpty X509.SignedCertificate,
     -- | Holds both the "alg" from the statement and the public key from the
     -- X.509 certificate
@@ -237,7 +236,7 @@ instance M.AttestationStatementFormat Format where
 
   asfDecode _ xs =
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
-      (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw))) -> do
+      (Just (CBOR.TInt algId), Just (CBOR.TBytes (Cose.CoseSignature -> sig)), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw))) -> do
         alg <- Cose.toCoseSignAlg algId
         x5c@(credCert :| _) <- forM x5cRaw $ \case
           CBOR.TBytes certBytes ->
@@ -260,7 +259,7 @@ instance M.AttestationStatementFormat Format where
 
   asfEncode _ Statement {..} =
     CBOR.TMap
-      [ (CBOR.TString "sig", CBOR.TBytes sig),
+      [ (CBOR.TString "sig", CBOR.TBytes $ Cose.unCoseSignature sig),
         (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg $ Cose.signAlg pubKeyAndAlg),
         ( CBOR.TString "x5c",
           CBOR.TList $
@@ -277,7 +276,7 @@ instance M.AttestationStatementFormat Format where
 
     -- 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the
     -- public key in the first certificate in x5c with the algorithm specified in alg.
-    let signedData = rawData <> convert (M.unClientDataHash clientDataHash)
+    let signedData = Cose.CoseMessage $ rawData <> convert (M.unClientDataHash clientDataHash)
     case Cose.verify pubKeyAndAlg signedData sig of
       Right () -> pure ()
       Left err -> failure $ VerificationFailure err

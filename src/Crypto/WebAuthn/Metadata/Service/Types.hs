@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Stability: experimental
 -- This module contains additional Haskell-specific type definitions for the
@@ -87,7 +88,12 @@ data MetadataEntry (p :: M.ProtocolKind) = MetadataEntry
     -- rogueListURL, rogueListHash. TODO, but not currently used in the
     -- BLOB and difficult to implement since it involves JWT
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON (MetadataEntry p)
 
 -- | Same as 'MetadataEntry', but with its type parameter erased
 data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (MetadataEntry p)
@@ -114,4 +120,9 @@ data StatusReport = StatusReport
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#dom-statusreport-certificationrequirementsversion)
     srCertificationRequirementsVersion :: Maybe Text
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON StatusReport

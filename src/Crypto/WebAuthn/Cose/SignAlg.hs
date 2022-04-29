@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Stability: experimental
 -- This module contains definitions for [COSE registry](https://www.iana.org/assignments/cose/cose.xhtml)
@@ -95,7 +96,12 @@ data CoseSignAlg
     --
     -- Security considerations are [here](https://www.rfc-editor.org/rfc/rfc8812.html#section-5)
     CoseSignAlgRSA CoseHashAlgRSA
-  deriving (Eq, Show, Ord, Generic, ToJSON)
+  deriving (Eq, Show, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CoseSignAlg
 
 -- | Hash algorithms that can be used with the ECDSA signature algorithm
 data CoseHashAlgECDSA
@@ -105,7 +111,12 @@ data CoseHashAlgECDSA
     CoseHashAlgECDSASHA384
   | -- | SHA-512
     CoseHashAlgECDSASHA512
-  deriving (Eq, Show, Ord, Enum, Bounded, Generic, ToJSON)
+  deriving (Eq, Show, Ord, Enum, Bounded, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CoseHashAlgECDSA
 
 -- | Hash algorithms that can be used with the RSA signature algorithm
 data CoseHashAlgRSA
@@ -117,7 +128,12 @@ data CoseHashAlgRSA
     CoseHashAlgRSASHA384
   | -- | SHA-512
     CoseHashAlgRSASHA512
-  deriving (Eq, Show, Ord, Enum, Bounded, Generic, ToJSON)
+  deriving (Eq, Show, Ord, Enum, Bounded, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CoseHashAlgRSA
 
 -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2)
 -- [Cose Algorithm registry](https://www.iana.org/assignments/cose/cose.xhtml#algorithms)

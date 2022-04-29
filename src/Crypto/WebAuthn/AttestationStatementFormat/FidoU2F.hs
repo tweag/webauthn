@@ -18,6 +18,7 @@ import Control.Exception (Exception)
 import Control.Monad (unless)
 import Crypto.PubKey.ECC.Types (CurveName (SEC_p256r1))
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
 import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model.Types as M
 import Data.Aeson (ToJSON, object, toJSON, (.=))
@@ -66,7 +67,7 @@ instance ToJSON Statement where
   toJSON Statement {..} =
     object
       [ "attestnCert" .= attCert,
-        "sig" .= sig
+        "sig" .= Base16ByteString sig
       ]
 
 instance M.AttestationStatementFormat Format where

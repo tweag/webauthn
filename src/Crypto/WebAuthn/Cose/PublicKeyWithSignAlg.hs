@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
 -- | Stability: experimental
@@ -11,6 +12,8 @@ module Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     PublicKeyWithSignAlg (PublicKeyWithSignAlg, Crypto.WebAuthn.Cose.PublicKeyWithSignAlg.publicKey, signAlg),
     CosePublicKey,
     makePublicKeyWithSignAlg,
+    CoseMessage (..),
+    CoseSignature (..),
   )
 where
 
@@ -22,7 +25,8 @@ import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
 import qualified Crypto.WebAuthn.Cose.Internal.Registry as R
 import qualified Crypto.WebAuthn.Cose.PublicKey as P
 import qualified Crypto.WebAuthn.Cose.SignAlg as A
-import Crypto.WebAuthn.Internal.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
+import Data.Aeson (ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import Data.Functor (($>))
@@ -43,7 +47,12 @@ data PublicKeyWithSignAlg = PublicKeyWithSignAlgInternal
     -- acdCredentialPublicKeyBytes. This would then require parametrizing
     -- 'PublicKeyWithSignAlg' with 'raw :: Bool'
   }
-  deriving (Eq, Show, Generic, Aeson.ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance Aeson.ToJSON PublicKeyWithSignAlg
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
 -- A structured and checked representation of a
@@ -53,8 +62,17 @@ data PublicKeyWithSignAlg = PublicKeyWithSignAlgInternal
 -- field.
 type CosePublicKey = PublicKeyWithSignAlg
 
+-- A cose message
+newtype CoseMessage = CoseMessage {unCoseMessage :: BS.ByteString}
+  deriving newtype (Eq, Show)
+  deriving (ToJSON) via Base16ByteString
+
+newtype CoseSignature = CoseSignature {unCoseSignature :: BS.ByteString}
+  deriving newtype (Eq, Show)
+  deriving (ToJSON) via Base16ByteString
+
 -- | Deconstructs a 'makePublicKeyWithSignAlg' into its t'P.PublicKey' and
--- 'A.CoseSignAlg'. Since 'makePublicKeyWithSignAlg' can only be constructed
+-- 'A.CoseSignAlg'. Since 'PublicKeyWithSignAlg' can only be constructed
 -- using 'makePublicKeyWithSignAlg', we can be sure that the signature scheme
 -- of t'P.PublicKey' and 'A.CoseSignAlg' matches.
 pattern PublicKeyWithSignAlg :: P.PublicKey -> A.CoseSignAlg -> PublicKeyWithSignAlg
@@ -90,7 +108,7 @@ instance Serialise CosePublicKey where
         <> encode R.CoseKeyTypeParameterOKPCrv
         <> encode (fromCurveEdDSA eddsaCurve)
         <> encode R.CoseKeyTypeParameterOKPX
-        <> encodeBytes eddsaX
+        <> encodeBytes (P.unEdDSAKeyBytes eddsaX)
     P.PublicKey P.PublicKeyECDSA {..} ->
       common R.CoseKeyTypeEC2
         <> encode R.CoseKeyTypeParameterEC2Crv
@@ -195,7 +213,7 @@ instance Serialise CosePublicKey where
             decodeExpected R.CoseKeyTypeParameterOKPCrv
             eddsaCurve <- toCurveEdDSA <$> decode
             decodeExpected R.CoseKeyTypeParameterOKPX
-            eddsaX <- decodeBytesCanonical
+            eddsaX <- P.EdDSAKeyBytes <$> decodeBytesCanonical
             pure P.PublicKeyEdDSA {..}
 
           decodeECDSAKey :: Decoder s P.UncheckedPublicKey

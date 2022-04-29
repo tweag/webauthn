@@ -3,7 +3,7 @@
 
 -- | Stability: internal
 -- This module contain some useful orphan 'ToJSON' instances for pretty-printing values from third-party libraries
-module Crypto.WebAuthn.Internal.ToJSONOrphans () where
+module Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (..)) where
 
 import Crypto.Hash (Digest)
 import qualified Crypto.PubKey.ECC.Types as ECC
@@ -23,8 +23,14 @@ import qualified Data.Text.Encoding as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
 
-instance ToJSON BS.ByteString where
-  toJSON = String . Text.decodeUtf8 . Base16.encode
+newtype Base16ByteString = Base16ByteString BS.ByteString
+  deriving newtype (Eq)
+
+instance ToJSON Base16ByteString where
+  toJSON (Base16ByteString bytes) = String . Text.decodeUtf8 . Base16.encode $ bytes
+
+instance Show Base16ByteString where
+  show (Base16ByteString bytes) = Text.unpack . Text.decodeUtf8 . Base16.encode $ bytes
 
 instance ToJSON (Digest h) where
   toJSON = String . Text.decodeUtf8 . Base16.encode . convert
@@ -55,7 +61,7 @@ instance ToJSON X509.ExtensionRaw where
   toJSON X509.ExtensionRaw {..} =
     object
       [ "extRawOID" .= oidToJSON extRawOID,
-        "extRawContent" .= extRawContent
+        "extRawContent" .= Base16ByteString extRawContent
       ]
 
 instance ToJSON ECC.CurveName where
