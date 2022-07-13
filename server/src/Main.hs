@@ -121,8 +121,7 @@ logout db = do
 
   case userHandle of
     Nothing -> pure ()
-    Just user ->
-      Scotty.liftAndCatchIO $ TIO.putStrLn $ "Logging out user: " <> Text.pack (show user)
+    Just user -> return ()
 
   let setCookie =
         Cookie.defaultSetCookie
@@ -193,8 +192,6 @@ app origin rpIdHash db pending registryVar = do
       Just _ -> Scotty.redirect "authenticated.html"
   Scotty.post "/register/begin" $ beginRegistration db pending
   Scotty.post "/register/complete" $ completeRegistration origin rpIdHash db pending registryVar
-  Scotty.post "/login/begin" $ beginLogin db pending
-  Scotty.post "/login/complete" $ completeLogin origin rpIdHash db pending
   Scotty.get "/requires-auth" $ do
     getAuthenticatedUser db >>= \case
       Nothing -> Scotty.raiseStatus HTTP.status401 "Please authenticate first"
@@ -210,7 +207,6 @@ app origin rpIdHash db pending registryVar = do
 beginRegistration :: Database.Connection -> PendingCeremonies -> Scotty.ActionM ()
 beginRegistration db pending = do
   req@RegisterBeginReq {accountName, accountDisplayName} <- Scotty.jsonData @RegisterBeginReq
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin <= " <> jsonText req
   exists <- Scotty.liftAndCatchIO $
     Database.withTransaction db $ \tx -> do
       Database.userExists tx (WA.UserAccountName accountName)
@@ -223,7 +219,6 @@ beginRegistration db pending = do
             WA.cueName = WA.UserAccountName accountName
           }
   options <- Scotty.liftAndCatchIO $ insertPendingRegistration pending $ defaultPkcco user
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register begin => " <> jsonText options
   Scotty.json $ WA.wjEncodeCredentialOptionsRegistration options
 
 -- | Completes the relying party's responsibilities of the registration
@@ -246,7 +241,6 @@ completeRegistration origin rpIdHash db pending registryVar = do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete failed to decode raw request: " <> Text.pack (show err)
       fail $ show err
     Right result -> pure result
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete <= " <> jsonText (WA.stripRawCredential cred)
 
   options <-
     Scotty.liftAndCatchIO (getPendingRegistration pending cred) >>= \case
@@ -266,7 +260,6 @@ completeRegistration origin rpIdHash db pending registryVar = do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete had errors: " <> Text.pack (show errs)
       fail $ show err
     Success result -> pure result
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete result: " <> jsonText result
   -- if the credential was succesfully attested, we will see if the
   -- credential doesn't exist yet, and if it doesn't, insert it.
   Scotty.liftAndCatchIO $
@@ -287,123 +280,6 @@ completeRegistration origin rpIdHash db pending registryVar = do
   setAuthenticatedAs db userHandle
   let result = String "success"
   Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete => " <> jsonText result
-  Scotty.json result
-
--- | Starts the login procedure. In this function we receive the intent to
--- login from the client, retrieve the userdata from the database, and reply
--- with the
--- [request options](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialrequestoptions).
-beginLogin :: Database.Connection -> PendingCeremonies -> Scotty.ActionM ()
-beginLogin db pending = do
-  -- Receive login name from the login field
-  accountName <- WA.UserAccountName <$> Scotty.jsonData @Text
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login begin <= " <> jsonText accountName
-
-  -- Retrieve account details from the database
-  credentials <- Scotty.liftAndCatchIO $
-    Database.withTransaction db $ \tx -> do
-      Database.queryCredentialEntriesByUser tx accountName
-  when (null credentials) $ do
-    Scotty.liftAndCatchIO $ TIO.putStrLn "Login begin error: User not found"
-    Scotty.raiseStatus HTTP.status404 "User not found"
-
-  -- Create credential options from the credential retrieved from the database
-  -- and insert the options into the pending ceremonies. This server stores the
-  -- entire options, but this isn't actually necessary a fully spec complient
-  -- RP implementation. See the documentation of `WA.CredentialOptions` for
-  -- more information.
-  options <- Scotty.liftAndCatchIO $
-    insertPendingAuthentication pending $ \challenge -> do
-      WA.CredentialOptionsAuthentication
-        { WA.coaRpId = Nothing,
-          WA.coaTimeout = Nothing,
-          WA.coaChallenge = challenge,
-          WA.coaAllowCredentials = map mkCredentialDescriptor credentials,
-          WA.coaUserVerification = WA.UserVerificationRequirementPreferred,
-          WA.coaExtensions = Nothing
-        }
-
-  -- Send credential options to the client
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login begin => " <> jsonText options
-  Scotty.json $ WA.wjEncodeCredentialOptionsAuthentication options
-  where
-    mkCredentialDescriptor :: WA.CredentialEntry -> WA.CredentialDescriptor
-    mkCredentialDescriptor WA.CredentialEntry {WA.ceCredentialId, WA.ceTransports} =
-      WA.CredentialDescriptor
-        { WA.cdTyp = WA.CredentialTypePublicKey,
-          WA.cdId = ceCredentialId,
-          WA.cdTransports = Just ceTransports
-        }
-
--- | Completes the relying party's responsibilities of the authentication
--- ceremony. Receives the credential from the client and performs the
--- [authentication operation](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion).
--- If the operation succeeds, the user is logged in, and
--- redirected to the @authenticated.html@ page.
-completeLogin :: WA.Origin -> WA.RpIdHash -> Database.Connection -> PendingCeremonies -> Scotty.ActionM ()
-completeLogin origin rpIdHash db pending = do
-  -- Receive the credential from the client
-  credential <- Scotty.jsonData
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Raw login complete <= " <> jsonText credential
-
-  -- Decode credential
-  cred <- case WA.wjDecodeCredentialAuthentication credential of
-    Left err -> do
-      Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete failed to decode request: " <> Text.pack (show err)
-      fail $ show err
-    Right result -> pure result
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete <= " <> jsonText (WA.stripRawCredential cred)
-
-  -- Retrieve stored options from the pendingOptions
-  options <-
-    Scotty.liftAndCatchIO (getPendingAuthentication pending cred) >>= \case
-      Left err -> do
-        Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete problem with challenge: " <> jsonText (String $ Text.pack err)
-        Scotty.raiseStatus HTTP.status401 $ "Challenge error: " <> LText.pack err
-      Right result -> pure result
-
-  -- Check database for user, abort if user is unknown.
-  mentry <- Scotty.liftAndCatchIO $
-    Database.withTransaction db $ \tx ->
-      Database.queryCredentialEntryByCredential tx (WA.cIdentifier cred)
-  entry <- case mentry of
-    Nothing -> do
-      Scotty.liftAndCatchIO $ TIO.putStrLn "Login complete credential entry doesn't exist"
-      fail "Credential not found"
-    Just entry -> pure entry
-
-  -- Perform the verification of the credential. Abort if the credential could
-  -- not be verified.
-  let verificationResult =
-        WA.verifyAuthenticationResponse
-          origin
-          rpIdHash
-          (Just (WA.ceUserHandle entry))
-          entry
-          options
-          cred
-  WA.AuthenticationResult newSigCount <- case verificationResult of
-    Failure errs@(err :| _) -> do
-      Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete had errors: " <> Text.pack (show errs)
-      fail $ show err
-    Success result -> pure result
-
-  -- Update signature counter in the database/abort if it was potentially cloned
-  case newSigCount of
-    WA.SignatureCounterZero ->
-      Scotty.liftAndCatchIO $
-        TIO.putStrLn "SignatureCounter is Zero"
-    (WA.SignatureCounterUpdated counter) ->
-      Scotty.liftAndCatchIO $ do
-        TIO.putStrLn $ "Updating SignatureCounter to: " <> Text.pack (show counter)
-        Database.withTransaction db $
-          \tx -> Database.updateSignatureCounter tx (WA.cIdentifier cred) counter
-    WA.SignatureCounterPotentiallyCloned -> Scotty.raiseStatus HTTP.status401 "Signature Counter Cloned"
-
-  -- Set the login cookie and send the result to the server
-  setAuthenticatedAs db (WA.ceUserHandle entry)
-  let result = String "success"
-  Scotty.liftAndCatchIO $ TIO.putStrLn $ "Login complete => " <> jsonText result
   Scotty.json result
 
 -- | Utility function for debugging. Creates a human-readable bytestring from
