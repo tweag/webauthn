@@ -1,3 +1,9 @@
+### 0.4.1.0
+
+* [#148](https://github.com/tweag/webauthn/pull/148) Allow authentication on Safari even though it violates the specification with an empty user handle
+* [#149](https://github.com/tweag/webauthn/pull/149) Export constructors for `Crypto.WebAuthn.Encoding.WebAuthnJson` types and derive `FromJSON` for all of them
+* [#151](https://github.com/tweag/webauthn/pull/151) Fix decoding of packed attestations without a `x5c` CBOR key. This fixes attestation on MacBook Pros with Chrome and TouchID.
+
 ### 0.4.0.0
 
 * [#129](https://github.com/tweag/webauthn/pull/129) Rename and expand

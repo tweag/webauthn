@@ -1,6 +1,6 @@
 cabal-version: 2.4
 name: webauthn
-version: 0.4.0.0
+version: 0.4.1.0
 license: Apache-2.0
 license-file: LICENSE
 copyright:
