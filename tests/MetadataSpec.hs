@@ -15,7 +15,7 @@ import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
-import System.Hourglass (dateCurrent)
+import Spec.Util (predeterminedDateTime)
 import Test.Hspec (SpecWith, describe, it, shouldBe, shouldSatisfy)
 import Test.Hspec.Expectations.Json (shouldBeUnorderedJson)
 
@@ -30,8 +30,7 @@ golden subdir = describe subdir $ do
         store = X509.makeCertificateStore [cert]
 
     blobBytes <- BS.readFile $ "tests/golden-metadata/" <> subdir <> "/blob.jwt"
-    now <- dateCurrent
-    let Right result = jwtToJson blobBytes (RootCertificate store origin) now
+    let Right result = jwtToJson blobBytes (RootCertificate store origin) predeterminedDateTime
 
     Just expectedPayload <- decodeFileStrict $ "tests/golden-metadata/" <> subdir <> "/payload.json"
 
@@ -61,5 +60,4 @@ spec = do
   describe "fidoAllianceRootCertificate" $ do
     it "can validate the payload" $ do
       blobBytes <- BS.readFile "tests/golden-metadata/big/blob.jwt"
-      now <- dateCurrent
-      jwtToJson blobBytes fidoAllianceRootCertificate now `shouldSatisfy` isRight
+      jwtToJson blobBytes fidoAllianceRootCertificate predeterminedDateTime `shouldSatisfy` isRight

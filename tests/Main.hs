@@ -33,22 +33,12 @@ import qualified Encoding
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
 import qualified PublicKeySpec
-import Spec.Util (decodeFile)
+import Spec.Util (decodeFile, predeterminedDateTime, timeZero)
 import qualified System.Directory as Directory
 import System.FilePath ((</>))
-import System.Hourglass (dateCurrent)
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
 import qualified Test.Hspec as Hspec
 import Test.QuickCheck.Instances.Text ()
-
--- | Attestation requires a specific time to be passed for the verification of the certificate chain.
--- For sake of reproducability we hardcode a time.
-predeterminedDateTime :: HG.DateTime
-predeterminedDateTime = HG.DateTime {dtDate = HG.Date {dateYear = 2021, dateMonth = HG.December, dateDay = 22}, dtTime = timeZero}
-
--- | For most uses of DateTime in these tests, the time of day isn't relevant. This definition allows easier construction of these DateTimes.
-timeZero :: HG.TimeOfDay
-timeZero = HG.TimeOfDay {todHour = HG.Hours 0, todMin = HG.Minutes 0, todSec = HG.Seconds 0, todNSec = HG.NanoSeconds 0}
 
 -- | Load all files in the given directory, and ensure that all of them can be
 -- decoded. The caller can pass in a function to run further checks on the
@@ -69,8 +59,7 @@ canDecodeAllToJSRepr path = do
 registryFromBlobFile :: IO Service.MetadataServiceRegistry
 registryFromBlobFile = do
   blobBytes <- BS.readFile "tests/golden-metadata/big/blob.jwt"
-  now <- dateCurrent
-  case Meta.metadataBlobToRegistry blobBytes now of
+  case Meta.metadataBlobToRegistry blobBytes predeterminedDateTime of
     Left err -> error $ Text.unpack err
     Right res -> pure res
 
@@ -223,10 +212,18 @@ main = Hspec.hspec $ do
         predeterminedDateTime
     it "tests whether the fixed packed register has a valid attestation" $
       registerTestFromFile
-        "tests/responses/attestation/packed-02.json"
+        "tests/responses/attestation/packed-03.json"
         "http://localhost:5000"
         "localhost"
         True
+        registry
+        predeterminedDateTime
+    it "regression test for #150" $
+      registerTestFromFile
+        "tests/responses/attestation/regression-150.json"
+        "https://webauthn.dev.tweag.io"
+        "webauthn.dev.tweag.io"
+        False
         registry
         predeterminedDateTime
     it "the response with transports information works" $
@@ -391,6 +388,10 @@ defaultPublicKeyCredentialCreationOptions c =
           M.CredentialParameters
             { M.cpTyp = M.CredentialTypePublicKey,
               M.cpAlg = Cose.CoseAlgorithmRS256
+            },
+          M.CredentialParameters
+            { cpTyp = M.CredentialTypePublicKey,
+              cpAlg = Cose.CoseAlgorithmEdDSA
             }
         ],
       M.corTimeout = Nothing,

@@ -97,35 +97,41 @@ instance M.AttestationStatementFormat Format where
 
   asfDecode _ xs =
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
-      (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), Just (CBOR.TList x5cRaw)) -> do
+      (Just (CBOR.TInt algId), Just (CBOR.TBytes sig), mx5c) -> do
         alg <- Cose.toCoseSignAlg algId
-        x5c <- case NE.nonEmpty x5cRaw of
+        x5c <- case mx5c of
           Nothing -> pure Nothing
-          Just x5cBytes -> do
-            x5c@(signedCert :| _) <- forM x5cBytes $ \case
-              CBOR.TBytes certBytes ->
-                first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
-              cert ->
-                Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
+          Just (CBOR.TList x5cRaw) -> case NE.nonEmpty x5cRaw of
+            Nothing -> pure Nothing
+            Just x5cBytes -> do
+              x5c@(signedCert :| _) <- forM x5cBytes $ \case
+                CBOR.TBytes certBytes ->
+                  first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
+                cert ->
+                  Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
 
-            let cert = X509.getCertificate signedCert
-            aaguidExt <- case X509.extensionGetE (X509.certExtensions cert) of
-              Just (Right ext) -> pure ext
-              Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
-              Nothing -> Left "Certificate aaguid extension is missing"
-            pure $ Just (x5c, aaguidExt)
+              let cert = X509.getCertificate signedCert
+              aaguidExt <- case X509.extensionGetE (X509.certExtensions cert) of
+                Just (Right ext) -> pure ext
+                Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
+                Nothing -> Left "Certificate aaguid extension is missing"
+              pure $ Just (x5c, aaguidExt)
+          Just _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, [optional] x5c: non-empty list): " <> Text.pack (show xs)
         pure $ Statement {..}
-      _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, x5c: list): " <> Text.pack (show xs)
+      _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, [optional] x5c: non-empty list): " <> Text.pack (show xs)
 
   asfEncode _ Statement {..} =
-    let encodedx5c = case x5c of
-          Nothing -> []
-          Just (certChain, _) -> map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
-     in CBOR.TMap
-          [ (CBOR.TString "sig", CBOR.TBytes sig),
-            (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg),
-            (CBOR.TString "x5c", CBOR.TList encodedx5c)
-          ]
+    CBOR.TMap
+      ( [ (CBOR.TString "sig", CBOR.TBytes sig),
+          (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg)
+        ]
+          ++ case x5c of
+            Nothing -> []
+            Just (certChain, _) ->
+              let encodedx5c = map (CBOR.TBytes . X509.encodeSignedObject) $ toList certChain
+               in [ (CBOR.TString "x5c", CBOR.TList encodedx5c)
+                  ]
+      )
 
   type AttStmtVerificationError Format = VerificationError
 
