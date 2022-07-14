@@ -212,10 +212,18 @@ main = Hspec.hspec $ do
         predeterminedDateTime
     it "tests whether the fixed packed register has a valid attestation" $
       registerTestFromFile
-        "tests/responses/attestation/packed-02.json"
+        "tests/responses/attestation/packed-03.json"
         "http://localhost:5000"
         "localhost"
         True
+        registry
+        predeterminedDateTime
+    it "regression test for #150" $
+      registerTestFromFile
+        "tests/responses/attestation/regression-150.json"
+        "https://webauthn.dev.tweag.io"
+        "webauthn.dev.tweag.io"
+        False
         registry
         predeterminedDateTime
     it "the response with transports information works" $
@@ -380,6 +388,10 @@ defaultPublicKeyCredentialCreationOptions c =
           M.CredentialParameters
             { M.cpTyp = M.CredentialTypePublicKey,
               M.cpAlg = Cose.CoseAlgorithmRS256
+            },
+          M.CredentialParameters
+            { cpTyp = M.CredentialTypePublicKey,
+              cpAlg = Cose.CoseAlgorithmEdDSA
             }
         ],
       M.corTimeout = Nothing,
