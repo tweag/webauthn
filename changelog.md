@@ -1,3 +1,6 @@
+### Next version (0.4.1.1)
+* [#153](https://github.com/tweag/webauthn/pull/153) Increase cabal bounds to support up to GHC 9.2
+
 ### 0.4.1.0
 
 * [#148](https://github.com/tweag/webauthn/pull/148) Allow authentication on Safari even though it violates the specification with an empty user handle
