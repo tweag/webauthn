@@ -1,4 +1,4 @@
-### Next version (0.4.1.1)
+### 0.4.1.1
 * [#153](https://github.com/tweag/webauthn/pull/153) Increase cabal bounds to support up to GHC 9.2
 
 ### 0.4.1.0
