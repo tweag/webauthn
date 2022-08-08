@@ -74,7 +74,7 @@ library
   hs-source-dirs: src
   build-depends:
     base                  >= 4.13.0 && < 4.17,
-    aeson                 >= 1.4.7 && < 2.1,
+    aeson                 >= 1.4.7 && <= 2.1.0.0,
     asn1-encoding         >= 0.9.6 && < 0.10,
     asn1-parse            >= 0.9.5 && < 0.10,
     asn1-types            >= 0.3.4 && < 0.4,
@@ -91,7 +91,7 @@ library
     jose                  >= 0.8.5 && < 0.10,
     lens                  >= 4.18.1 && < 5.2,
     memory                >= 0.15.0 && < 0.18,
-    monad-time            >= 0.3.1 && < 0.4,
+    monad-time            >= 0.3.1 && <= 0.4.0.0,
     mtl                   >= 2.2.2 && < 2.3,
     serialise             >= 0.2.3 && < 0.3,
     singletons            >= 2.6 && < 3.2,
