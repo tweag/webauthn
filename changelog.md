@@ -1,3 +1,6 @@
+### 0.4.1.2
+* [#155](https://github.com/tweag/webauthn/pull/155) Increase cabal bounds for aeson and monad-time to support latest versions from Hackage
+
 ### 0.4.1.1
 * [#153](https://github.com/tweag/webauthn/pull/153) Increase cabal bounds to support up to GHC 9.2
 
