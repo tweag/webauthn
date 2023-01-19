@@ -219,7 +219,7 @@ instance Decode m Cose.CoseSignAlg where
   decode = liftEither . Cose.toCoseSignAlg
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
-data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
+newtype AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
     credProps :: Maybe Bool
   }
@@ -249,7 +249,7 @@ instance Decode m T.AuthenticationExtensionsClientInputs where
     pure $ T.AuthenticationExtensionsClientInputs {..}
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-credentialpropertiesoutput)
-data CredentialPropertiesOutput = CredentialPropertiesOutput
+newtype CredentialPropertiesOutput = CredentialPropertiesOutput
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-credentialpropertiesoutput-rk)
     rk :: Maybe Bool
   }
@@ -274,7 +274,7 @@ instance Decode m T.CredentialPropertiesOutput where
     pure $ T.CredentialPropertiesOutput {..}
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
-data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
+newtype AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
     credProps :: Maybe CredentialPropertiesOutput
   }

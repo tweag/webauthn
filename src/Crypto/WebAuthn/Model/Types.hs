@@ -661,7 +661,7 @@ newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
 -- TODO: Most extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
-data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
+newtype AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
     -- When true, indicates that that extension is requested by the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
     aeciCredProps :: Maybe Bool
@@ -676,7 +676,7 @@ instance ToJSON AuthenticationExtensionsClientInputs where
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-credentialpropertiesoutput)
 -- This is a dictionary containing the client properties output.
-data CredentialPropertiesOutput = CredentialPropertiesOutput
+newtype CredentialPropertiesOutput = CredentialPropertiesOutput
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-credentialpropertiesoutput-rk)
     -- The resident key credential property (i.e., client-side discoverable
     -- credential property), indicating whether the `[PublicKeyCredential](https://www.w3.org/TR/webauthn-2/#publickeycredential)`
@@ -695,7 +695,7 @@ instance ToJSON CredentialPropertiesOutput where
 -- This is a dictionary containing the [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
 -- TODO: Most extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
-data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
+newtype AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
     -- When provided, indicates the value of the requireResidentKey parameter
     -- that was used in the [invocation](https://www.w3.org/TR/webauthn-2/#CreateCred-InvokeAuthnrMakeCred)
