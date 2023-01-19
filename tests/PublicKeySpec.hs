@@ -7,8 +7,8 @@ where
 
 import Codec.Serialise.Properties (serialiseIdentity)
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Data.ByteString as BS
 import qualified Spec.Key as Key
 import Spec.Types ()

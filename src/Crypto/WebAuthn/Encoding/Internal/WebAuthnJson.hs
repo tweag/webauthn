@@ -233,6 +233,7 @@ instance Aeson.ToJSON AuthenticationExtensionsClientInputs where
 
 instance Encode T.AuthenticationExtensionsClientInputs where
   type JSON T.AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
+
   -- TODO: Extensions are not implemented by this library, see the TODO in the
   -- module documentation of `Crypto.WebAuthn.Model` for more information.
   encode T.AuthenticationExtensionsClientInputs {..} =
@@ -287,6 +288,7 @@ instance Aeson.ToJSON AuthenticationExtensionsClientOutputs where
 
 instance Encode T.AuthenticationExtensionsClientOutputs where
   type JSON T.AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
+
   -- TODO: Extensions are not implemented by this library, see the TODO in the
   -- module documentation of `Crypto.WebAuthn.Model` for more information.
   encode T.AuthenticationExtensionsClientOutputs {..} =

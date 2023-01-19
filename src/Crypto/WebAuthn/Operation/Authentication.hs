@@ -232,7 +232,7 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- initiated, verify that response.userHandle is present, and that the user
   -- identified by this value is the owner of credentialSource.
   let owner = ceUserHandle entry
-  
+
   -- According to the [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-id)
   -- The user handle MUST NOT be empty, though it MAY be null.
   -- For clarification see https://github.com/w3c/webauthn/issues/1722

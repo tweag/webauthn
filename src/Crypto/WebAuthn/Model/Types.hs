@@ -675,7 +675,7 @@ instance ToJSON AuthenticationExtensionsClientInputs where
       ]
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-credentialpropertiesoutput)
--- This is a dictionary containing the 
+-- This is a dictionary containing the client properties output.
 data CredentialPropertiesOutput = CredentialPropertiesOutput
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-credentialpropertiesoutput-rk)
     -- The resident key credential property (i.e., client-side discoverable
