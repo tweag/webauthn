@@ -237,7 +237,7 @@ instance Arbitrary M.AuthenticatorSelectionCriteria where
       <*> arbitrary
 
 instance Arbitrary M.AuthenticationExtensionsClientInputs where
-  arbitrary = pure M.AuthenticationExtensionsClientInputs
+  arbitrary = M.AuthenticationExtensionsClientInputs <$> arbitrary
 
 instance Arbitrary (M.CredentialOptions 'M.Registration) where
   arbitrary =
@@ -262,8 +262,11 @@ instance Arbitrary (M.CredentialOptions 'M.Authentication) where
       <*> arbitrary
       <*> arbitrary
 
+instance Arbitrary M.CredentialPropertiesOutput where
+  arbitrary = M.CredentialPropertiesOutput <$> arbitrary
+
 instance Arbitrary M.AuthenticationExtensionsClientOutputs where
-  arbitrary = pure M.AuthenticationExtensionsClientOutputs
+  arbitrary = M.AuthenticationExtensionsClientOutputs <$> arbitrary
 
 instance Arbitrary (M.Credential 'M.Registration 'False) where
   arbitrary =
