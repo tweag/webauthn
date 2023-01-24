@@ -667,12 +667,7 @@ newtype AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInp
     aeciCredProps :: Maybe Bool
   }
   deriving (Eq, Show)
-
-instance ToJSON AuthenticationExtensionsClientInputs where
-  toJSON AuthenticationExtensionsClientInputs {..} =
-    object
-      [ "aeciCredProps" .= aeciCredProps
-      ]
+  deriving newtype (ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-credentialpropertiesoutput)
 -- This is a dictionary containing the client properties output.
@@ -684,12 +679,7 @@ newtype CredentialPropertiesOutput = CredentialPropertiesOutput
     cpoRk :: Maybe Bool
   }
   deriving (Eq, Show)
-
-instance ToJSON CredentialPropertiesOutput where
-  toJSON CredentialPropertiesOutput {..} =
-    object
-      [ "cpoRk" .= cpoRk
-      ]
+  deriving newtype (ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- This is a dictionary containing the [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output)
@@ -703,12 +693,7 @@ newtype AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOu
     aecoCredProps :: Maybe CredentialPropertiesOutput
   }
   deriving (Eq, Show)
-
-instance ToJSON AuthenticationExtensionsClientOutputs where
-  toJSON AuthenticationExtensionsClientOutputs {..} =
-    object
-      [ "aecoCredProps" .= aecoCredProps
-      ]
+  deriving newtype (ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-extension-output)
 data AuthenticatorExtensionOutputs = AuthenticatorExtensionOutputs
