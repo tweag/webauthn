@@ -1,3 +1,8 @@
+### 0.5.0.0
+
+* [#157](https://github.com/tweag/webauthn/pull/157) Add support for the [credProps](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension) extension
+* [#158](https://github.com/tweag/webauthn/pull/158) Update root certificates
+
 ### 0.4.1.2
 * [#155](https://github.com/tweag/webauthn/pull/155) Increase cabal bounds for aeson and monad-time to support latest versions from Hackage
 
