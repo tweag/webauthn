@@ -145,7 +145,7 @@ main = Hspec.hspec $ do
                   M.Credential
                     { M.cIdentifier = O.ceCredentialId credentialEntry,
                       M.cResponse = cResponse,
-                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
                     }
         signInResult `shouldSatisfy` isRight
     it "tests whether the fixed register and login responses are matching with empty user handle" $
@@ -183,7 +183,7 @@ main = Hspec.hspec $ do
                   M.Credential
                     { M.cIdentifier = O.ceCredentialId credentialEntry,
                       M.cResponse = cResponse,
-                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
                     }
         signInResult `shouldSatisfy` isRight
   describe "Packed register" $ do
