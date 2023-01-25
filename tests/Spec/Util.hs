@@ -21,7 +21,7 @@ runSeededMonadRandom seed f = do
 -- | Attestation requires a specific time to be passed for the verification of the certificate chain.
 -- For sake of reproducability we hardcode a time.
 predeterminedDateTime :: HG.DateTime
-predeterminedDateTime = HG.DateTime {HG.dtDate = HG.Date {HG.dateYear = 2021, HG.dateMonth = HG.December, HG.dateDay = 22}, HG.dtTime = timeZero}
+predeterminedDateTime = HG.DateTime {HG.dtDate = HG.Date {HG.dateYear = 2023, HG.dateMonth = HG.January, HG.dateDay = 25}, HG.dtTime = timeZero}
 
 -- | For most uses of DateTime in these tests, the time of day isn't relevant. This definition allows easier construction of these DateTimes.
 timeZero :: HG.TimeOfDay
