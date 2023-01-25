@@ -18,8 +18,7 @@ where
 
 import qualified Codec.CBOR.Term as CBOR
 import Control.Exception (Exception)
-import Control.Monad (forM)
-import Control.Monad.Cont (unless)
+import Control.Monad (forM, unless)
 import Crypto.Hash (Digest, SHA256, digestFromByteString, hash)
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
