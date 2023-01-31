@@ -77,9 +77,9 @@ import GHC.Generics (Generic)
 The functions in this module are grouped and named according to the
 following conventions:
 
-* If the type is parametrized by @raw@, there should be @stripRaw@ and
+  * If the type is parametrized by @raw@, there should be @stripRaw@ and
   @encodeRaw@ functions
-* If the type is serializable there should be a @decode@
+  * If the type is serializable there should be a @decode@
   * In addition, if the type has a raw field for its own encoding (implying
     that it's parametrized by @raw@), no other function needs to be provided
   * Alternatively, there should be an @encode@ that encodes the type, using
@@ -88,9 +88,9 @@ following conventions:
 If the type is parametrized by @raw@, this module should guarantee these
 invariants for any @value :: TheType (raw ~ False)@:
 
-* @stripRaw@ doesn't change any fields: @stripRaw value = value@
-* @encodeRaw@ doesn't change any fields: @stripRaw (encodeRaw value) = value@
-* If the type is also serializable:
+  * @stripRaw@ doesn't change any fields: @stripRaw value = value@
+  * @encodeRaw@ doesn't change any fields: @stripRaw (encodeRaw value) = value@
+  * If the type is also serializable:
   * If the type has a raw field, @decode@ inverses @encodeRaw@ and
     @getEncoded@: @stripRaw (decode (getEncoded (encodeRaw value))) = value@
   * Alternatively, @decode@ inverses @encodeRaw@ and @encode@:
@@ -99,7 +99,7 @@ invariants for any @value :: TheType (raw ~ False)@:
 If the type is only serializable then this invariant should hold for any
 @value :: TheType@
 
-* @decode@ inverses @encode@: @decode (encode value) = value@
+  * @decode@ inverses @encode@: @decode (encode value) = value@
 
 If any such functions are expected to be used only internally, they may not be
 exported
@@ -111,13 +111,13 @@ exported
 -- custom binary format the
 -- [binary](https://hackage.haskell.org/package/binary) library. However these
 -- two libraries don't interact nicely with each other. Because of this we are
--- specifying decoders that don't consume all input as a 'PartialBinaryDecoder
--- DecodingError', which is just a function that can partially consume a
--- 'LBS.ByteString'. Using this we can somewhat easily flip between the two
+-- specifying decoders that don't consume all input as a @PartialBinaryDecoder@,
+-- which is just a state monad transformer over an 'LBS.ByteString'.
+-- Using this we can somewhat easily flip between the two
 -- libraries while decoding without too much nastiness.
 type PartialBinaryDecoder a = StateT LBS.ByteString (Either Text) a
 
--- | Runs a 'PartialBinaryDecoder' using a strict bytestring. Afterwards it
+-- | Runs a @PartialBinaryDecoder@ using a strict bytestring. Afterwards it
 -- makes sure that no bytes are left, otherwise returns an error.
 runPartialBinaryDecoder ::
   BS.ByteString ->
@@ -129,11 +129,11 @@ runPartialBinaryDecoder bytes decoder =
     Right (result, rest)
       | LBS.null rest -> return result
       | otherwise ->
-        Left $
-          "Not all binary input used, rest in base64 format is: "
-            <> decodeUtf8 (Base64.encode $ LBS.toStrict rest)
+          Left $
+            "Not all binary input used, rest in base64 format is: "
+              <> decodeUtf8 (Base64.encode $ LBS.toStrict rest)
 
--- | A 'PartialBinaryDecoder' for a binary encoding specified using
+-- | A @PartialBinaryDecoder@ for a binary encoding specified using
 -- 'Binary.Get'.
 runBinary ::
   Binary.Get a ->
@@ -147,7 +147,7 @@ runBinary decoder = do
       put rest
       pure result
 
--- | A 'PartialBinaryDecoder' for a CBOR encoding specified using the given
+-- | A @PartialBinaryDecoder@ for a CBOR encoding specified using the given
 -- 'CBOR.Decoder'.
 runCBOR ::
   (forall s. CBOR.Decoder s a) ->

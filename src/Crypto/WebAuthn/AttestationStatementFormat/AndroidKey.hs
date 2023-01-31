@@ -264,7 +264,8 @@ instance M.AttestationStatementFormat Format where
         (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg $ Cose.signAlg pubKeyAndAlg),
         ( CBOR.TString "x5c",
           CBOR.TList $
-            map (CBOR.TBytes . X509.encodeSignedObject) $ toList x5c
+            map (CBOR.TBytes . X509.encodeSignedObject) $
+              toList x5c
         )
       ]
 
