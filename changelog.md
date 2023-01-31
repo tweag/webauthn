@@ -1,3 +1,7 @@
+### 0.5.0.1
+
+* [#159](https://github.com/tweag/webauthn/pull/159) Allow mtl-2.3.1 and support GHC 9.4
+
 ### 0.5.0.0
 
 * [#157](https://github.com/tweag/webauthn/pull/157) Add support for the [credProps](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension) extension
