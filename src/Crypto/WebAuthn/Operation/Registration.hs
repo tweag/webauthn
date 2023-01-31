@@ -334,11 +334,13 @@ verifyRegistrationResponse
       -- 8. Verify that the value of C.challenge equals the base64url encoding of
       -- options.challenge.
       unless (corChallenge == M.ccdChallenge c) $
-        failure $ RegistrationChallengeMismatch corChallenge (M.ccdChallenge c)
+        failure $
+          RegistrationChallengeMismatch corChallenge (M.ccdChallenge c)
 
       -- 9. Verify that the value of C.origin matches the Relying Party's origin.
       unless (rpOrigin == M.ccdOrigin c) $
-        failure $ RegistrationOriginMismatch rpOrigin (M.ccdOrigin c)
+        failure $
+          RegistrationOriginMismatch rpOrigin (M.ccdOrigin c)
 
       -- 10. Verify that the value of C.tokenBinding.status matches the state of
       -- Token Binding for the TLS connection over which the assertion was
@@ -363,7 +365,8 @@ verifyRegistrationResponse
       -- 13. Verify that the rpIdHash in authData is the SHA-256 hash of the RP
       -- ID expected by the Relying Party.
       unless (rpIdHash == M.adRpIdHash authData) $
-        failure $ RegistrationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
+        failure $
+          RegistrationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
       -- 14. Verify that the User Present bit of the flags in authData is set.
       unless (M.adfUserPresent (M.adFlags authData)) $
@@ -391,7 +394,8 @@ verifyRegistrationResponse
       let acdAlg = Cose.signAlg acdCredentialPublicKey
           desiredAlgs = map M.cpAlg corPubKeyCredParams
       unless (acdAlg `elem` desiredAlgs) $
-        failure $ RegistrationPublicKeyAlgorithmDisallowed desiredAlgs acdAlg
+        failure $
+          RegistrationPublicKeyAlgorithmDisallowed desiredAlgs acdAlg
 
       -- 17. Verify that the values of the client extension outputs in
       -- clientExtensionResults and the authenticator extension outputs in the

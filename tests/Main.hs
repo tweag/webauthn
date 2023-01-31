@@ -345,10 +345,10 @@ isExpectedAttestationResponse _ _ _ (Left _) = False -- We should never receive 
 isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration {..} verifiable (Right O.RegistrationResult {..}) =
   rrEntry == expectedCredentialEntry
     && not verifiable
-      || ( case rrAttestationStatement of
-             O.SomeAttestationStatement _ O.VerifiedAuthenticator {} -> True
-             _ -> False
-         )
+    || ( case rrAttestationStatement of
+           O.SomeAttestationStatement _ O.VerifiedAuthenticator {} -> True
+           _ -> False
+       )
   where
     expectedCredentialEntry :: O.CredentialEntry
     expectedCredentialEntry =
@@ -356,7 +356,8 @@ isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration 
         { ceCredentialId = cIdentifier,
           ceUserHandle = M.cueId corUser,
           cePublicKeyBytes =
-            M.PublicKeyBytes . M.unRaw
+            M.PublicKeyBytes
+              . M.unRaw
               . M.acdCredentialPublicKeyBytes
               . M.adAttestedCredentialData
               . M.aoAuthData

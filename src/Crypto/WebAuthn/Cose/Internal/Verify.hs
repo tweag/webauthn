@@ -116,7 +116,7 @@ verify
         public_q = ECC.Point ecdsaX ecdsaY
 
     -- This check is already done in checkPublicKey
-    --unless (ECC.isPointValid public_curve public_q) $
+    -- unless (ECC.isPointValid public_curve public_q) $
     --  Left $ "ECDSA point is not valid for curve " <> Text.pack (show curveName) <> ": " <> Text.pack (show public_q)
     let key = ECDSA.PublicKey {..}
 

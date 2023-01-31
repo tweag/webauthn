@@ -131,26 +131,26 @@ checkPublicKey :: UncheckedPublicKey -> Either Text PublicKey
 checkPublicKey key@PublicKeyEdDSA {..}
   | actualSize == expectedSize = Right $ CheckedPublicKey key
   | otherwise =
-    Left $
-      "EdDSA public key for curve "
-        <> Text.pack (show eddsaCurve)
-        <> " didn't have the expected size of "
-        <> Text.pack (show expectedSize)
-        <> " bytes, it has "
-        <> Text.pack (show actualSize)
-        <> " bytes instead: "
-        <> Text.decodeUtf8 (Base16.encode eddsaX)
+      Left $
+        "EdDSA public key for curve "
+          <> Text.pack (show eddsaCurve)
+          <> " didn't have the expected size of "
+          <> Text.pack (show expectedSize)
+          <> " bytes, it has "
+          <> Text.pack (show actualSize)
+          <> " bytes instead: "
+          <> Text.decodeUtf8 (Base16.encode eddsaX)
   where
     actualSize = BS.length eddsaX
     expectedSize = coordinateSizeEdDSA eddsaCurve
 checkPublicKey key@PublicKeyECDSA {..}
   | ECC.isPointValid curve point = Right $ CheckedPublicKey key
   | otherwise =
-    Left $
-      "ECDSA public key point is not valid for curve "
-        <> Text.pack (show ecdsaCurve)
-        <> ": "
-        <> Text.pack (show point)
+      Left $
+        "ECDSA public key point is not valid for curve "
+          <> Text.pack (show ecdsaCurve)
+          <> ": "
+          <> Text.pack (show point)
   where
     curve = ECC.getCurveByName (toCryptCurveECDSA ecdsaCurve)
     point = ECC.Point ecdsaX ecdsaY

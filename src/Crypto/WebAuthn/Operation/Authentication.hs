@@ -245,17 +245,17 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   case (midentifiedUser, mUserHandler) of
     (Just identifiedUser, Just userHandle)
       | identifiedUser /= owner ->
-        failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
+          failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
       | userHandle /= owner ->
-        failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
+          failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
       | otherwise -> pure ()
     (Just identifiedUser, Nothing)
       | identifiedUser /= owner ->
-        failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
+          failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
       | otherwise -> pure ()
     (Nothing, Just userHandle)
       | userHandle /= owner ->
-        failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
+          failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
       | otherwise -> pure ()
     (Nothing, Nothing) ->
       failure AuthenticationCannotVerifyUserHandle
@@ -286,11 +286,13 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
 
   -- 12. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
   unless (M.ccdChallenge c == M.coaChallenge options) $
-    failure $ AuthenticationChallengeMismatch (M.coaChallenge options) (M.ccdChallenge c)
+    failure $
+      AuthenticationChallengeMismatch (M.coaChallenge options) (M.ccdChallenge c)
 
   -- 13. Verify that the value of C.origin matches the Relying Party's origin.
   unless (M.ccdOrigin c == origin) $
-    failure $ AuthenticationOriginMismatch origin (M.ccdOrigin c)
+    failure $
+      AuthenticationOriginMismatch origin (M.ccdOrigin c)
 
   -- 14. Verify that the value of C.tokenBinding.status matches the state of
   -- Token Binding for the TLS connection over which the attestation was
@@ -305,7 +307,8 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- Note: If using the appid extension, this step needs some special logic.
   -- See § 10.1 FIDO AppID Extension (appid) for details.
   unless (M.adRpIdHash authData == rpIdHash) $
-    failure $ AuthenticationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
+    failure $
+      AuthenticationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
   -- 16. Verify that the User Present bit of the flags in authData is set.
   unless (M.adfUserPresent (M.adFlags authData)) $
