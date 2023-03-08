@@ -27,6 +27,7 @@ import qualified Data.Hourglass as HG
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
+import Data.These (These (That, These, This))
 import Data.Validation (toEither)
 import qualified Emulation
 import qualified Encoding
@@ -39,6 +40,8 @@ import System.FilePath ((</>))
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
 import qualified Test.Hspec as Hspec
 import Test.QuickCheck.Instances.Text ()
+import qualified Data.List.NonEmpty as NE
+import Data.List (intercalate)
 
 -- | Load all files in the given directory, and ensure that all of them can be
 -- decoded. The caller can pass in a function to run further checks on the
@@ -61,7 +64,9 @@ registryFromBlobFile = do
   blobBytes <- BS.readFile "tests/golden-metadata/big/blob.jwt"
   case Meta.metadataBlobToRegistry blobBytes predeterminedDateTime of
     Left err -> error $ Text.unpack err
-    Right res -> pure res
+    Right (This err) -> error $ intercalate "," (Text.unpack <$> NE.toList err)
+    Right (These err _res) -> error $ "Unexpected MDS parsing errors: " <> intercalate "," (Text.unpack <$> NE.toList err)
+    Right (That res) -> pure res
 
 -- | Given a JSON Message in a file, performs attestation.
 -- The Boolean argument denotes if the attestation message can be verified using the metadata service.
