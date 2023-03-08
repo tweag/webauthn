@@ -15,6 +15,8 @@ import qualified Data.ByteString as BS
 import qualified Data.Hourglass as HG
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.These (These)
+import Data.Bifunctor (first, Bifunctor (second))
 
 -- | Verifies, decodes and extracts a 'Service.MetadataServiceRegistry' from a
 -- [FIDO Alliance Metadata Service](https://fidoalliance.org/metadata/) BLOB.
@@ -24,11 +26,10 @@ metadataBlobToRegistry ::
   BS.ByteString ->
   -- | The time at which it was fetched
   HG.DateTime ->
-  -- | Either an error on a registry of metadata entries
-  Either Text Service.MetadataServiceRegistry
+  -- | Either a certifcate error or a list of errors, a registry of metadata entries or both where the MDS has bad entries
+  Either Text (These [Text] Service.MetadataServiceRegistry)
 metadataBlobToRegistry bytes now = do
-  json <- case Service.jwtToJson bytes Service.fidoAllianceRootCertificate now of
-    Left err -> Left $ Text.pack $ show err
-    Right res -> pure res
-  payload <- Service.jsonToPayload json
-  pure $ Service.createMetadataRegistry $ Service.mpEntries payload
+  json <- first (Text.pack . show) (Service.jwtToJson bytes Service.fidoAllianceRootCertificate now)
+  let payload = Service.jsonToPayload json
+  pure $ second (Service.createMetadataRegistry . Service.mpEntries) payload
+  

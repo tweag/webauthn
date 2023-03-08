@@ -15,26 +15,32 @@ import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import Crypto.WebAuthn.Metadata.Statement.Decode (decodeAAGUID, decodeCertificate, decodeMetadataStatement, decodeSubjectKeyIdentifier)
 import qualified Crypto.WebAuthn.Metadata.WebIDL as IDL
 import Data.Bifunctor (first)
+import Data.Either (lefts, rights)
 import Data.Hourglass (Date, DateTime (dtDate), ISO8601_Date (ISO8601_Date), timeParse)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.These (These (This, That, These))
 
 -- | Decodes a 'ServiceTypes.MetadataPayload' from a 'ServiceIDL.MetadataBLOBPayload',
 -- discarding any 'ServiceIDL.MetadataBLOBPayloadEntry' that are not relevant to webauthn.
 -- This includes entries of the protocol family 'StatementIDL.ProtocolFamilyUAF'
 -- and entries whose 'StatementIDL.attestationTypes' doesn't include either
 -- 'Registry.ATTESTATION_BASIC_FULL' or 'Registry.ATTESTATION_ATTCA'
-decodeMetadataPayload :: ServiceIDL.MetadataBLOBPayload -> Either Text ServiceTypes.MetadataPayload
+decodeMetadataPayload :: ServiceIDL.MetadataBLOBPayload -> These [Text] ServiceTypes.MetadataPayload
 decodeMetadataPayload ServiceIDL.MetadataBLOBPayload {..} = do
   let mpLegalHeader = legalHeader
       mpNo = no
-  mpNextUpdate <- decodeDate nextUpdate
-  decodedEntries <- sequence $ mapMaybe decodeMetadataEntry entries
+  mpNextUpdate <- either (\err -> This [err]) That $ decodeDate nextUpdate
+  let errorOrEntries = mapMaybe decodeMetadataEntry entries
+  let errors = lefts errorOrEntries
+  let decodedEntries = rights errorOrEntries
   let mpEntries = foldMap NE.toList decodedEntries
-  pure ServiceTypes.MetadataPayload {..}
+  case errors of
+    [] -> That (ServiceTypes.MetadataPayload {..})
+    a -> These a (ServiceTypes.MetadataPayload {..})
 
 liftEitherMaybe :: Either (Maybe a) b -> Maybe (Either a b)
 liftEitherMaybe (Left Nothing) = Nothing

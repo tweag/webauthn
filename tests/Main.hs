@@ -24,9 +24,11 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Either (isRight)
 import Data.Foldable (for_)
 import qualified Data.Hourglass as HG
+import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
+import Data.These (These (That, These, This))
 import Data.Validation (toEither)
 import qualified Emulation
 import qualified Encoding
@@ -61,7 +63,9 @@ registryFromBlobFile = do
   blobBytes <- BS.readFile "tests/golden-metadata/big/blob.jwt"
   case Meta.metadataBlobToRegistry blobBytes predeterminedDateTime of
     Left err -> error $ Text.unpack err
-    Right res -> pure res
+    Right (This err) -> error $ intercalate "," (Text.unpack <$> err)
+    Right (These err _res) -> error $ "Unexpected MDS parsing errors: " <> intercalate "," (Text.unpack <$> err)
+    Right (That res) -> pure res
 
 -- | Given a JSON Message in a file, performs attestation.
 -- The Boolean argument denotes if the attestation message can be verified using the metadata service.
