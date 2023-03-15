@@ -1,3 +1,7 @@
+### 0.6.0.0
+
+* [#162](https://github.com/tweag/webauthn/pull/162) Enable MDS blob parsing to handle invalid entries without completely failing to parse
+
 ### 0.5.0.1
 
 * [#159](https://github.com/tweag/webauthn/pull/159) Allow mtl-2.3.1 and support GHC 9.4

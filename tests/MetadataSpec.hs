@@ -11,7 +11,6 @@ import Data.Aeson.Types (Result (Error))
 import qualified Data.ByteString as BS
 import Data.Either (isRight)
 import Data.HashMap.Strict ((!), (!?))
-import Data.List (intercalate)
 import qualified Data.PEM as PEM
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -69,7 +68,6 @@ spec = do
     it "can process an MDS file with errors" $ do
       blobBytes <- BS.readFile "tests/golden-metadata/big/blob-with-errors.jwt"
       case metadataBlobToRegistry blobBytes predeterminedDateTime of
-        Right (This err) -> error $ intercalate "," (Text.unpack <$> err)
-        Right (That _res) -> error "Expected parsing errors as well as registry"
         Right (These _errs _res) -> pure ()
+        Right _thisThat -> error "Expected parsing errors as well as registry"
         Left err -> error $ Text.unpack err

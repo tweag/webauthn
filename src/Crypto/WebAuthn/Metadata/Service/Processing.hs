@@ -68,6 +68,7 @@ import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import GHC.Exts (fromList, toList)
 import Data.These (These (This))
+import Data.List.NonEmpty (NonEmpty, singleton)
 
 -- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate
@@ -183,9 +184,9 @@ jwtToJson blob rootCert now = runExcept $ do
 -- relying party the `Crypto.WebAuthn.Metadata.Service.Types.mpNextUpdate`
 -- and `Crypto.WebAuthn.Metadata.Service.Types.mpEntries` fields are most
 -- important.
-jsonToPayload :: HashMap Text Value -> These [Text] Service.MetadataPayload
+jsonToPayload :: HashMap Text Value -> These (NonEmpty Text) Service.MetadataPayload
 jsonToPayload value = case Aeson.parseEither metadataPayloadParser value of
-  Left err -> This [Text.pack err]
+  Left err -> This (singleton $ Text.pack err)
   Right payload -> decodeMetadataPayload payload
 
 metadataPayloadParser :: HashMap Text Aeson.Value -> Aeson.Parser ServiceIDL.MetadataBLOBPayload

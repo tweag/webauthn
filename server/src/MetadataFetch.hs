@@ -17,9 +17,11 @@ import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as WAMeta
 import Data.Aeson (eitherDecodeFileStrict)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.List (intercalate)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (mapMaybe)
 import qualified Data.Text as Text
+import Data.These (These (That, These, This))
 import Network.HTTP.Client (Manager, httpLbs, responseBody)
 import Network.HTTP.Client.TLS (newTlsManager)
 import System.Hourglass (dateCurrent)
@@ -74,4 +76,6 @@ fetchRegistry manager = do
   now <- dateCurrent
   case WA.metadataBlobToRegistry blobBytes now of
     Left err -> error $ Text.unpack err
-    Right res -> pure res
+    Right (This err) -> error $ "Unexpected MDS parsing errors: " <> intercalate "," (Text.unpack <$> NE.toList err)
+    Right (These err res) -> putStrLn ("Unexpected MDS parsing errors: " <> intercalate "," (Text.unpack <$> NE.toList err)) >> pure res
+    Right (That res) -> pure res
