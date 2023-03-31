@@ -1,3 +1,7 @@
+### 0.5.0.2
+
+* [#163](https://github.com/tweag/webauthn/pull/163) Fix build with mtl-2.3
+
 ### 0.5.0.1
 
 * [#159](https://github.com/tweag/webauthn/pull/159) Allow mtl-2.3.1 and support GHC 9.4
