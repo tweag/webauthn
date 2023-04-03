@@ -60,15 +60,15 @@ import Data.FileEmbed (embedFile)
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
+import Data.List.NonEmpty (NonEmpty, singleton)
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.These (These (This))
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import GHC.Exts (fromList, toList)
-import Data.These (These (This))
-import Data.List.NonEmpty (NonEmpty, singleton)
 
 -- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate

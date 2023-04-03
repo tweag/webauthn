@@ -11,13 +11,13 @@ where
 
 import qualified Crypto.WebAuthn.Metadata.Service.Processing as Service
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
+import Data.Bifunctor (Bifunctor (second), first)
 import qualified Data.ByteString as BS
 import qualified Data.Hourglass as HG
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.These (These)
-import Data.Bifunctor (first, Bifunctor (second))
-import qualified Data.List.NonEmpty as NE
 
 -- | Verifies, decodes and extracts a 'Service.MetadataServiceRegistry' from a
 -- [FIDO Alliance Metadata Service](https://fidoalliance.org/metadata/) BLOB.
