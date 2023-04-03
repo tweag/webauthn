@@ -1,4 +1,4 @@
-### Next release: 0.6.0.0
+### 0.6.0.0
 
 * [#162](https://github.com/tweag/webauthn/pull/162) Enable MDS blob parsing to handle invalid entries without completely failing to parse
 * [#163](https://github.com/tweag/webauthn/pull/163) Fix build with mtl-2.3
