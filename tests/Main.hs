@@ -24,7 +24,9 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Either (isRight)
 import Data.Foldable (for_)
 import qualified Data.Hourglass as HG
+import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import Data.These (These (That, These, This))
@@ -40,8 +42,6 @@ import System.FilePath ((</>))
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
 import qualified Test.Hspec as Hspec
 import Test.QuickCheck.Instances.Text ()
-import qualified Data.List.NonEmpty as NE
-import Data.List (intercalate)
 
 -- | Load all files in the given directory, and ensure that all of them can be
 -- decoded. The caller can pass in a function to run further checks on the

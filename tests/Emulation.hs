@@ -7,8 +7,8 @@ module Emulation
   )
 where
 
-import Control.Monad.Trans (MonadTrans (lift))
 import Control.Monad.Except (ExceptT (ExceptT), MonadError, runExceptT, throwError)
+import Control.Monad.Trans (MonadTrans (lift))
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
