@@ -41,6 +41,7 @@ extra-source-files:
   changelog.md,
   root-certs/**/*.crt,
   tests/golden-metadata/big/blob.jwt,
+  tests/golden-metadata/big/blob-with-errors.jwt,
   tests/golden-metadata/big/payload.json,
   tests/golden-metadata/big/origin,
   tests/golden-metadata/big/root.crt,
