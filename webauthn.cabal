@@ -40,15 +40,10 @@ extra-source-files:
   README.md,
   changelog.md,
   root-certs/**/*.crt,
-  tests/golden-metadata/big/blob.jwt,
-  tests/golden-metadata/big/blob-with-errors.jwt,
-  tests/golden-metadata/big/payload.json,
-  tests/golden-metadata/big/origin,
-  tests/golden-metadata/big/root.crt,
-  tests/golden-metadata/small/blob.jwt,
-  tests/golden-metadata/small/payload.json,
-  tests/golden-metadata/small/origin,
-  tests/golden-metadata/small/root.crt,
+  tests/golden-metadata/**/*.jwt
+  tests/golden-metadata/**/*.json
+  tests/golden-metadata/**/*.crt
+  tests/golden-metadata/**/*.txt
   tests/responses/**/*.json
 
 common sanity
