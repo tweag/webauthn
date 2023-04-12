@@ -24,7 +24,7 @@ import Test.Hspec.Expectations.Json (shouldBeUnorderedJson)
 golden :: FilePath -> SpecWith ()
 golden subdir = describe subdir $ do
   it "can verify and extract the blob payload" $ do
-    origin <- Text.unpack . Text.strip . decodeUtf8 <$> BS.readFile ("tests/golden-metadata/" <> subdir <> "/origin")
+    origin <- Text.unpack . Text.strip . decodeUtf8 <$> BS.readFile ("tests/golden-metadata/" <> subdir <> "/origin.txt")
 
     certBytes <- BS.readFile $ "tests/golden-metadata/" <> subdir <> "/root.crt"
     let Right [PEM.pemContent -> pem] = PEM.pemParseBS certBytes

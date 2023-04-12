@@ -28,8 +28,9 @@ let
               + "`webauthn.cabal` at the same time.")
         else hsuper.ghc;
 
-      webauthn = pkgs.haskell.lib.disableLibraryProfiling
-        (hself.callCabal2nix "webauthn" src { });
+      webauthn = hself.buildFromCabalSdist
+        (pkgs.haskell.lib.disableLibraryProfiling
+          (hself.callCabal2nix "webauthn" src { }));
 
       server = hself.callCabal2nix "server" (src + "/server") { };
     });
