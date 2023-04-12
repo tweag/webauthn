@@ -18,8 +18,8 @@ jobs:
         - macos-latest
     steps:
     - uses: actions/checkout@v2
-    - uses: cachix/install-nix-action@v16
-    - uses: cachix/cachix-action@v10
+    - uses: cachix/install-nix-action@v20
+    - uses: cachix/cachix-action@v12
       with:
         name: tweag-webauthn
         authToken: '${{ secrets.CACHIX_TWEAG_WEBAUTHN_AUTH_TOKEN }}'
@@ -37,8 +37,8 @@ jobs:
         - macos-latest
     steps:
     - uses: actions/checkout@v2
-    - uses: cachix/install-nix-action@v16
-    - uses: cachix/cachix-action@v10
+    - uses: cachix/install-nix-action@v20
+    - uses: cachix/cachix-action@v12
       with:
         name: tweag-webauthn
         authToken: '${{ secrets.CACHIX_TWEAG_WEBAUTHN_AUTH_TOKEN }}'
