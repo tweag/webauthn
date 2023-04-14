@@ -1,3 +1,7 @@
+### 0.6.0.1
+
+* [#167](https://github.com/tweag/webauthn/pull/167) Fix missing file from sdist for testing
+
 ### 0.6.0.0
 
 * [#162](https://github.com/tweag/webauthn/pull/162) Enable MDS blob parsing to handle invalid entries without completely failing to parse
