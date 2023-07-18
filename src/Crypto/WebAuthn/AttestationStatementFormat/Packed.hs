@@ -46,7 +46,8 @@ instance Show Format where
 data Statement = Statement
   { alg :: Cose.CoseSignAlg,
     sig :: BS.ByteString,
-    x5c :: Maybe (NE.NonEmpty X509.SignedCertificate, IdFidoGenCeAAGUID)
+    -- The AAGUID extension is optional
+    x5c :: Maybe (NE.NonEmpty X509.SignedCertificate, Maybe IdFidoGenCeAAGUID)
   }
   deriving (Eq, Show)
 
@@ -112,9 +113,9 @@ instance M.AttestationStatementFormat Format where
 
               let cert = X509.getCertificate signedCert
               aaguidExt <- case X509.extensionGetE (X509.certExtensions cert) of
-                Just (Right ext) -> pure ext
+                Just (Right ext) -> pure $ Just ext
                 Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
-                Nothing -> Left "Certificate aaguid extension is missing"
+                Nothing -> pure Nothing
               pure $ Just (x5c, aaguidExt)
           Just _ -> Left $ "CBOR map didn't have expected value types (alg: int, sig: bytes, [optional] x5c: non-empty list): " <> Text.pack (show xs)
         pure $ Statement {..}
@@ -159,7 +160,7 @@ instance M.AttestationStatementFormat Format where
           pure $ M.SomeAttestationType M.AttestationTypeSelf
 
         -- Basic, AttCA
-        Just (x5c@(certCred :| _), IdFidoGenCeAAGUID certAAGUID) -> do
+        Just (x5c@(certCred :| _), mbAAGUID) -> do
           let cert = X509.getCertificate certCred
               pubKey = X509.certPubKey cert
           -- Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using
@@ -181,8 +182,11 @@ instance M.AttestationStatementFormat Format where
 
           -- If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that
           -- the value of this extension matches the aaguid in authenticatorData.
-          let aaguid = M.acdAaguid credData
-          unless (certAAGUID == aaguid) . failure $ CertificateAAGUIDMismatch certAAGUID aaguid
+          case mbAAGUID of
+            Just (IdFidoGenCeAAGUID certAAGUID) -> do
+              let aaguid = M.acdAaguid credData
+              unless (certAAGUID == aaguid) . failure $ CertificateAAGUIDMismatch certAAGUID aaguid
+            Nothing -> pure ()
 
           pure $
             M.SomeAttestationType $
