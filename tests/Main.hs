@@ -239,6 +239,20 @@ main = Hspec.hspec $ do
         True
         registry
         predeterminedDateTime
+    it "the response without a aaguid extension works" $
+      registerTestFromFile
+        "tests/responses/attestation/without-aaguid.json"
+        "https://mercury.com/"
+        "mercury.com"
+        -- Uses "Dynamic Softtoken CA", which is an unknown software CA. And
+        -- thus not verifiable by this library, which, by default, requires
+        -- hardware attestation.
+        False
+        registry
+        HG.DateTime
+          { dtDate = HG.Date {dateYear = 2023, dateMonth = HG.July, dateDay = 18},
+            dtTime = HG.TimeOfDay {todHour = HG.Hours 21, todMin = HG.Minutes 7, todSec = HG.Seconds 6, todNSec = HG.NanoSeconds 0}
+          }
   describe "AndroidKey register" $ do
     it "tests whether the fixed android key register has a valid attestation" $
       registerTestFromFile
