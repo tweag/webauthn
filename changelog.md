@@ -1,6 +1,6 @@
 ### 0.7.0.0
 
-* [174](https://github.com/tweag/webauthn/pull/174) Correctly verify packed
+* [#174](https://github.com/tweag/webauthn/pull/174) Correctly verify packed
   attestation when the AAGUID extension of the certitificate is missing. This is
   a backwards-incompatible change for packed attestation responses that
   previously failed due to the missing AAGUID extension. These responses now
