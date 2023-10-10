@@ -26,7 +26,7 @@ where
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
-import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
+import Crypto.WebAuthn.Internal.ToJSONOrphans (PrettyHexByteString (PrettyHexByteString))
 import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
 import Data.Text (Text)
@@ -37,7 +37,7 @@ import GHC.Generics (Generic)
 -- This contains the public key bytes.
 newtype EdDSAKeyBytes = EdDSAKeyBytes {unEdDSAKeyBytes :: BS.ByteString}
   deriving newtype (Eq)
-  deriving (Show, ToJSON) via Base16ByteString
+  deriving (Show, ToJSON) via PrettyHexByteString
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
 -- A structured representation of a [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7)

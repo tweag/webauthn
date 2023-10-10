@@ -26,7 +26,7 @@ import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
-import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
+import Crypto.WebAuthn.Internal.ToJSONOrphans (PrettyHexByteString (PrettyHexByteString))
 import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import qualified Crypto.WebAuthn.Model.Types as M
@@ -125,8 +125,8 @@ data TPMSClockInfo = TPMSClockInfo
 -- | The TPMS_CERTIFY_INFO structure as specified in [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
 -- section 10.12.3.
 data TPMSCertifyInfo = TPMSCertifyInfo
-  { tpmsciName :: Base16ByteString,
-    tpmsciQualifiedName :: Base16ByteString
+  { tpmsciName :: PrettyHexByteString,
+    tpmsciQualifiedName :: PrettyHexByteString
   }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -136,8 +136,8 @@ data TPMSCertifyInfo = TPMSCertifyInfo
 data TPMSAttest = TPMSAttest
   { tpmsaMagic :: Word32,
     tpmsaType :: Word16,
-    tpmsaQualifiedSigner :: Base16ByteString,
-    tpmsaExtraData :: Base16ByteString,
+    tpmsaQualifiedSigner :: PrettyHexByteString,
+    tpmsaExtraData :: PrettyHexByteString,
     tpmsaClockInfo :: TPMSClockInfo,
     tpmsaFirmwareVersion :: Word64,
     tpmsaAttested :: TPMSCertifyInfo
@@ -171,10 +171,10 @@ data TPMUPublicParms
 -- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
 -- section 12.2.3.2.
 data TPMUPublicId
-  = TPM2BPublicKeyRSA Base16ByteString
+  = TPM2BPublicKeyRSA PrettyHexByteString
   | TPMSECCPoint
-      { tpmseX :: Base16ByteString,
-        tpmseY :: Base16ByteString
+      { tpmseX :: PrettyHexByteString,
+        tpmseY :: PrettyHexByteString
       }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -184,7 +184,7 @@ data TPMTPublic = TPMTPublic
     tpmtpNameAlg :: TPMAlgId,
     tpmtpNameAlgRaw :: Word16,
     tpmtpObjectAttributes :: TPMAObject,
-    tpmtpAuthPolicy :: Base16ByteString,
+    tpmtpAuthPolicy :: PrettyHexByteString,
     tpmtpParameters :: TPMUPublicParms,
     tpmtpUnique :: TPMUPublicId
   }
@@ -442,10 +442,10 @@ instance M.AttestationStatementFormat Format where
         tpmsciQualifiedName <- getTPMByteString
         pure TPMSCertifyInfo {..}
 
-      getTPMByteString :: Get.Get Base16ByteString
+      getTPMByteString :: Get.Get PrettyHexByteString
       getTPMByteString = do
         size <- Get.getWord16be
-        Base16ByteString <$> Get.getByteString (fromIntegral size)
+        PrettyHexByteString <$> Get.getByteString (fromIntegral size)
 
       decodePubAreaBytes :: PubAreaBytes -> Either Text TPMTPublic
       decodePubAreaBytes (PubAreaBytes bytes) =
@@ -500,7 +500,7 @@ instance M.AttestationStatementFormat Format where
         TPMTPublic
           { tpmtpType = TPMAlgRSA,
             tpmtpParameters = TPMSRSAParms {..},
-            tpmtpUnique = TPM2BPublicKeyRSA (Base16ByteString nb)
+            tpmtpUnique = TPM2BPublicKeyRSA (PrettyHexByteString nb)
           } =
           Cose.checkPublicKey
             Cose.PublicKeyRSA
@@ -511,7 +511,7 @@ instance M.AttestationStatementFormat Format where
         TPMTPublic
           { tpmtpType = TPMAlgECC,
             tpmtpParameters = TPMSECCParms {..},
-            tpmtpUnique = TPMSECCPoint {tpmseX = Base16ByteString tpmseX, tpmseY = Base16ByteString tpmseY}
+            tpmtpUnique = TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
           } =
           Cose.checkPublicKey
             Cose.PublicKeyECDSA
@@ -567,7 +567,7 @@ instance M.AttestationStatementFormat Format where
       -- the hash algorithm employed in "alg".
       case hashWithCorrectAlgorithm (Cose.signAlg aikPubKeyAndAlg) attToBeSigned of
         Just attHash -> do
-          let Base16ByteString extraData = tpmsaExtraData certInfo
+          let PrettyHexByteString extraData = tpmsaExtraData certInfo
           unless (attHash == extraData) . failure $ HashMismatch attHash extraData
           pure ()
         Nothing -> failure HashFunctionUnknown
@@ -590,7 +590,7 @@ instance M.AttestationStatementFormat Format where
                   Put.putWord16be (tpmtpNameAlgRaw pubArea)
                   Put.putByteString pubAreaHash
 
-          let Base16ByteString name = tpmsciName (tpmsaAttested certInfo)
+          let PrettyHexByteString name = tpmsciName (tpmsaAttested certInfo)
           unless (name == pubName) . failure $ NameMismatch pubName name
           pure ()
         Left alg -> failure $ NameAlgorithmInvalid alg

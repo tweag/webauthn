@@ -11,7 +11,7 @@ module Crypto.WebAuthn.Metadata.Statement.Types
   )
 where
 
-import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
+import Crypto.WebAuthn.Internal.ToJSONOrphans (PrettyHexByteString (PrettyHexByteString))
 import qualified Crypto.WebAuthn.Metadata.FidoRegistry as Registry
 import qualified Crypto.WebAuthn.Metadata.Statement.WebIDL as StatementIDL
 import qualified Crypto.WebAuthn.Metadata.UAF as UAF
@@ -88,7 +88,7 @@ deriving instance ToJSON MetadataStatement
 -- | Type-safe wrapper for binary representation of the images.
 newtype PNGBytes = PNGBytes {unPNGBytes :: BS.ByteString}
   deriving newtype (Eq)
-  deriving (Show, ToJSON) via Base16ByteString
+  deriving (Show, ToJSON) via PrettyHexByteString
 
 -- | Values of 'Registry.AuthenticatorAttestationType' but limited to the ones possible with Webauthn, see https://www.w3.org/TR/webauthn-2/#sctn-attestation-types
 data WebauthnAttestationType
