@@ -7,8 +7,8 @@ where
 
 import Codec.Serialise.Properties (serialiseIdentity)
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Data.ByteString as BS
 import qualified Spec.Key as Key
 import Spec.Types ()
@@ -40,7 +40,7 @@ prop_signverify :: Integer -> Key.KeyPair -> BS.ByteString -> Bool
 prop_signverify seed Key.KeyPair {..} msg = do
   let signAlg = Cose.signAlg cosePubKey
       sig = runSeededMonadRandom seed $ Key.sign signAlg privKey msg
-      valid = Cose.verify cosePubKey msg sig
+      valid = Cose.verify cosePubKey (Cose.CoseMessage msg) (Cose.CoseSignature sig)
    in case valid of
         Left _ -> False
         Right () -> True

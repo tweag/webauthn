@@ -232,20 +232,30 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- initiated, verify that response.userHandle is present, and that the user
   -- identified by this value is the owner of credentialSource.
   let owner = ceUserHandle entry
-  case (midentifiedUser, M.araUserHandle response) of
+
+  -- According to the [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-id)
+  -- The user handle MUST NOT be empty, though it MAY be null.
+  -- For clarification see https://github.com/w3c/webauthn/issues/1722
+  -- However, Safari returns an empty string instead of null, see the bug report:
+  -- https://bugs.webkit.org/show_bug.cgi?id=239737
+  let mUserHandler = case M.araUserHandle response of
+        Just (M.UserHandle "") -> Nothing
+        userHandle -> userHandle
+
+  case (midentifiedUser, mUserHandler) of
     (Just identifiedUser, Just userHandle)
       | identifiedUser /= owner ->
-        failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
+          failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
       | userHandle /= owner ->
-        failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
+          failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
       | otherwise -> pure ()
     (Just identifiedUser, Nothing)
       | identifiedUser /= owner ->
-        failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
+          failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
       | otherwise -> pure ()
     (Nothing, Just userHandle)
       | userHandle /= owner ->
-        failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
+          failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
       | otherwise -> pure ()
     (Nothing, Nothing) ->
       failure AuthenticationCannotVerifyUserHandle
@@ -276,11 +286,13 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
 
   -- 12. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
   unless (M.ccdChallenge c == M.coaChallenge options) $
-    failure $ AuthenticationChallengeMismatch (M.coaChallenge options) (M.ccdChallenge c)
+    failure $
+      AuthenticationChallengeMismatch (M.coaChallenge options) (M.ccdChallenge c)
 
   -- 13. Verify that the value of C.origin matches the Relying Party's origin.
   unless (M.ccdOrigin c == origin) $
-    failure $ AuthenticationOriginMismatch origin (M.ccdOrigin c)
+    failure $
+      AuthenticationOriginMismatch origin (M.ccdOrigin c)
 
   -- 14. Verify that the value of C.tokenBinding.status matches the state of
   -- Token Binding for the TLS connection over which the attestation was
@@ -295,7 +307,8 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- Note: If using the appid extension, this step needs some special logic.
   -- See § 10.1 FIDO AppID Extension (appid) for details.
   unless (M.adRpIdHash authData == rpIdHash) $
-    failure $ AuthenticationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
+    failure $
+      AuthenticationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
   -- 16. Verify that the User Present bit of the flags in authData is set.
   unless (M.adfUserPresent (M.adFlags authData)) $

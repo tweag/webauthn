@@ -23,7 +23,7 @@ instructions below assume the use of Nix.
 
 ### Nix Caches
 Tweag provides a Cachix cache for the library itself and all
-non-Haskell dependencies, setting up the `tweag-haskell-fido2` cache can be
+non-Haskell dependencies, setting up the `tweag-webauthn` cache can be
 done using the [instructions][cachix] provided by Cachix.
 
 ### Nix Shell
@@ -111,7 +111,7 @@ specific language governing permissions and limitations under the License.
 ```
 
 [cache]: https://input-output-hk.github.io/haskell.nix/tutorials/getting-started.html#setting-up-the-binary-cache
-[cachix]: https://app.cachix.org/cache/tweag-haskell-fido2
+[cachix]: https://app.cachix.org/cache/tweag-webauthn
 [dotnet]: https://github.com/passwordless-lib/fido2-net-lib
 [hls-editor]: https://haskell-language-server.readthedocs.io/en/latest/configuration.html#configuring-your-editor
 [hls]: https://github.com/haskell/haskell-language-server

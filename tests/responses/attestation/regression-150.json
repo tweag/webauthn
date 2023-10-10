@@ -1,0 +1,13 @@
+{
+  "type": "public-key",
+  "id": "AdW2Vc7uD2urgMT9OMkyELoYSIxWvKoBY1gD5EQF9MlcOvHZUqqclf_Na5wTdzPneS0ms8bb3D9wu8QzelzRTjEqN4TazZKdKRxzGbozvBGawsNwjowK",
+  "rawId": "AdW2Vc7uD2urgMT9OMkyELoYSIxWvKoBY1gD5EQF9MlcOvHZUqqclf_Na5wTdzPneS0ms8bb3D9wu8QzelzRTjEqN4TazZKdKRxzGbozvBGawsNwjowK",
+  "response": {
+    "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiRk5MUFlnQUFBQUJOQTMzX253ZEIwbjJaWmZTNGEtRFYiLCJvcmlnaW4iOiJodHRwczovL3dlYmF1dGhuLmRldi50d2VhZy5pbyIsImNyb3NzT3JpZ2luIjpmYWxzZSwib3RoZXJfa2V5c19jYW5fYmVfYWRkZWRfaGVyZSI6ImRvIG5vdCBjb21wYXJlIGNsaWVudERhdGFKU09OIGFnYWluc3QgYSB0ZW1wbGF0ZS4gU2VlIGh0dHBzOi8vZ29vLmdsL3lhYlBleCJ9",
+    "attestationObject": "o2NmbXRmcGFja2VkZ2F0dFN0bXSiY2FsZyZjc2lnWEcwRQIhAIATxHdZC9pJA-RXLR-Gf0Kqnk8wk8YrmpEhff5D4dXuAiAH8rhgVstTbBNWSClMV7KZwtwTK9nmWPRAHOljZWH0gWhhdXRoRGF0YVjbz99AFunehK-NCfKrLtwZLiTxIgpzhkn0sc0Ib1Am45hFYs_Q663OAAI1vMYKZIsLJfHwVQMAVwHVtlXO7g9rq4DE_TjJMhC6GEiMVryqAWNYA-REBfTJXDrx2VKqnJX_zWucE3cz53ktJrPG29w_cLvEM3pc0U4xKjeE2s2SnSkccxm6M7wRmsLDcI6MCqUBAgMmIAEhWCC1PYYJ_C4KKBQ-10uWb8opsm9k7EfYnoETrdfsecI08iJYIPjQb8M6os-2zSb25VFANzAvniX1n5hiU_T7dyOhNS2a",
+    "transports": [
+      "internal"
+    ]
+  },
+  "clientExtensionResults": {}
+}

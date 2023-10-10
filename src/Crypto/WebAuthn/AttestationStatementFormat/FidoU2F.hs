@@ -137,7 +137,8 @@ instance M.AttestationStatementFormat Format where
         Just (xb, yb) -> do
           -- We decode the x and y values in an earlier stage of the process. In order to construct the publicKeyU2F, we have to reencode the value.
           unless (BS.length xb == 32 && BS.length yb == 32) $
-            failure $ CoordinateSizeInvalid (BS.length xb) (BS.length yb)
+            failure $
+              CoordinateSizeInvalid (BS.length xb) (BS.length yb)
           -- 4.c Let publicKeyU2F be the concatenation 0x04 || x || y.
           let publicKeyU2F = BS.singleton 0x04 <> xb <> yb
 

@@ -23,6 +23,9 @@ module Crypto.WebAuthn.Encoding.Internal.WebAuthnJson
     PublicKeyCredentialRpEntity (..),
     PublicKeyCredentialUserEntity (..),
     PublicKeyCredentialParameters (..),
+    AuthenticationExtensionsClientInputs (..),
+    AuthenticationExtensionsClientOutputs (..),
+    CredentialPropertiesOutput (..),
     COSEAlgorithmIdentifier,
     PublicKeyCredentialDescriptor (..),
     AuthenticatorSelectionCriteria (..),
@@ -49,8 +52,6 @@ import qualified Data.ByteString.Base64.URL as Base64Url
 import Data.Coerce (Coercible, coerce)
 import Data.Int (Int32)
 import Data.Kind (Type)
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Singletons (SingI)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
@@ -220,29 +221,90 @@ instance Encode Cose.CoseSignAlg where
 instance Decode m Cose.CoseSignAlg where
   decode = liftEither . Cose.toCoseSignAlg
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
+newtype AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
+    credProps :: Maybe Bool
+  }
+  deriving (Eq, Show, Generic)
+
+instance Aeson.FromJSON AuthenticationExtensionsClientInputs where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON AuthenticationExtensionsClientInputs where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
+
 instance Encode T.AuthenticationExtensionsClientInputs where
-  type JSON T.AuthenticationExtensionsClientInputs = Map Text Aeson.Value
+  type JSON T.AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
 
   -- TODO: Extensions are not implemented by this library, see the TODO in the
   -- module documentation of `Crypto.WebAuthn.Model` for more information.
-  encode T.AuthenticationExtensionsClientInputs {} = Map.empty
+  encode T.AuthenticationExtensionsClientInputs {..} =
+    AuthenticationExtensionsClientInputs
+      { credProps = aeciCredProps
+      }
 
 instance Decode m T.AuthenticationExtensionsClientInputs where
   -- TODO: Extensions are not implemented by this library, see the TODO in the
   -- module documentation of `Crypto.WebAuthn.Model` for more information.
-  decode _ = pure T.AuthenticationExtensionsClientInputs {}
+  decode AuthenticationExtensionsClientInputs {..} = do
+    let aeciCredProps = credProps
+    pure $ T.AuthenticationExtensionsClientInputs {..}
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-credentialpropertiesoutput)
+newtype CredentialPropertiesOutput = CredentialPropertiesOutput
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-credentialpropertiesoutput-rk)
+    rk :: Maybe Bool
+  }
+  deriving (Eq, Show, Generic)
+
+instance Aeson.FromJSON CredentialPropertiesOutput where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON CredentialPropertiesOutput where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
+
+instance Encode T.CredentialPropertiesOutput where
+  type JSON T.CredentialPropertiesOutput = CredentialPropertiesOutput
+  encode T.CredentialPropertiesOutput {..} =
+    CredentialPropertiesOutput
+      { rk = cpoRk
+      }
+
+instance Decode m T.CredentialPropertiesOutput where
+  decode CredentialPropertiesOutput {..} = do
+    let cpoRk = rk
+    pure $ T.CredentialPropertiesOutput {..}
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
+newtype AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
+    credProps :: Maybe CredentialPropertiesOutput
+  }
+  deriving (Eq, Show, Generic)
+
+instance Aeson.FromJSON AuthenticationExtensionsClientOutputs where
+  parseJSON = Aeson.genericParseJSON jsonEncodingOptions
+
+instance Aeson.ToJSON AuthenticationExtensionsClientOutputs where
+  toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 instance Encode T.AuthenticationExtensionsClientOutputs where
-  type JSON T.AuthenticationExtensionsClientOutputs = Map Text Aeson.Value
+  type JSON T.AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
 
   -- TODO: Extensions are not implemented by this library, see the TODO in the
   -- module documentation of `Crypto.WebAuthn.Model` for more information.
-  encode T.AuthenticationExtensionsClientOutputs {} = Map.empty
+  encode T.AuthenticationExtensionsClientOutputs {..} =
+    AuthenticationExtensionsClientOutputs
+      { credProps = encode aecoCredProps
+      }
 
 instance Decode m T.AuthenticationExtensionsClientOutputs where
   -- TODO: Extensions are not implemented by this library, see the TODO in the
   -- module documentation of `Crypto.WebAuthn.Model` for more information.
-  decode _ = pure T.AuthenticationExtensionsClientOutputs {}
+  decode AuthenticationExtensionsClientOutputs {..} = do
+    aecoCredProps <- decode credProps
+    pure $ T.AuthenticationExtensionsClientOutputs {..}
 
 instance SingI c => Encode (T.CollectedClientData (c :: K.CeremonyKind) 'True) where
   type JSON (T.CollectedClientData c 'True) = Base64UrlString
@@ -289,7 +351,7 @@ data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
     attestation :: Maybe Text,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
-    extensions :: Maybe (Map Text Aeson.Value)
+    extensions :: Maybe AuthenticationExtensionsClientInputs
   }
   deriving (Eq, Show, Generic)
 
@@ -340,7 +402,7 @@ data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
     userVerification :: Maybe Text,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
-    extensions :: Maybe (Map Text Aeson.Value)
+    extensions :: Maybe AuthenticationExtensionsClientInputs
   }
   deriving (Eq, Show, Generic)
 
@@ -544,7 +606,7 @@ data PublicKeyCredential response = PublicKeyCredential
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-response)
     response :: response,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
-    clientExtensionResults :: Map Text Aeson.Value
+    clientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
   deriving (Eq, Show, Generic)
 

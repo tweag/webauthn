@@ -11,10 +11,13 @@ where
 
 import qualified Crypto.WebAuthn.Metadata.Service.Processing as Service
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
+import Data.Bifunctor (Bifunctor (second), first)
 import qualified Data.ByteString as BS
 import qualified Data.Hourglass as HG
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.These (These)
 
 -- | Verifies, decodes and extracts a 'Service.MetadataServiceRegistry' from a
 -- [FIDO Alliance Metadata Service](https://fidoalliance.org/metadata/) BLOB.
@@ -24,11 +27,9 @@ metadataBlobToRegistry ::
   BS.ByteString ->
   -- | The time at which it was fetched
   HG.DateTime ->
-  -- | Either an error on a registry of metadata entries
-  Either Text Service.MetadataServiceRegistry
+  -- | Either a certifcate error or a list of errors, a registry of metadata entries or both where the MDS has bad entries
+  Either Text (These (NE.NonEmpty Text) Service.MetadataServiceRegistry)
 metadataBlobToRegistry bytes now = do
-  json <- case Service.jwtToJson bytes Service.fidoAllianceRootCertificate now of
-    Left err -> Left $ Text.pack $ show err
-    Right res -> pure res
-  payload <- Service.jsonToPayload json
-  pure $ Service.createMetadataRegistry $ Service.mpEntries payload
+  json <- first (Text.pack . show) (Service.jwtToJson bytes Service.fidoAllianceRootCertificate now)
+  let payload = Service.jsonToPayload json
+  pure $ second (Service.createMetadataRegistry . Service.mpEntries) payload

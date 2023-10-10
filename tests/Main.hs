@@ -24,31 +24,24 @@ import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Either (isRight)
 import Data.Foldable (for_)
 import qualified Data.Hourglass as HG
+import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
+import Data.These (These (That, These, This))
 import Data.Validation (toEither)
 import qualified Emulation
 import qualified Encoding
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
 import qualified PublicKeySpec
-import Spec.Util (decodeFile)
+import Spec.Util (decodeFile, predeterminedDateTime, timeZero)
 import qualified System.Directory as Directory
 import System.FilePath ((</>))
-import System.Hourglass (dateCurrent)
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
 import qualified Test.Hspec as Hspec
 import Test.QuickCheck.Instances.Text ()
-
--- | Attestation requires a specific time to be passed for the verification of the certificate chain.
--- For sake of reproducability we hardcode a time.
-predeterminedDateTime :: HG.DateTime
-predeterminedDateTime = HG.DateTime {dtDate = HG.Date {dateYear = 2021, dateMonth = HG.December, dateDay = 22}, dtTime = timeZero}
-
--- | For most uses of DateTime in these tests, the time of day isn't relevant. This definition allows easier construction of these DateTimes.
-timeZero :: HG.TimeOfDay
-timeZero = HG.TimeOfDay {todHour = HG.Hours 0, todMin = HG.Minutes 0, todSec = HG.Seconds 0, todNSec = HG.NanoSeconds 0}
 
 -- | Load all files in the given directory, and ensure that all of them can be
 -- decoded. The caller can pass in a function to run further checks on the
@@ -69,10 +62,11 @@ canDecodeAllToJSRepr path = do
 registryFromBlobFile :: IO Service.MetadataServiceRegistry
 registryFromBlobFile = do
   blobBytes <- BS.readFile "tests/golden-metadata/big/blob.jwt"
-  now <- dateCurrent
-  case Meta.metadataBlobToRegistry blobBytes now of
+  case Meta.metadataBlobToRegistry blobBytes predeterminedDateTime of
     Left err -> error $ Text.unpack err
-    Right res -> pure res
+    Right (This err) -> error $ intercalate "," (Text.unpack <$> NE.toList err)
+    Right (These err _res) -> error $ "Unexpected MDS parsing errors: " <> intercalate "," (Text.unpack <$> NE.toList err)
+    Right (That res) -> pure res
 
 -- | Given a JSON Message in a file, performs attestation.
 -- The Boolean argument denotes if the attestation message can be verified using the metadata service.
@@ -120,7 +114,7 @@ main = Hspec.hspec $ do
     "Encoding"
     Encoding.spec
   -- We test assertion only for none attestation, this is because the type of attestation has no influence on assertion.
-  describe "RegisterAndLogin" $
+  describe "RegisterAndLogin" $ do
     it "tests whether the fixed register and login responses are matching" $
       do
         pkCredential <-
@@ -156,7 +150,45 @@ main = Hspec.hspec $ do
                   M.Credential
                     { M.cIdentifier = O.ceCredentialId credentialEntry,
                       M.cResponse = cResponse,
-                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
+                    }
+        signInResult `shouldSatisfy` isRight
+    it "tests whether the fixed register and login responses are matching with empty user handle" $
+      do
+        pkCredential <-
+          either (error . show) id . WJ.wjDecodeCredentialRegistration
+            <$> decodeFile
+              "tests/responses/attestation/01-none.json"
+        let options = defaultPublicKeyCredentialCreationOptions pkCredential
+            registerResult =
+              toEither $
+                O.verifyRegistrationResponse
+                  (M.Origin "http://localhost:8080")
+                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
+                  registry
+                  predeterminedDateTime
+                  options
+                  pkCredential
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
+        let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
+        loginReq <-
+          either (error . show) id . WJ.wjDecodeCredentialAuthentication
+            <$> decodeFile
+              @WJ.WJCredentialAuthentication
+              "tests/responses/assertion/01-none-empty-user-handle.json"
+        let M.Credential {M.cResponse = cResponse} = loginReq
+            signInResult =
+              toEither $
+                O.verifyAuthenticationResponse
+                  (M.Origin "http://localhost:8080")
+                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
+                  (Just (M.UserHandle "UserId"))
+                  credentialEntry
+                  (defaultPublicKeyCredentialRequestOptions loginReq)
+                  M.Credential
+                    { M.cIdentifier = O.ceCredentialId credentialEntry,
+                      M.cResponse = cResponse,
+                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
                     }
         signInResult `shouldSatisfy` isRight
   describe "Packed register" $ do
@@ -185,10 +217,18 @@ main = Hspec.hspec $ do
         predeterminedDateTime
     it "tests whether the fixed packed register has a valid attestation" $
       registerTestFromFile
-        "tests/responses/attestation/packed-02.json"
+        "tests/responses/attestation/packed-03.json"
         "http://localhost:5000"
         "localhost"
         True
+        registry
+        predeterminedDateTime
+    it "regression test for #150" $
+      registerTestFromFile
+        "tests/responses/attestation/regression-150.json"
+        "https://webauthn.dev.tweag.io"
+        "webauthn.dev.tweag.io"
+        False
         registry
         predeterminedDateTime
     it "the response with transports information works" $
@@ -199,6 +239,20 @@ main = Hspec.hspec $ do
         True
         registry
         predeterminedDateTime
+    it "the response without a aaguid extension works" $
+      registerTestFromFile
+        "tests/responses/attestation/without-aaguid.json"
+        "https://mercury.com/"
+        "mercury.com"
+        -- Uses "Dynamic Softtoken CA", which is an unknown software CA. And
+        -- thus not verifiable by this library, which, by default, requires
+        -- hardware attestation.
+        False
+        registry
+        HG.DateTime
+          { dtDate = HG.Date {dateYear = 2023, dateMonth = HG.July, dateDay = 18},
+            dtTime = HG.TimeOfDay {todHour = HG.Hours 21, todMin = HG.Minutes 7, todSec = HG.Seconds 6, todNSec = HG.NanoSeconds 0}
+          }
   describe "AndroidKey register" $ do
     it "tests whether the fixed android key register has a valid attestation" $
       registerTestFromFile
@@ -310,10 +364,10 @@ isExpectedAttestationResponse _ _ _ (Left _) = False -- We should never receive 
 isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration {..} verifiable (Right O.RegistrationResult {..}) =
   rrEntry == expectedCredentialEntry
     && not verifiable
-      || ( case rrAttestationStatement of
-             O.SomeAttestationStatement _ O.VerifiedAuthenticator {} -> True
-             _ -> False
-         )
+    || ( case rrAttestationStatement of
+           O.SomeAttestationStatement _ O.VerifiedAuthenticator {} -> True
+           _ -> False
+       )
   where
     expectedCredentialEntry :: O.CredentialEntry
     expectedCredentialEntry =
@@ -321,7 +375,8 @@ isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration 
         { ceCredentialId = cIdentifier,
           ceUserHandle = M.cueId corUser,
           cePublicKeyBytes =
-            M.PublicKeyBytes . M.unRaw
+            M.PublicKeyBytes
+              . M.unRaw
               . M.acdCredentialPublicKeyBytes
               . M.adAttestedCredentialData
               . M.aoAuthData
@@ -353,6 +408,10 @@ defaultPublicKeyCredentialCreationOptions c =
           M.CredentialParameters
             { M.cpTyp = M.CredentialTypePublicKey,
               M.cpAlg = Cose.CoseAlgorithmRS256
+            },
+          M.CredentialParameters
+            { cpTyp = M.CredentialTypePublicKey,
+              cpAlg = Cose.CoseAlgorithmEdDSA
             }
         ],
       M.corTimeout = Nothing,

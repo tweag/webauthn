@@ -19,10 +19,10 @@ import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
 import Crypto.Random (MonadRandom)
-import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
+import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Prim as ASN1
@@ -66,7 +66,7 @@ newKeyPair Cose.CoseSignAlgEdDSA = do
       unchecked =
         Cose.PublicKeyEdDSA
           { eddsaCurve = Cose.CoseCurveEd25519,
-            eddsaX = convert pubKey'
+            eddsaX = Cose.EdDSAKeyBytes $ convert pubKey'
           }
       pubKey = fromRight (error "unreachable") $ Cose.checkPublicKey unchecked
       cosePubKey = fromRight (error "unreachable") $ Cose.makePublicKeyWithSignAlg pubKey Cose.CoseSignAlgEdDSA
@@ -157,8 +157,8 @@ sign signAlg privKey _ = error $ "sign: Combination of signature algorithm " <> 
 
 toX509 :: Cose.UncheckedPublicKey -> X509.PubKey
 toX509 Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
-  let key = case Ed25519.publicKey eddsaX of
-        CryptoFailed err -> error $ "Failed to create a cryptonite Ed25519 public key of a bytestring with size " <> show (BS.length eddsaX) <> ": " <> show err
+  let key = case Ed25519.publicKey $ Cose.unEdDSAKeyBytes eddsaX of
+        CryptoFailed err -> error $ "Failed to create a cryptonite Ed25519 public key of a bytestring with size " <> show (BS.length $ Cose.unEdDSAKeyBytes eddsaX) <> ": " <> show err
         CryptoPassed res -> res
    in X509.PubKeyEd25519 key
 toX509 Cose.PublicKeyECDSA {..} =

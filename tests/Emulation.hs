@@ -7,7 +7,8 @@ module Emulation
   )
 where
 
-import Control.Monad.Except (ExceptT (ExceptT), MonadError, MonadTrans (lift), runExceptT, throwError)
+import Control.Monad.Except (ExceptT (ExceptT), MonadError, runExceptT, throwError)
+import Control.Monad.Trans (MonadTrans (lift))
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
@@ -34,7 +35,7 @@ import Emulation.Client
     clientAttestation,
   )
 import Emulation.Client.Arbitrary ()
-import System.Hourglass (dateCurrent)
+import Spec.Util (predeterminedDateTime)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 import Test.QuickCheck (property)
 
@@ -127,12 +128,10 @@ spec =
                 }
         -- Since our emulator only supports None attestation the registry can be left empty.
         let registry = mempty
-        -- The time could also be empty, but since we're in IO anyway, might as well just fetch it.
-        now <- dateCurrent
         -- We are not currently interested in client or authenticator fails, we
         -- only wish to test our relying party implementation and are thus only
         -- interested in its errors.
-        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry now)
+        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry predeterminedDateTime)
         -- Since we only do None attestation, we only care about the resulting entry
         let registerResult' = second O.rrEntry registerResult
         registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options

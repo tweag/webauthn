@@ -160,11 +160,11 @@ checkPublicKey key@PublicKeyEdDSA {..}
 checkPublicKey key@PublicKeyECDSA {..}
   | ECC.isPointValid curve point = Right $ CheckedPublicKey key
   | otherwise =
-    Left $
-      "ECDSA public key point is not valid for curve "
-        <> Text.pack (show ecdsaCurve)
-        <> ": "
-        <> Text.pack (show point)
+      Left $
+        "ECDSA public key point is not valid for curve "
+          <> Text.pack (show ecdsaCurve)
+          <> ": "
+          <> Text.pack (show point)
   where
     curve = ECC.getCurveByName (toCryptCurveECDSA ecdsaCurve)
     point = ECC.Point ecdsaX ecdsaY

@@ -1,3 +1,41 @@
+### 0.7.0.0
+
+* [#174](https://github.com/tweag/webauthn/pull/174) Correctly verify packed
+  attestation when the AAGUID extension of the certitificate is missing. This is
+  a backwards-incompatible change for packed attestation responses that
+  previously failed due to the missing AAGUID extension. These responses now
+  succeed.
+
+### 0.6.0.1
+
+* [#167](https://github.com/tweag/webauthn/pull/167) Fix missing file from sdist for testing
+
+### 0.6.0.0
+
+* [#162](https://github.com/tweag/webauthn/pull/162) Enable MDS blob parsing to handle invalid entries without completely failing to parse
+* [#163](https://github.com/tweag/webauthn/pull/163) Fix build with mtl-2.3
+
+### 0.5.0.1
+
+* [#159](https://github.com/tweag/webauthn/pull/159) Allow mtl-2.3.1 and support GHC 9.4
+
+### 0.5.0.0
+
+* [#157](https://github.com/tweag/webauthn/pull/157) Add support for the [credProps](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension) extension
+* [#158](https://github.com/tweag/webauthn/pull/158) Update root certificates
+
+### 0.4.1.2
+* [#155](https://github.com/tweag/webauthn/pull/155) Increase cabal bounds for aeson and monad-time to support latest versions from Hackage
+
+### 0.4.1.1
+* [#153](https://github.com/tweag/webauthn/pull/153) Increase cabal bounds to support up to GHC 9.2
+
+### 0.4.1.0
+
+* [#148](https://github.com/tweag/webauthn/pull/148) Allow authentication on Safari even though it violates the specification with an empty user handle
+* [#149](https://github.com/tweag/webauthn/pull/149) Export constructors for `Crypto.WebAuthn.Encoding.WebAuthnJson` types and derive `FromJSON` for all of them
+* [#151](https://github.com/tweag/webauthn/pull/151) Fix decoding of packed attestations without a `x5c` CBOR key. This fixes attestation on MacBook Pros with Chrome and TouchID.
+
 ### 0.4.0.0
 
 * [#129](https://github.com/tweag/webauthn/pull/129) Rename and expand

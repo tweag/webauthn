@@ -92,7 +92,7 @@ clientAttestation M.CredentialOptionsRegistration {..} AnnotatedOrigin {..} conf
                   M.arrAttestationObject = attestationObject,
                   M.arrTransports = []
                 },
-            M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+            M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {aecoCredProps = Nothing}
           }
   pure (response, authenticator')
 
@@ -145,6 +145,6 @@ clientAssertion M.CredentialOptionsAuthentication {..} AnnotatedOrigin {..} conf
                   M.araSignature = M.AssertionSignature signature,
                   M.araUserHandle = userHandle
                 },
-            M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {}
+            M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs {aecoCredProps = Nothing}
           }
   pure (response, authenticator')

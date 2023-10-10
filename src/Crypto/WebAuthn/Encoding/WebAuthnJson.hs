@@ -8,15 +8,15 @@
 module Crypto.WebAuthn.Encoding.WebAuthnJson
   ( -- * Registration
     wjEncodeCredentialOptionsRegistration,
-    WJCredentialOptionsRegistration,
-    WJCredentialRegistration,
+    WJCredentialOptionsRegistration (..),
+    WJCredentialRegistration (..),
     wjDecodeCredentialRegistration',
     wjDecodeCredentialRegistration,
 
     -- * Authentication
     wjEncodeCredentialOptionsAuthentication,
-    WJCredentialOptionsAuthentication,
-    WJCredentialAuthentication,
+    WJCredentialOptionsAuthentication (..),
+    WJCredentialAuthentication (..),
     wjDecodeCredentialAuthentication,
   )
 where
@@ -46,7 +46,7 @@ wjEncodeCredentialOptionsRegistration = WJCredentialOptionsRegistration <$> WJ.e
 newtype WJCredentialOptionsRegistration = WJCredentialOptionsRegistration
   { _unWJCredentialOptionsRegistration :: WJ.PublicKeyCredentialCreationOptions
   }
-  deriving newtype (Show, Eq, ToJSON)
+  deriving newtype (Show, Eq, FromJSON, ToJSON)
 
 -- | The intermediate type as an input to 'wjDecodeCredentialRegistration',
 -- equivalent to the [PublicKeyCredential](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)
@@ -96,7 +96,7 @@ wjEncodeCredentialOptionsAuthentication = WJCredentialOptionsAuthentication <$> 
 newtype WJCredentialOptionsAuthentication = WJCredentialOptionsAuthentication
   { _unWJCredentialOptionsAuthentication :: WJ.PublicKeyCredentialRequestOptions
   }
-  deriving newtype (Show, Eq, ToJSON)
+  deriving newtype (Show, Eq, FromJSON, ToJSON)
 
 -- | The intermediate type as an input to 'wjDecodeCredentialAuthentication',
 -- equivalent to the [PublicKeyCredential](https://www.w3.org/TR/webauthn-2/#iface-pkcredential)

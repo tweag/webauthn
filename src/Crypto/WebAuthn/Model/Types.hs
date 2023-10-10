@@ -47,8 +47,8 @@
 -- #extensions#
 -- TODO:
 -- [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-extensions) This library
--- does not currently implement extensions. In order to fully comply with level
--- 2 of the webauthn spec extensions are required. At least, we wish the
+-- does not currently implement most extensions. In order to fully comply with
+-- level 2 of the webauthn spec extensions are required. At least, we wish the
 -- library to offer a typeclass implementable by relying parties to allow
 -- extensions in a scheme similar to the attestation statement formats.
 -- Ideally, we would implement all 8 extensions tracked by
@@ -87,6 +87,7 @@ module Crypto.WebAuthn.Model.Types
 
     -- * Extensions (unimplemented, see module documentation)
     AuthenticationExtensionsClientInputs (..),
+    CredentialPropertiesOutput (..),
     AuthenticationExtensionsClientOutputs (..),
     AuthenticatorExtensionOutputs (..),
 
@@ -763,32 +764,40 @@ deriving via Base16ByteString instance ToJSON PublicKeyBytes
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
-data AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
-  {
+-- TODO: Most extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
+newtype AuthenticationExtensionsClientInputs = AuthenticationExtensionsClientInputs
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
+    -- When true, indicates that that extension is requested by the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
+    aeciCredProps :: Maybe Bool
   }
   deriving (Eq, Show)
+  deriving newtype (ToJSON)
 
--- | An arbitrary and potentially unstable JSON encoding, only intended for
--- logging purposes. To actually encode and decode structures, use the
--- "Crypto.WebAuthn.Encoding" modules
-instance ToJSON AuthenticationExtensionsClientInputs where
-  toJSON _ = object []
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-credentialpropertiesoutput)
+-- This is a dictionary containing the client properties output.
+newtype CredentialPropertiesOutput = CredentialPropertiesOutput
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-credentialpropertiesoutput-rk)
+    -- The resident key credential property (i.e., client-side discoverable
+    -- credential property), indicating whether the `[PublicKeyCredential](https://www.w3.org/TR/webauthn-2/#publickeycredential)`
+    -- returned as a result of a registration ceremony is a client-side discoverable credential.
+    cpoRk :: Maybe Bool
+  }
+  deriving (Eq, Show)
+  deriving newtype (ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-outputs)
 -- This is a dictionary containing the [client extension output](https://www.w3.org/TR/webauthn-2/#client-extension-output)
 -- values for zero or more [WebAuthn Extensions](https://www.w3.org/TR/webauthn-2/#webauthn-extensions).
--- TODO: Extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
-data AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
-  {
+-- TODO: Most extensions are not implemented by this library, see "Crypto.WebAuthn.Model.Types#extensions".
+newtype AuthenticationExtensionsClientOutputs = AuthenticationExtensionsClientOutputs
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-authenticator-credential-properties-extension)
+    -- When provided, indicates the value of the requireResidentKey parameter
+    -- that was used in the [invocation](https://www.w3.org/TR/webauthn-2/#CreateCred-InvokeAuthnrMakeCred)
+    -- of the `[authenticatorMakeCredential](https://www.w3.org/TR/webauthn-2/#authenticatormakecredential)` operation.
+    aecoCredProps :: Maybe CredentialPropertiesOutput
   }
   deriving (Eq, Show)
-
--- | An arbitrary and potentially unstable JSON encoding, only intended for
--- logging purposes. To actually encode and decode structures, use the
--- "Crypto.WebAuthn.Encoding" modules
-instance ToJSON AuthenticationExtensionsClientOutputs where
-  toJSON _ = object []
+  deriving newtype (ToJSON)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-extension-output)
 data AuthenticatorExtensionOutputs = AuthenticatorExtensionOutputs

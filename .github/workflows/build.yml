@@ -17,15 +17,15 @@ jobs:
         - ubuntu-latest
         - macos-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: cachix/install-nix-action@v16
-    - uses: cachix/cachix-action@v10
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v22
+    - uses: cachix/cachix-action@v12
       with:
-        name: tweag-haskell-fido2
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        name: tweag-webauthn
+        authToken: '${{ secrets.CACHIX_TWEAG_WEBAUTHN_AUTH_TOKEN }}'
 
     - name: "Nix build"
-      run: nix-build -A webauthn -A server -A webauthn_aeson1
+      run: nix-build -A webauthn -A server
 
   dev:
     runs-on: ${{ matrix.os }}
@@ -36,12 +36,12 @@ jobs:
         - ubuntu-latest
         - macos-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: cachix/install-nix-action@v16
-    - uses: cachix/cachix-action@v10
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v22
+    - uses: cachix/cachix-action@v12
       with:
-        name: tweag-haskell-fido2
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        name: tweag-webauthn
+        authToken: '${{ secrets.CACHIX_TWEAG_WEBAUTHN_AUTH_TOKEN }}'
 
     - name: "Install Nix bash"
       run: nix-env -f . -iA pkgs.bash

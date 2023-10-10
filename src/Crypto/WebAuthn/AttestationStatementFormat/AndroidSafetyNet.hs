@@ -94,7 +94,7 @@ data Response = Response
   }
   deriving (Eq, Show, Generic, Aeson.FromJSON, Aeson.ToJSON)
 
--- | Milliseconds represented as an 'Integer', used for 'timestampMs'
+-- | Milliseconds represented as an 'Integer', used for @timestampMs@
 newtype Milliseconds = Milliseconds Integer
   deriving (Eq, Show)
   deriving newtype (Aeson.FromJSON, Aeson.ToJSON)
@@ -180,7 +180,8 @@ instance M.AttestationStatementFormat Format where
       (Just (TString ver), Just (TBytes responseRaw)) -> do
         jws <-
           first (("Failed to decode compact JWT response blob: " <>) . Text.pack . show) $
-            runExcept @JOSE.Error $ JOSE.decodeCompact (LBS.fromStrict responseRaw)
+            runExcept @JOSE.Error $
+              JOSE.decodeCompact (LBS.fromStrict responseRaw)
         response <-
           first (("Failed to verify/decode JWT payload: " <>) . Text.pack . show) $
             JOSE.verifyJWSWithPayload
@@ -256,7 +257,8 @@ instance M.AttestationStatementFormat Format where
           (True, False) -> BasicIntegrity
           (False, False) -> NoIntegrity
     unless (integrity >= requiredIntegrity) $
-      failure $ IntegrityCheckFailed integrity
+      failure $
+        IntegrityCheckFailed integrity
 
     -- 5. If successful, return implementation-specific values representing attestation type Basic and attestation trust
     -- path x5c.

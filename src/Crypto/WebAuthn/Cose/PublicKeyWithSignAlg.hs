@@ -255,23 +255,24 @@ os2ipWithSize :: MonadFail m => Int -> BS.ByteString -> m Integer
 os2ipWithSize size bytes
   | BS.length bytes == size = pure $ os2ip bytes
   | otherwise =
-    fail $
-      "bytes have length " <> show (BS.length bytes)
-        <> " when length "
-        <> show size
-        <> " was expected"
+      fail $
+        "bytes have length "
+          <> show (BS.length bytes)
+          <> " when length "
+          <> show size
+          <> " was expected"
 
 -- | Same as 'os2ip', but throws an error if there are leading zero bytes. Thus any successful result of this function will give the same 'BS.ByteString' back if encoded with 'i2osp'.
 os2ipNoLeading :: MonadFail m => BS.ByteString -> m Integer
 os2ipNoLeading bytes
   | leadingZeroCount == 0 = pure $ os2ip bytes
   | otherwise =
-    fail $
-      "bytes of length "
-        <> show (BS.length bytes)
-        <> " has "
-        <> show leadingZeroCount
-        <> " leading zero bytes when none were expected"
+      fail $
+        "bytes of length "
+          <> show (BS.length bytes)
+          <> " has "
+          <> show leadingZeroCount
+          <> " leading zero bytes when none were expected"
   where
     leadingZeroCount = BS.length (BS.takeWhile (== 0) bytes)
 
@@ -280,7 +281,8 @@ decodeExpected :: (Show a, Eq a, Serialise a) => a -> Decoder s ()
 decodeExpected expected = do
   actual <- decode
   unless (expected == actual) $
-    fail $ "Expected " <> show expected <> " but got " <> show actual
+    fail $
+      "Expected " <> show expected <> " but got " <> show actual
 
 fromCurveEdDSA :: P.CoseCurveEdDSA -> R.CoseEllipticCurveOKP
 fromCurveEdDSA P.CoseCurveEd25519 = R.CoseEllipticCurveEd25519
