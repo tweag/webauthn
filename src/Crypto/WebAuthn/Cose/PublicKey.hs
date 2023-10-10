@@ -33,6 +33,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import GHC.Generics (Generic)
 
+-- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
+-- This contains the public key bytes.
 newtype EdDSAKeyBytes = EdDSAKeyBytes {unEdDSAKeyBytes :: BS.ByteString}
   deriving newtype (Eq)
   deriving (Show, ToJSON) via Base16ByteString

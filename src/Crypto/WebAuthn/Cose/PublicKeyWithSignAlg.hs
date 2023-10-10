@@ -25,7 +25,7 @@ import Crypto.Number.Serialize (i2osp, i2ospOf_, os2ip)
 import qualified Crypto.WebAuthn.Cose.Internal.Registry as R
 import qualified Crypto.WebAuthn.Cose.PublicKey as P
 import qualified Crypto.WebAuthn.Cose.SignAlg as A
-import Crypto.WebAuthn.Internal.ToJSONOrphans (Base16ByteString (Base16ByteString))
+import Crypto.WebAuthn.Internal.ToJSONOrphans (PrettyHexByteString (PrettyHexByteString))
 import Data.Aeson (ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
@@ -62,14 +62,15 @@ deriving instance Aeson.ToJSON PublicKeyWithSignAlg
 -- field.
 type CosePublicKey = PublicKeyWithSignAlg
 
--- A cose message
+-- | Binary representation of the COSE_Messages structure defined in the [spec](https://datatracker.ietf.org/doc/html/rfc8152#section-2).
 newtype CoseMessage = CoseMessage {unCoseMessage :: BS.ByteString}
   deriving newtype (Eq, Show)
-  deriving (ToJSON) via Base16ByteString
+  deriving (ToJSON) via PrettyHexByteString
 
+-- | Binary representation of the COSE_Signature structure in the [spec](https://datatracker.ietf.org/doc/html/rfc8152#section-4.1).
 newtype CoseSignature = CoseSignature {unCoseSignature :: BS.ByteString}
   deriving newtype (Eq, Show)
-  deriving (ToJSON) via Base16ByteString
+  deriving (ToJSON) via PrettyHexByteString
 
 -- | Deconstructs a 'makePublicKeyWithSignAlg' into its t'P.PublicKey' and
 -- 'A.CoseSignAlg'. Since 'PublicKeyWithSignAlg' can only be constructed
