@@ -47,9 +47,13 @@ let
     withHoogle = true;
     nativeBuildInputs = [
       pkgs.haskellPackages.cabal-install
+      pkgs.haskellPackages.haskell-language-server
+      pkgs.haskellPackages.hlint
+      pkgs.haskellPackages.ormolu
 
       pkgs.entr
       pkgs.gitMinimal
+      pkgs.niv
       pkgs.python3
       pkgs.yarn
       pkgs.nodejs
