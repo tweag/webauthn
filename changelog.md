@@ -1,3 +1,7 @@
+### 0.8.0.0
+* [#178](https://github.com/tweag/webauthn/pull/178) Remove orphan instance for ToJSON ByteString.
+  Use newtypes for the binary data including the PNG icons for authenticators and the cryptographic values.
+
 ### 0.7.0.0
 
 * [#174](https://github.com/tweag/webauthn/pull/174) Correctly verify packed
