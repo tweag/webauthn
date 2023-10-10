@@ -6,7 +6,7 @@
 -- specification
 module Crypto.WebAuthn.Metadata.Statement.Types
   ( MetadataStatement (..),
-    JPEGBytes (..),
+    PNGBytes (..),
     WebauthnAttestationType (..),
   )
 where
@@ -72,7 +72,7 @@ data MetadataStatement = MetadataStatement
     -- msEcdaaTrustAnchors, not needed for the subset we implement, FIDO 2 and FIDO U2F
 
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-icon)
-    msIcon :: Maybe JPEGBytes,
+    msIcon :: Maybe PNGBytes,
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-supportedextensions)
     msSupportedExtensions :: Maybe (NonEmpty StatementIDL.ExtensionDescriptor),
     -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-authenticatorgetinfo)
@@ -85,7 +85,7 @@ data MetadataStatement = MetadataStatement
 -- "Crypto.WebAuthn.Encoding" modules
 deriving instance ToJSON MetadataStatement
 
-newtype JPEGBytes = JPEGBytes {unJPEGBytes :: BS.ByteString}
+newtype PNGBytes = PNGBytes {unPNGBytes :: BS.ByteString}
   deriving newtype (Eq)
   deriving (Show, ToJSON) via Base16ByteString
 
