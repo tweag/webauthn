@@ -85,7 +85,7 @@ data MetadataStatement = MetadataStatement
 -- "Crypto.WebAuthn.Encoding" modules
 deriving instance ToJSON MetadataStatement
 
--- | Type-safe wrapper for binary representation of the images.
+-- | A wrapper for the bytes of a PNG images.
 newtype PNGBytes = PNGBytes {unPNGBytes :: BS.ByteString}
   deriving newtype (Eq)
   deriving (Show, ToJSON) via PrettyHexByteString
