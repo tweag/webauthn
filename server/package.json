@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "devDependencies": {
-    "parcel": "^2.2.1"
+    "parcel": "^2.9.1"
   },
   "dependencies": {
     "@github/webauthn-json": "^0.6.5"
