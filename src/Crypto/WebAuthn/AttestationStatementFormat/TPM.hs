@@ -221,7 +221,7 @@ data Statement = Statement
     aaguidExt :: Maybe IdFidoGenCeAAGUID,
     extendedKeyUsage :: [X509.ExtKeyUsagePurpose],
     basicConstraintsCA :: Bool,
-    sig :: Cose.CoseSignature,
+    sig :: Cose.Signature,
     certInfo :: TPMSAttest,
     certInfoRaw :: CertInfoBytes,
     pubArea :: TPMTPublic,
@@ -367,7 +367,7 @@ instance M.AttestationStatementFormat Format where
       ( Just (CBOR.TString "2.0"),
         Just (CBOR.TInt algId),
         Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)),
-        Just (CBOR.TBytes (Cose.CoseSignature -> sig)),
+        Just (CBOR.TBytes (Cose.Signature -> sig)),
         Just (CBOR.TBytes (CertInfoBytes -> certInfoRaw)),
         Just (CBOR.TBytes (PubAreaBytes -> pubAreaRaw))
         ) ->
@@ -528,7 +528,7 @@ instance M.AttestationStatementFormat Format where
         ( CBOR.TString "x5c",
           CBOR.TList $ map (CBOR.TBytes . X509.encodeSignedObject) $ NE.toList x5c
         ),
-        (CBOR.TString "sig", CBOR.TBytes $ Cose.unCoseSignature sig),
+        (CBOR.TString "sig", CBOR.TBytes $ Cose.unSignature sig),
         (CBOR.TString "certInfo", CBOR.TBytes $ unCertInfoBytes certInfoRaw),
         (CBOR.TString "pubArea", CBOR.TBytes $ unPubAreaBytes pubAreaRaw)
       ]
@@ -606,7 +606,7 @@ instance M.AttestationStatementFormat Format where
 
       -- 4.8 Verify the sig is a valid signature over certInfo using the
       -- attestation public key in aikCert with the algorithm specified in alg.
-      case Cose.verify aikPubKeyAndAlg (Cose.CoseMessage $ unCertInfoBytes certInfoRaw) sig of
+      case Cose.verify aikPubKeyAndAlg (Cose.Message $ unCertInfoBytes certInfoRaw) sig of
         Right () -> pure ()
         Left err -> failure $ VerificationFailure err
 

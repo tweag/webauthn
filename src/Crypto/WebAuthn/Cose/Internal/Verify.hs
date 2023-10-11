@@ -25,8 +25,8 @@ module Crypto.WebAuthn.Cose.Internal.Verify
     fromX509,
 
     -- * Signature verification
-    Cose.CoseMessage (..),
-    Cose.CoseSignature (..),
+    Cose.Message (..),
+    Cose.Signature (..),
     verify,
 
     -- * Hash Conversions to cryptonite types
@@ -89,7 +89,7 @@ fromX509 key = Left $ "X509 public key algorithm is not supported: " <> Text.pac
 -- doesn't match. Also returns an error if the signature wasn't valid or for
 -- other errors.
 -- FIXME: https://w3c.github.io/webauthn/#sctn-signature-attestation-types kind of documents this, but not for all formats. This is notably not really related to COSE, but rather webauthn's own definitions. The spec should be made less ambiguous, file upstream issues and refactor this code
-verify :: Cose.PublicKeyWithSignAlg -> Cose.CoseMessage -> Cose.CoseSignature -> Either Text ()
+verify :: Cose.PublicKeyWithSignAlg -> Cose.Message -> Cose.Signature -> Either Text ()
 verify
   Cose.PublicKeyWithSignAlg
     { publicKey = Cose.PublicKey Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..},
@@ -100,10 +100,10 @@ verify
     key <- case Ed25519.publicKey $ Cose.unEdDSAKeyBytes eddsaX of
       CryptoFailed err -> Left $ "Failed to create Ed25519 public key: " <> Text.pack (show err)
       CryptoPassed res -> pure res
-    sig <- case Ed25519.signature (Cose.unCoseSignature sig) of
+    sig <- case Ed25519.signature (Cose.unSignature sig) of
       CryptoFailed err -> Left $ "Failed to create Ed25519 signature: " <> Text.pack (show err)
       CryptoPassed res -> pure res
-    if Ed25519.verify key (Cose.unCoseMessage msg) sig
+    if Ed25519.verify key (Cose.unMessage msg) sig
       then Right ()
       else Left "EdDSA Signature invalid"
 verify
@@ -126,14 +126,14 @@ verify
     -- > For COSEAlgorithmIdentifier -7 (ES256), and other ECDSA-based algorithms,
     -- the `sig` value MUST be encoded as an ASN.1 DER Ecdsa-Sig-Value, as defined
     -- in [RFC3279](https://www.w3.org/TR/webauthn-2/#biblio-rfc3279) section 2.2.3.
-    sig <- case ASN1.decodeASN1' ASN1.DER (Cose.unCoseSignature sig) of
+    sig <- case ASN1.decodeASN1' ASN1.DER (Cose.unSignature sig) of
       Left err -> Left $ "Failed to decode ECDSA DER value: " <> Text.pack (show err)
       -- Ecdsa-Sig-Value in https://datatracker.ietf.org/doc/html/rfc3279#section-2.2.3
       Right [ASN1.Start ASN1.Sequence, ASN1.IntVal r, ASN1.IntVal s, ASN1.End ASN1.Sequence] ->
         pure $ ECDSA.Signature r s
       Right asns -> Left $ "Unexpected ECDSA ASN.1 structure: " <> Text.pack (show asns)
 
-    if ECDSA.verify hash key sig (Cose.unCoseMessage msg)
+    if ECDSA.verify hash key sig (Cose.unMessage msg)
       then Right ()
       else Left "ECDSA Signature invalid"
 verify
@@ -155,7 +155,7 @@ verify
               public_n = rsaN,
               public_e = rsaE
             }
-    if RSA.verify (Just hash) key (Cose.unCoseMessage msg) (Cose.unCoseSignature sig)
+    if RSA.verify (Just hash) key (Cose.unMessage msg) (Cose.unSignature sig)
       then Right ()
       else Left "RSA Signature invalid"
 verify key _ _ = error $ "PublicKeyWithSignAlg invariant violated for public key " <> show key <> ". This should not occur unless the PublicKeyWithSignAlg module has a bug"

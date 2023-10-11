@@ -12,8 +12,8 @@ module Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     PublicKeyWithSignAlg (PublicKeyWithSignAlg, Crypto.WebAuthn.Cose.PublicKeyWithSignAlg.publicKey, signAlg),
     CosePublicKey,
     makePublicKeyWithSignAlg,
-    CoseMessage (..),
-    CoseSignature (..),
+    Message (..),
+    Signature (..),
   )
 where
 
@@ -62,13 +62,16 @@ deriving instance Aeson.ToJSON PublicKeyWithSignAlg
 -- field.
 type CosePublicKey = PublicKeyWithSignAlg
 
--- | Binary representation of the COSE_Messages structure defined in the [spec](https://datatracker.ietf.org/doc/html/rfc8152#section-2).
-newtype CoseMessage = CoseMessage {unCoseMessage :: BS.ByteString}
+-- | A wrapper for the bytes of a message that should be verified.
+-- This is used for both assertion and assertion.
+newtype Message = Message {unMessage :: BS.ByteString}
   deriving newtype (Eq, Show)
   deriving (ToJSON) via PrettyHexByteString
 
--- | Binary representation of the COSE_Signature structure in the [spec](https://datatracker.ietf.org/doc/html/rfc8152#section-4.1).
-newtype CoseSignature = CoseSignature {unCoseSignature :: BS.ByteString}
+-- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types)
+-- A wrapper for the bytes of a signature that can be used to verify a 'Message'.
+-- The encoding is specific to webauthn and depends on the 'A.CoseSignAlg' used.
+newtype Signature = Signature {unSignature :: BS.ByteString}
   deriving newtype (Eq, Show)
   deriving (ToJSON) via PrettyHexByteString
 

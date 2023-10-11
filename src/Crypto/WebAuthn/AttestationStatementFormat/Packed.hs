@@ -45,7 +45,7 @@ instance Show Format where
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation)
 data Statement = Statement
   { alg :: Cose.CoseSignAlg,
-    sig :: Cose.CoseSignature,
+    sig :: Cose.Signature,
     -- The AAGUID extension is optional
     x5c :: Maybe (NE.NonEmpty X509.SignedCertificate, Maybe IdFidoGenCeAAGUID)
   }
@@ -98,7 +98,7 @@ instance M.AttestationStatementFormat Format where
 
   asfDecode _ xs =
     case (xs !? "alg", xs !? "sig", xs !? "x5c") of
-      (Just (CBOR.TInt algId), Just (CBOR.TBytes (Cose.CoseSignature -> sig)), mx5c) -> do
+      (Just (CBOR.TInt algId), Just (CBOR.TBytes (Cose.Signature -> sig)), mx5c) -> do
         alg <- Cose.toCoseSignAlg algId
         x5c <- case mx5c of
           Nothing -> pure Nothing
@@ -123,7 +123,7 @@ instance M.AttestationStatementFormat Format where
 
   asfEncode _ Statement {..} =
     CBOR.TMap
-      ( [ (CBOR.TString "sig", CBOR.TBytes $ Cose.unCoseSignature sig),
+      ( [ (CBOR.TString "sig", CBOR.TBytes $ Cose.unSignature sig),
           (CBOR.TString "alg", CBOR.TInt $ Cose.fromCoseSignAlg alg)
         ]
           ++ case x5c of
@@ -142,7 +142,7 @@ instance M.AttestationStatementFormat Format where
     Statement {alg = stmtAlg, sig = stmtSig, x5c = stmtx5c}
     M.AuthenticatorData {M.adRawData = M.WithRaw rawData, M.adAttestedCredentialData = credData}
     clientDataHash = do
-      let signedData = Cose.CoseMessage $ rawData <> convert (M.unClientDataHash clientDataHash)
+      let signedData = Cose.Message $ rawData <> convert (M.unClientDataHash clientDataHash)
       case stmtx5c of
         -- Self attestation
         Nothing -> do
@@ -166,7 +166,7 @@ instance M.AttestationStatementFormat Format where
           -- Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using
           -- the attestation public key in attestnCert with the algorithm specified in alg.
           -- FIXME: This is wrong, we should use alg!
-          case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) pubKey (Cose.unCoseMessage signedData) (Cose.unCoseSignature stmtSig) of
+          case X509.verifySignature (X509.SignatureALG X509.HashSHA256 X509.PubKeyALG_EC) pubKey (Cose.unMessage signedData) (Cose.unSignature stmtSig) of
             X509.SignaturePass -> pure ()
             X509.SignatureFailed err -> failure $ VerificationFailure err
 
