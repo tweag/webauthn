@@ -79,6 +79,9 @@ deriving instance Show (SCeremonyKind c)
 
 deriving instance Eq (SCeremonyKind c)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (SCeremonyKind c) where
   toJSON SRegistration = "Registration"
   toJSON SAuthentication = "Authentication"
@@ -109,6 +112,9 @@ deriving instance Show (SProtocolKind p)
 
 deriving instance Eq (SProtocolKind p)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (SProtocolKind p) where
   toJSON SFidoU2F = "FidoU2F"
   toJSON SFido2 = "Fido2"

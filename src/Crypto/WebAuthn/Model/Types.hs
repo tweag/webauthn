@@ -29,9 +29,9 @@
 --   the initials of the constructor name.
 -- * Every type should have a 'ToJSON' instance for pretty-printing purposes.
 --   This JSON encoding doesn't correspond to any encoding used for
---   sending/receiving these structures, it's only used for pretty-printing,
+--   sending\/receiving these structures, it's only used for pretty-printing,
 --   which is why it doesn't need to be standardized. For encoding these
---   structures from/to JSON for sending/receiving, see the
+--   structures from\/to JSON for sending/receiving, see the
 --   'Crypto.WebAuthn.Model.WebIDL' module
 -- #defaultFields#
 -- * Fields of the WebAuthn standard that are optional (for writing) but have
@@ -128,7 +128,7 @@ import Crypto.Hash.Algorithms (SHA256)
 import Crypto.Random (MonadRandom, getRandomBytes)
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
-import Crypto.WebAuthn.Internal.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans (PrettyHexByteString (PrettyHexByteString))
 import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import Crypto.WebAuthn.Model.Kinds
   ( AttestationKind (Unverifiable, Verifiable),
@@ -162,9 +162,12 @@ deriving instance Eq (RawField raw)
 
 deriving instance Show (RawField raw)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (RawField raw) where
   toJSON NoRaw = "<none>"
-  toJSON (WithRaw bytes) = toJSON bytes
+  toJSON (WithRaw bytes) = toJSON $ PrettyHexByteString bytes
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-publickeycredentialtype)
 -- This enumeration defines the valid credential types. It is an extension point;
@@ -177,6 +180,9 @@ instance ToJSON (RawField raw) where
 data CredentialType = CredentialTypePublicKey
   deriving (Eq, Show, Bounded, Enum, Ord, Generic)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON CredentialType where
   toJSON CredentialTypePublicKey = "CredentialTypePublicKey"
 
@@ -220,7 +226,12 @@ data AuthenticatorTransport
     -- stored. Draft version 3 of the standard [fixes
     -- this](https://github.com/w3c/webauthn/pull/1654).
     AuthenticatorTransportUnknown Text
-  deriving (Eq, Show, Ord, Generic, ToJSON)
+  deriving (Eq, Show, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON AuthenticatorTransport
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-authenticatorattachment)
 -- This enumeration’s values describe [authenticators](https://www.w3.org/TR/webauthn-2/#authenticator)'
@@ -239,7 +250,12 @@ data AuthenticatorAttachment
   | -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-authenticatorattachment-cross-platform)
     -- This value indicates [cross-platform attachment](https://www.w3.org/TR/webauthn-2/#cross-platform-attachment).
     AuthenticatorAttachmentCrossPlatform
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  deriving (Eq, Show, Bounded, Enum, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON AuthenticatorAttachment
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enumdef-residentkeyrequirement)
 -- This enumeration’s values describe the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party)'s
@@ -269,7 +285,12 @@ data ResidentKeyRequirement
     -- and is prepared to receive an error if a
     -- [client-side discoverable credential](https://www.w3.org/TR/webauthn-2/#client-side-discoverable-credential) cannot be created.
     ResidentKeyRequirementRequired
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  deriving (Eq, Show, Bounded, Enum, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON ResidentKeyRequirement
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-userVerificationRequirement)
 -- A [WebAuthn Relying Party](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may
@@ -296,7 +317,12 @@ data UserVerificationRequirement
     -- does not want [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) employed
     -- during the operation (e.g., in the interest of minimizing disruption to the user interaction flow).
     UserVerificationRequirementDiscouraged
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  deriving (Eq, Show, Bounded, Enum, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON UserVerificationRequirement
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#enum-attestation-convey)
 -- [WebAuthn Relying Parties](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party) may use
@@ -352,7 +378,12 @@ data AttestationConveyancePreference
     -- and [attestation statement](https://www.w3.org/TR/webauthn-2/#attestation-statement), unaltered,
     -- to the [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party).
     AttestationConveyancePreferenceEnterprise
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  deriving (Eq, Show, Bounded, Enum, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON AttestationConveyancePreference
 
 -- | An X.509 certificate chain that can be used to verify an attestation
 -- statement
@@ -367,6 +398,9 @@ deriving instance Eq (AttestationChain p)
 
 deriving instance Show (AttestationChain p)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (AttestationChain p) where
   toJSON (Fido2Chain chain) = toJSON chain
   toJSON (FidoU2FCert cert) = toJSON [cert]
@@ -423,7 +457,12 @@ data VerifiableAttestationType
     -- presented to [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
     -- do not provide uniquely identifiable information, e.g., that might be used for tracking purposes.
     VerifiableAttestationTypeAnonCA
-  deriving (Eq, Show, Bounded, Enum, Ord, Generic, ToJSON)
+  deriving (Eq, Show, Bounded, Enum, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON VerifiableAttestationType
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
 -- WebAuthn supports several [attestation types](https://www.w3.org/TR/webauthn-2/#attestation-type),
@@ -458,6 +497,9 @@ deriving instance Eq (AttestationType k)
 
 deriving instance Show (AttestationType k)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (AttestationType k) where
   toJSON AttestationTypeNone =
     object
@@ -496,7 +538,12 @@ instance ToJSON (AttestationType k) where
 -- uses DOMString, while the latter uses USVString. Is this a bug in the spec or is there an actual difference?
 newtype RpId = RpId {unRpId :: Text}
   deriving (Eq, Show, Ord)
-  deriving newtype (IsString, ToJSON)
+  deriving newtype (IsString)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON RpId
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability)
@@ -512,7 +559,12 @@ newtype RpId = RpId {unRpId :: Text}
 -- about how this metadata is encoded.
 newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
   deriving (Eq, Show)
-  deriving newtype (IsString, ToJSON)
+  deriving newtype (IsString)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON RelyingPartyName
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- The user handle is specified by a [Relying Party](https://www.w3.org/TR/webauthn-2/#relying-party),
@@ -525,7 +577,11 @@ newtype RelyingPartyName = RelyingPartyName {unRelyingPartyName :: Text}
 -- with a maximum size of 64 bytes, and is not meant to be displayed to the user.
 newtype UserHandle = UserHandle {unUserHandle :: BS.ByteString}
   deriving (Eq, Show, Ord)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving via PrettyHexByteString instance ToJSON UserHandle
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
@@ -547,7 +603,12 @@ generateUserHandle = UserHandle <$> getRandomBytes 16
 -- about how this metadata is encoded.
 newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayName :: Text}
   deriving (Eq, Show)
-  deriving newtype (IsString, ToJSON)
+  deriving newtype (IsString)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON UserAccountDisplayName
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialentity-name)
 -- A [human-palatable](https://www.w3.org/TR/webauthn-2/#human-palatability) identifier for a user account.
@@ -566,7 +627,12 @@ newtype UserAccountDisplayName = UserAccountDisplayName {unUserAccountDisplayNam
 --   about how this metadata is encoded.
 newtype UserAccountName = UserAccountName {unUserAccountName :: Text}
   deriving (Eq, Show)
-  deriving newtype (IsString, ToJSON)
+  deriving newtype (IsString)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON UserAccountName
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credential-id)
 -- A probabilistically-unique [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
@@ -574,7 +640,11 @@ newtype UserAccountName = UserAccountName {unUserAccountName :: Text}
 -- source and its [authentication assertions](https://www.w3.org/TR/webauthn-2/#authentication-assertion).
 newtype CredentialId = CredentialId {unCredentialId :: BS.ByteString}
   deriving (Eq, Show, Ord)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving via PrettyHexByteString instance ToJSON CredentialId
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credential-id)
 -- Generates a random 'CredentialId' using 16 random bytes.
@@ -589,7 +659,11 @@ generateCredentialId = CredentialId <$> getRandomBytes 16
 -- security consideration.
 newtype Challenge = Challenge {unChallenge :: BS.ByteString}
   deriving (Eq, Show, Ord)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving via PrettyHexByteString instance ToJSON Challenge
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
 -- In order to prevent replay attacks, the challenges MUST contain enough entropy
@@ -602,7 +676,11 @@ generateChallenge = Challenge <$> getRandomBytes 16
 -- This is treated as a hint, and MAY be overridden by the [client](https://www.w3.org/TR/webauthn-2/#client).
 newtype Timeout = Timeout {unTimeout :: Word32}
   deriving (Eq, Show)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON Timeout
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#assertion-signature)
 -- An assertion signature is produced when the
@@ -624,7 +702,11 @@ newtype Timeout = Timeout {unTimeout :: Word32}
 -- format is illustrated in [Figure 4, below](https://www.w3.org/TR/webauthn-2/#fig-signature).
 newtype AssertionSignature = AssertionSignature {unAssertionSignature :: BS.ByteString}
   deriving (Eq, Show)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving via PrettyHexByteString instance ToJSON AssertionSignature
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#rpidhash)
 -- SHA-256 hash of the [RP ID](https://www.w3.org/TR/webauthn-2/#rp-id) the
@@ -632,30 +714,52 @@ newtype AssertionSignature = AssertionSignature {unAssertionSignature :: BS.Byte
 -- [scoped](https://www.w3.org/TR/webauthn-2/#scope) to.
 newtype RpIdHash = RpIdHash {unRpIdHash :: Digest SHA256}
   deriving (Eq, Show)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON RpIdHash
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#collectedclientdata-hash-of-the-serialized-client-data)
 -- This is the hash (computed using SHA-256) of the [JSON-compatible serialization of client data](https://www.w3.org/TR/webauthn-2/#collectedclientdata-json-compatible-serialization-of-client-data),
 -- as constructed by the client.
 newtype ClientDataHash = ClientDataHash {unClientDataHash :: Digest SHA256}
   deriving (Eq, Show)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON ClientDataHash
 
 -- | [(spec)](https://html.spec.whatwg.org/multipage/origin.html#concept-origin)
 newtype Origin = Origin {unOrigin :: Text}
   deriving (Eq, Show)
-  deriving newtype (IsString, ToJSON)
+  deriving newtype (IsString)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON Origin
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#signcount)
 -- [Signature counter](https://www.w3.org/TR/webauthn-2/#signature-counter)
 newtype SignatureCounter = SignatureCounter {unSignatureCounter :: Word32}
   deriving (Eq, Show)
-  deriving newtype (Num, Ord, ToJSON)
+  deriving newtype (Num, Ord)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON SignatureCounter
 
 -- | The encoding of a 'Cose.CosePublicKey'
 newtype PublicKeyBytes = PublicKeyBytes {unPublicKeyBytes :: BS.ByteString}
   deriving (Eq, Show)
-  deriving newtype (ToJSON)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving via PrettyHexByteString instance ToJSON PublicKeyBytes
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#iface-authentication-extensions-client-inputs)
 -- This is a dictionary containing the [client extension input](https://www.w3.org/TR/webauthn-2/#client-extension-input)
@@ -701,6 +805,9 @@ data AuthenticatorExtensionOutputs = AuthenticatorExtensionOutputs
   }
   deriving (Eq, Show)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON AuthenticatorExtensionOutputs where
   toJSON _ = object []
 
@@ -718,7 +825,12 @@ data CredentialRpEntity = CredentialRpEntity
     -- intended only for display. For example, "ACME Corporation", "Wonderful Widgets, Inc." or "ОАО Примертех".
     creName :: RelyingPartyName
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CredentialRpEntity
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-user-credential-params)
 -- The 'CredentialUserEntity' dictionary is used to supply additional
@@ -746,7 +858,12 @@ data CredentialUserEntity = CredentialUserEntity
     -- accounts with similar 'cueDisplayName's. For example, "alexm", "alex.mueller@example.com" or "+14255551234".
     cueName :: UserAccountName
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CredentialUserEntity
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictionary-credential-params)
 -- This dictionary is used to supply additional parameters when creating a new credential.
@@ -760,7 +877,12 @@ data CredentialParameters = CredentialParameters
     -- key pair to be generated, e.g., RSA or Elliptic Curve.
     cpAlg :: Cose.CoseSignAlg
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CredentialParameters
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-publickeycredentialdescriptor)
 -- This dictionary contains the attributes that are specified by a caller when referring to a
@@ -782,7 +904,12 @@ data CredentialDescriptor = CredentialDescriptor
     -- of the [public key credential](https://www.w3.org/TR/webauthn-2/#public-key-credential) the caller is referring to.
     cdTransports :: Maybe [AuthenticatorTransport]
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CredentialDescriptor
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dictdef-authenticatorselectioncriteria)
 -- [WebAuthn Relying Parties](https://www.w3.org/TR/webauthn-2/#webauthn-relying-party)
@@ -808,7 +935,12 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
     -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.ascUserVerificationDefault'.
     ascUserVerification :: UserVerificationRequirement
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON AuthenticatorSelectionCriteria
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#flags)
 data AuthenticatorDataFlags = AuthenticatorDataFlags
@@ -821,7 +953,12 @@ data AuthenticatorDataFlags = AuthenticatorDataFlags
     -- the user is said to be "[verified](https://www.w3.org/TR/webauthn-2/#concept-user-verified)".
     adfUserVerified :: Bool
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON AuthenticatorDataFlags
 
 -- | A type encompassing the credential options, both for
 -- [creation](https://www.w3.org/TR/webauthn-2/#dictionary-makecredentialoptions)
@@ -954,6 +1091,9 @@ deriving instance Eq (CredentialOptions c)
 
 deriving instance Show (CredentialOptions c)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (CredentialOptions c) where
   toJSON CredentialOptionsRegistration {..} =
     object
@@ -1027,6 +1167,9 @@ data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
   }
   deriving (Eq, Show)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance SingI c => ToJSON (CollectedClientData (c :: CeremonyKind) raw) where
   toJSON CollectedClientData {..} =
     object
@@ -1061,6 +1204,9 @@ deriving instance Eq (AttestedCredentialData c raw)
 
 deriving instance Show (AttestedCredentialData c raw)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (AttestedCredentialData c raw) where
   toJSON AttestedCredentialData {..} =
     object
@@ -1122,7 +1268,12 @@ data AuthenticatorData (c :: CeremonyKind) raw = AuthenticatorData
     -- | Raw encoded data for verification purposes
     adRawData :: RawField raw
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON (AuthenticatorData c raw)
 
 -- | The result from verifying an attestation statement.
 -- Either the result is verifiable, in which case @k ~ 'Verifiable'@, the
@@ -1344,6 +1495,9 @@ instance Eq (AttestationObject raw) where
 
 deriving instance Show (AttestationObject raw)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (AttestationObject raw) where
   toJSON AttestationObject {..} =
     object
@@ -1446,6 +1600,9 @@ deriving instance Eq (AuthenticatorResponse c raw)
 
 deriving instance Show (AuthenticatorResponse c raw)
 
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
 instance ToJSON (AuthenticatorResponse c raw) where
   toJSON AuthenticatorResponseRegistration {..} =
     object
@@ -1504,4 +1661,9 @@ data Credential (c :: CeremonyKind) raw = Credential
     -- by the extension’s [client extension processing](https://www.w3.org/TR/webauthn-2/#client-extension-processing).
     cClientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON (Credential c raw)

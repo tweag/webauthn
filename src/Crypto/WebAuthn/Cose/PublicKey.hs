@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Stability: experimental
 -- This module contains a partial implementation of the
@@ -10,6 +11,7 @@ module Crypto.WebAuthn.Cose.PublicKey
     UncheckedPublicKey (..),
     checkPublicKey,
     PublicKey (PublicKey),
+    EdDSAKeyBytes (..),
 
     -- * COSE Elliptic Curves
     CoseCurveEdDSA (..),
@@ -24,14 +26,18 @@ where
 import qualified Crypto.PubKey.ECC.Prim as ECC
 import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
-import Crypto.WebAuthn.Internal.ToJSONOrphans ()
+import Crypto.WebAuthn.Internal.ToJSONOrphans (PrettyHexByteString (PrettyHexByteString))
 import Data.Aeson (ToJSON)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base16 as Base16
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 import GHC.Generics (Generic)
+
+-- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
+-- This contains the public key bytes.
+newtype EdDSAKeyBytes = EdDSAKeyBytes {unEdDSAKeyBytes :: BS.ByteString}
+  deriving newtype (Eq)
+  deriving (Show, ToJSON) via PrettyHexByteString
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
 -- A structured representation of a [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7)
@@ -65,7 +71,7 @@ data UncheckedPublicKey
         eddsaCurve :: CoseCurveEdDSA,
         -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
         -- This contains the public key bytes.
-        eddsaX :: BS.ByteString
+        eddsaX :: EdDSAKeyBytes
       }
   | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1)
     -- ECDSA Signature Algorithm
@@ -113,12 +119,22 @@ data UncheckedPublicKey
         -- GCD(e,\\lambda(n)) = 1, where \\lambda(n) = LCM(r_1 - 1, ..., r_u - 1)
         rsaE :: Integer
       }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON UncheckedPublicKey
 
 -- | Same as 'UncheckedPublicKey', but checked to be valid using
 -- 'checkPublicKey'.
 newtype PublicKey = CheckedPublicKey UncheckedPublicKey
-  deriving newtype (Eq, Show, ToJSON)
+  deriving newtype (Eq, Show)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving newtype instance ToJSON PublicKey
 
 -- | Returns the 'UncheckedPublicKey' for a t'PublicKey'
 pattern PublicKey :: UncheckedPublicKey -> PublicKey
@@ -131,17 +147,17 @@ checkPublicKey :: UncheckedPublicKey -> Either Text PublicKey
 checkPublicKey key@PublicKeyEdDSA {..}
   | actualSize == expectedSize = Right $ CheckedPublicKey key
   | otherwise =
-      Left $
-        "EdDSA public key for curve "
-          <> Text.pack (show eddsaCurve)
-          <> " didn't have the expected size of "
-          <> Text.pack (show expectedSize)
-          <> " bytes, it has "
-          <> Text.pack (show actualSize)
-          <> " bytes instead: "
-          <> Text.decodeUtf8 (Base16.encode eddsaX)
+    Left $
+      "EdDSA public key for curve "
+        <> Text.pack (show eddsaCurve)
+        <> " didn't have the expected size of "
+        <> Text.pack (show expectedSize)
+        <> " bytes, it has "
+        <> Text.pack (show actualSize)
+        <> " bytes instead: "
+        <> Text.pack (show eddsaX)
   where
-    actualSize = BS.length eddsaX
+    actualSize = BS.length $ unEdDSAKeyBytes eddsaX
     expectedSize = coordinateSizeEdDSA eddsaCurve
 checkPublicKey key@PublicKeyECDSA {..}
   | ECC.isPointValid curve point = Right $ CheckedPublicKey key
@@ -161,7 +177,12 @@ data CoseCurveEdDSA
   = -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
     -- Ed25519 for use w/ EdDSA only
     CoseCurveEd25519
-  deriving (Eq, Show, Enum, Bounded, Generic, ToJSON)
+  deriving (Eq, Show, Enum, Bounded, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CoseCurveEdDSA
 
 -- | Returns the size of a coordinate point for a specific EdDSA curve in bytes.
 coordinateSizeEdDSA :: CoseCurveEdDSA -> Int
@@ -178,7 +199,12 @@ data CoseCurveECDSA
   | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1)
     -- NIST P-521 also known as secp521r1
     CoseCurveP521
-  deriving (Eq, Show, Enum, Bounded, Generic, ToJSON)
+  deriving (Eq, Show, Enum, Bounded, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON CoseCurveECDSA
 
 -- | Converts a 'Cose.CoseCurveECDSA' to an 'ECC.CurveName'. The inverse
 -- function is 'fromCryptCurveECDSA'

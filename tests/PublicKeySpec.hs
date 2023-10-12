@@ -40,7 +40,7 @@ prop_signverify :: Integer -> Key.KeyPair -> BS.ByteString -> Bool
 prop_signverify seed Key.KeyPair {..} msg = do
   let signAlg = Cose.signAlg cosePubKey
       sig = runSeededMonadRandom seed $ Key.sign signAlg privKey msg
-      valid = Cose.verify cosePubKey msg sig
+      valid = Cose.verify cosePubKey (Cose.Message msg) (Cose.Signature sig)
    in case valid of
         Left _ -> False
         Right () -> True

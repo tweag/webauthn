@@ -348,11 +348,11 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- 20. Using credentialPublicKey, verify that sig is a valid signature over
   -- the binary concatenation of authData and hash.
   let pubKeyBytes = LBS.fromStrict $ M.unPublicKeyBytes $ cePublicKeyBytes entry
-      message = rawData <> convert (M.unClientDataHash hash)
+      message = Cose.Message $ rawData <> convert (M.unClientDataHash hash)
   case CBOR.deserialiseFromBytes decode pubKeyBytes of
     Left err -> failure $ AuthenticationSignatureDecodingError err
     Right (_, coseKey) ->
-      case Cose.verify coseKey message (M.unAssertionSignature sig) of
+      case Cose.verify coseKey message (Cose.Signature $ M.unAssertionSignature sig) of
         Right () -> pure ()
         Left err -> failure $ AuthenticationSignatureInvalid err
 

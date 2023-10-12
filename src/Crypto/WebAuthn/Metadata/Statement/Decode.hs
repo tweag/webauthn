@@ -23,7 +23,6 @@ import qualified Crypto.WebAuthn.Metadata.WebIDL as IDL
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Identifier (AAGUID (AAGUID), AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F), SubjectKeyIdentifier (SubjectKeyIdentifier))
 import Data.Bifunctor (first)
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Base64 as Base64
 import Data.List.NonEmpty (NonEmpty)
@@ -117,10 +116,10 @@ decodeMetadataStatement StatementIDL.MetadataStatement {..} = do
         transform _ = Nothing
 
     -- Decodes the PNG bytes of an [icon](https://fidoalliance.org/specs/mds/fido-metadata-statement-v3.0-ps-20210518.html#dom-metadatastatement-icon) field of a metadata statement
-    decodeIcon :: IDL.DOMString -> Either Text BS.ByteString
+    decodeIcon :: IDL.DOMString -> Either Text StatementTypes.PNGBytes
     decodeIcon dataUrl = case Text.stripPrefix "data:image/png;base64," dataUrl of
       Nothing -> Left $ "Icon decoding failed because there is no \"data:image/png;base64,\" prefix: " <> dataUrl
       Just suffix ->
         -- TODO: Use non-lenient decoding, it's only needed because of a spec violation,
         -- see <https://github.com/tweag/haskell-fido2/issues/68>
-        Right $ Base64.decodeLenient (encodeUtf8 suffix)
+        Right $ StatementTypes.PNGBytes $ Base64.decodeLenient (encodeUtf8 suffix)

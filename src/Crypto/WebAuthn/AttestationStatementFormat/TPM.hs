@@ -26,6 +26,7 @@ import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKey as Cose
 import qualified Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
+import Crypto.WebAuthn.Internal.ToJSONOrphans (PrettyHexByteString (PrettyHexByteString))
 import Crypto.WebAuthn.Internal.Utils (IdFidoGenCeAAGUID (IdFidoGenCeAAGUID), failure)
 import Crypto.WebAuthn.Model.Identifier (AAGUID)
 import qualified Crypto.WebAuthn.Model.Types as M
@@ -124,8 +125,8 @@ data TPMSClockInfo = TPMSClockInfo
 -- | The TPMS_CERTIFY_INFO structure as specified in [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
 -- section 10.12.3.
 data TPMSCertifyInfo = TPMSCertifyInfo
-  { tpmsciName :: BS.ByteString,
-    tpmsciQualifiedName :: BS.ByteString
+  { tpmsciName :: PrettyHexByteString,
+    tpmsciQualifiedName :: PrettyHexByteString
   }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -135,8 +136,8 @@ data TPMSCertifyInfo = TPMSCertifyInfo
 data TPMSAttest = TPMSAttest
   { tpmsaMagic :: Word32,
     tpmsaType :: Word16,
-    tpmsaQualifiedSigner :: BS.ByteString,
-    tpmsaExtraData :: BS.ByteString,
+    tpmsaQualifiedSigner :: PrettyHexByteString,
+    tpmsaExtraData :: PrettyHexByteString,
     tpmsaClockInfo :: TPMSClockInfo,
     tpmsaFirmwareVersion :: Word64,
     tpmsaAttested :: TPMSCertifyInfo
@@ -170,10 +171,10 @@ data TPMUPublicParms
 -- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
 -- section 12.2.3.2.
 data TPMUPublicId
-  = TPM2BPublicKeyRSA BS.ByteString
+  = TPM2BPublicKeyRSA PrettyHexByteString
   | TPMSECCPoint
-      { tpmseX :: BS.ByteString,
-        tpmseY :: BS.ByteString
+      { tpmseX :: PrettyHexByteString,
+        tpmseY :: PrettyHexByteString
       }
   deriving (Eq, Show, Generic, ToJSON)
 
@@ -183,7 +184,7 @@ data TPMTPublic = TPMTPublic
     tpmtpNameAlg :: TPMAlgId,
     tpmtpNameAlgRaw :: Word16,
     tpmtpObjectAttributes :: TPMAObject,
-    tpmtpAuthPolicy :: BS.ByteString,
+    tpmtpAuthPolicy :: PrettyHexByteString,
     tpmtpParameters :: TPMUPublicParms,
     tpmtpUnique :: TPMUPublicId
   }
@@ -204,6 +205,12 @@ data SubjectAlternativeName = SubjectAlternativeName
   }
   deriving (Eq, Show)
 
+newtype CertInfoBytes = CertInfoBytes {unCertInfoBytes :: BS.ByteString}
+  deriving newtype (Eq, Show)
+
+newtype PubAreaBytes = PubAreaBytes {unPubAreaBytes :: BS.ByteString}
+  deriving newtype (Eq, Show)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-tpm-attestation)
 data Statement = Statement
   { x5c :: NE.NonEmpty X509.SignedCertificate,
@@ -214,11 +221,11 @@ data Statement = Statement
     aaguidExt :: Maybe IdFidoGenCeAAGUID,
     extendedKeyUsage :: [X509.ExtKeyUsagePurpose],
     basicConstraintsCA :: Bool,
-    sig :: BS.ByteString,
+    sig :: Cose.Signature,
     certInfo :: TPMSAttest,
-    certInfoRaw :: BS.ByteString,
+    certInfoRaw :: CertInfoBytes,
     pubArea :: TPMTPublic,
-    pubAreaRaw :: BS.ByteString,
+    pubAreaRaw :: PubAreaBytes,
     pubAreaKey :: Cose.PublicKey
   }
   deriving (Eq, Show)
@@ -357,49 +364,57 @@ instance M.AttestationStatementFormat Format where
 
   asfDecode _ xs =
     case (xs !? "ver", xs !? "alg", xs !? "x5c", xs !? "sig", xs !? "certInfo", xs !? "pubArea") of
-      (Just (CBOR.TString "2.0"), Just (CBOR.TInt algId), Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)), Just (CBOR.TBytes sig), Just (CBOR.TBytes certInfoRaw), Just (CBOR.TBytes pubAreaRaw)) ->
-        do
-          x5c@(signedAikCert :| _) <- forM x5cRaw $ \case
-            CBOR.TBytes certBytes ->
-              first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
-            cert ->
-              Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
-          alg <- Cose.toCoseSignAlg algId
-          -- The get interface requires lazy bytestrings but we typically use
-          -- strict bytestrings in the library, so we have to convert between
-          -- them
-          certInfo <- case Get.runGetOrFail getTPMAttest (LBS.fromStrict certInfoRaw) of
-            Left (_, _, err) -> Left $ "Failed to decode certInfo: " <> Text.pack (show err)
-            Right (_, _, res) -> pure res
-          pubArea <- case Get.runGetOrFail getTPMTPublic (LBS.fromStrict pubAreaRaw) of
-            Left (_, _, err) -> Left $ "Failed to decode pubArea: " <> Text.pack (show err)
-            Right (_, _, res) -> pure res
-          pubAreaKey <- extractPublicKey pubArea
+      ( Just (CBOR.TString "2.0"),
+        Just (CBOR.TInt algId),
+        Just (CBOR.TList (NE.nonEmpty -> Just x5cRaw)),
+        Just (CBOR.TBytes (Cose.Signature -> sig)),
+        Just (CBOR.TBytes (CertInfoBytes -> certInfoRaw)),
+        Just (CBOR.TBytes (PubAreaBytes -> pubAreaRaw))
+        ) ->
+          do
+            x5c@(signedAikCert :| _) <- forM x5cRaw $ \case
+              CBOR.TBytes certBytes ->
+                first (("Failed to decode signed certificate: " <>) . Text.pack) (X509.decodeSignedCertificate certBytes)
+              cert ->
+                Left $ "Certificate CBOR value is not bytes: " <> Text.pack (show cert)
+            alg <- Cose.toCoseSignAlg algId
+            -- The get interface requires lazy bytestrings but we typically use
+            -- strict bytestrings in the library, so we have to convert between
+            -- them
+            certInfo <- decodeCertInfoBytes certInfoRaw
+            pubArea <- decodePubAreaBytes pubAreaRaw
+            pubAreaKey <- extractPublicKey pubArea
 
-          let aikCert = X509.getCertificate signedAikCert
+            let aikCert = X509.getCertificate signedAikCert
 
-          aikCertPubKey <- Cose.fromX509 $ X509.certPubKey aikCert
-          aikPubKeyAndAlg <- Cose.makePublicKeyWithSignAlg aikCertPubKey alg
+            aikCertPubKey <- Cose.fromX509 $ X509.certPubKey aikCert
+            aikPubKeyAndAlg <- Cose.makePublicKeyWithSignAlg aikCertPubKey alg
 
-          subjectAlternativeName <- case X509.extensionGetE (X509.certExtensions aikCert) of
-            Just (Right ext) -> pure ext
-            Just (Left err) -> Left $ "Failed to decode certificate subject alternative name extension: " <> Text.pack err
-            Nothing -> Left "Certificate subject alternative name extension is missing"
-          aaguidExt <- case X509.extensionGetE (X509.certExtensions aikCert) of
-            Just (Right ext) -> pure $ Just ext
-            Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
-            Nothing -> pure Nothing
-          X509.ExtExtendedKeyUsage extendedKeyUsage <- case X509.extensionGetE (X509.certExtensions aikCert) of
-            Just (Right ext) -> pure ext
-            Just (Left err) -> Left $ "Failed to decode certificate extended key usage extension: " <> Text.pack err
-            Nothing -> Left "Certificate extended key usage extension is missing"
-          X509.ExtBasicConstraints basicConstraintsCA _ <- case X509.extensionGetE (X509.certExtensions aikCert) of
-            Just (Right ext) -> pure ext
-            Just (Left err) -> Left $ "Failed to decode certificate basic constraints extension: " <> Text.pack err
-            Nothing -> Left "Certificate basic constraints extension is missing"
-          Right $ Statement {..}
+            subjectAlternativeName <- case X509.extensionGetE (X509.certExtensions aikCert) of
+              Just (Right ext) -> pure ext
+              Just (Left err) -> Left $ "Failed to decode certificate subject alternative name extension: " <> Text.pack err
+              Nothing -> Left "Certificate subject alternative name extension is missing"
+            aaguidExt <- case X509.extensionGetE (X509.certExtensions aikCert) of
+              Just (Right ext) -> pure $ Just ext
+              Just (Left err) -> Left $ "Failed to decode certificate aaguid extension: " <> Text.pack err
+              Nothing -> pure Nothing
+            X509.ExtExtendedKeyUsage extendedKeyUsage <- case X509.extensionGetE (X509.certExtensions aikCert) of
+              Just (Right ext) -> pure ext
+              Just (Left err) -> Left $ "Failed to decode certificate extended key usage extension: " <> Text.pack err
+              Nothing -> Left "Certificate extended key usage extension is missing"
+            X509.ExtBasicConstraints basicConstraintsCA _ <- case X509.extensionGetE (X509.certExtensions aikCert) of
+              Just (Right ext) -> pure ext
+              Just (Left err) -> Left $ "Failed to decode certificate basic constraints extension: " <> Text.pack err
+              Nothing -> Left "Certificate basic constraints extension is missing"
+            Right $ Statement {..}
       _ -> Left $ "CBOR map didn't have expected value types (ver: \"2.0\", alg: int, x5c: non-empty list, sig: bytes, certInfo: bytes, pubArea: bytes): " <> Text.pack (show xs)
     where
+      decodeCertInfoBytes :: CertInfoBytes -> Either Text TPMSAttest
+      decodeCertInfoBytes (CertInfoBytes bytes) =
+        case Get.runGetOrFail getTPMAttest (LBS.fromStrict bytes) of
+          Left (_, _, err) -> Left $ "Failed to decode certInfo: " <> Text.pack (show err)
+          Right (_, _, res) -> pure res
+
       getTPMAttest :: Get.Get TPMSAttest
       getTPMAttest = do
         tpmsaMagic <- Get.getWord32be
@@ -427,10 +442,16 @@ instance M.AttestationStatementFormat Format where
         tpmsciQualifiedName <- getTPMByteString
         pure TPMSCertifyInfo {..}
 
-      getTPMByteString :: Get.Get BS.ByteString
+      getTPMByteString :: Get.Get PrettyHexByteString
       getTPMByteString = do
         size <- Get.getWord16be
-        Get.getByteString (fromIntegral size)
+        PrettyHexByteString <$> Get.getByteString (fromIntegral size)
+
+      decodePubAreaBytes :: PubAreaBytes -> Either Text TPMTPublic
+      decodePubAreaBytes (PubAreaBytes bytes) =
+        case Get.runGetOrFail getTPMTPublic (LBS.fromStrict bytes) of
+          Left (_, _, err) -> Left $ "Failed to decode certInfo: " <> Text.pack (show err)
+          Right (_, _, res) -> pure res
 
       getTPMTPublic :: Get.Get TPMTPublic
       getTPMTPublic = do
@@ -479,7 +500,7 @@ instance M.AttestationStatementFormat Format where
         TPMTPublic
           { tpmtpType = TPMAlgRSA,
             tpmtpParameters = TPMSRSAParms {..},
-            tpmtpUnique = TPM2BPublicKeyRSA nb
+            tpmtpUnique = TPM2BPublicKeyRSA (PrettyHexByteString nb)
           } =
           Cose.checkPublicKey
             Cose.PublicKeyRSA
@@ -490,7 +511,7 @@ instance M.AttestationStatementFormat Format where
         TPMTPublic
           { tpmtpType = TPMAlgECC,
             tpmtpParameters = TPMSECCParms {..},
-            tpmtpUnique = TPMSECCPoint {..}
+            tpmtpUnique = TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
           } =
           Cose.checkPublicKey
             Cose.PublicKeyECDSA
@@ -507,9 +528,9 @@ instance M.AttestationStatementFormat Format where
         ( CBOR.TString "x5c",
           CBOR.TList $ map (CBOR.TBytes . X509.encodeSignedObject) $ NE.toList x5c
         ),
-        (CBOR.TString "sig", CBOR.TBytes sig),
-        (CBOR.TString "certInfo", CBOR.TBytes certInfoRaw),
-        (CBOR.TString "pubArea", CBOR.TBytes pubAreaRaw)
+        (CBOR.TString "sig", CBOR.TBytes $ Cose.unSignature sig),
+        (CBOR.TString "certInfo", CBOR.TBytes $ unCertInfoBytes certInfoRaw),
+        (CBOR.TString "pubArea", CBOR.TBytes $ unPubAreaBytes pubAreaRaw)
       ]
 
   type AttStmtVerificationError Format = VerificationError
@@ -546,7 +567,7 @@ instance M.AttestationStatementFormat Format where
       -- the hash algorithm employed in "alg".
       case hashWithCorrectAlgorithm (Cose.signAlg aikPubKeyAndAlg) attToBeSigned of
         Just attHash -> do
-          let extraData = tpmsaExtraData certInfo
+          let PrettyHexByteString extraData = tpmsaExtraData certInfo
           unless (attHash == extraData) . failure $ HashMismatch attHash extraData
           pure ()
         Nothing -> failure HashFunctionUnknown
@@ -557,8 +578,8 @@ instance M.AttestationStatementFormat Format where
       -- nameAlg field of pubArea using the procedure specified in
       -- [TPMv2-Part1] section 16.
       let mPubAreaHash = case tpmtpNameAlg pubArea of
-            TPMAlgSHA1 -> Right $ BA.convert $ hashWith SHA1 pubAreaRaw
-            TPMAlgSHA256 -> Right $ BA.convert $ hashWith SHA256 pubAreaRaw
+            TPMAlgSHA1 -> Right $ BA.convert $ hashWith SHA1 $ unPubAreaBytes pubAreaRaw
+            TPMAlgSHA256 -> Right $ BA.convert $ hashWith SHA256 $ unPubAreaBytes pubAreaRaw
             TPMAlgECC -> Left TPMAlgECC
             TPMAlgRSA -> Left TPMAlgRSA
 
@@ -569,7 +590,7 @@ instance M.AttestationStatementFormat Format where
                   Put.putWord16be (tpmtpNameAlgRaw pubArea)
                   Put.putByteString pubAreaHash
 
-          let name = tpmsciName (tpmsaAttested certInfo)
+          let PrettyHexByteString name = tpmsciName (tpmsaAttested certInfo)
           unless (name == pubName) . failure $ NameMismatch pubName name
           pure ()
         Left alg -> failure $ NameAlgorithmInvalid alg
@@ -585,7 +606,7 @@ instance M.AttestationStatementFormat Format where
 
       -- 4.8 Verify the sig is a valid signature over certInfo using the
       -- attestation public key in aikCert with the algorithm specified in alg.
-      case Cose.verify aikPubKeyAndAlg certInfoRaw sig of
+      case Cose.verify aikPubKeyAndAlg (Cose.Message $ unCertInfoBytes certInfoRaw) sig of
         Right () -> pure ()
         Left err -> failure $ VerificationFailure err
 
