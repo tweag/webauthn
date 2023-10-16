@@ -147,15 +147,15 @@ checkPublicKey :: UncheckedPublicKey -> Either Text PublicKey
 checkPublicKey key@PublicKeyEdDSA {..}
   | actualSize == expectedSize = Right $ CheckedPublicKey key
   | otherwise =
-    Left $
-      "EdDSA public key for curve "
-        <> Text.pack (show eddsaCurve)
-        <> " didn't have the expected size of "
-        <> Text.pack (show expectedSize)
-        <> " bytes, it has "
-        <> Text.pack (show actualSize)
-        <> " bytes instead: "
-        <> Text.pack (show eddsaX)
+      Left $
+        "EdDSA public key for curve "
+          <> Text.pack (show eddsaCurve)
+          <> " didn't have the expected size of "
+          <> Text.pack (show expectedSize)
+          <> " bytes, it has "
+          <> Text.pack (show actualSize)
+          <> " bytes instead: "
+          <> Text.pack (show eddsaX)
   where
     actualSize = BS.length $ unEdDSAKeyBytes eddsaX
     expectedSize = coordinateSizeEdDSA eddsaCurve
