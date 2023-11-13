@@ -409,7 +409,7 @@ completeLogin origin rpIdHash db pending = do
 -- | Utility function for debugging. Creates a human-readable bytestring from
 -- any value that can be encoded to JSON. We use this function to provide a log
 -- of all messages received and sent.
-jsonText :: ToJSON a => a -> Text
+jsonText :: (ToJSON a) => a -> Text
 jsonText = decodeUtf8 . LBS.toStrict . AP.encodePretty' config
   where
     config :: AP.Config

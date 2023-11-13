@@ -211,7 +211,7 @@ instance Aeson.FromJSON ClientDataJSON where
 -- This function is useful for testing.
 encodeRawCollectedClientData ::
   forall (c :: K.CeremonyKind) raw.
-  SingI c =>
+  (SingI c) =>
   M.CollectedClientData c raw ->
   M.CollectedClientData c 'True
 encodeRawCollectedClientData M.CollectedClientData {..} =
@@ -248,7 +248,7 @@ encodeRawCollectedClientData M.CollectedClientData {..} =
     -- > Append 0x66616c7365 (false) to result.
     crossOriginValue = fromMaybe False ccdCrossOrigin
 
-    jsonBuilder :: Aeson.ToJSON a => a -> Builder
+    jsonBuilder :: (Aeson.ToJSON a) => a -> Builder
     jsonBuilder = Aeson.fromEncoding . Aeson.toEncoding
 
 -- | Removes all raw fields of a 'M.CollectedClientData'.
@@ -267,7 +267,7 @@ stripRawCollectedClientData M.CollectedClientData {..} =
 -- structure, which is used for both attestation and assertion.
 decodeCollectedClientData ::
   forall (c :: K.CeremonyKind).
-  SingI c =>
+  (SingI c) =>
   BS.ByteString ->
   Either Text (M.CollectedClientData c 'True)
 decodeCollectedClientData bytes = do
@@ -392,7 +392,7 @@ decodeAttestedCredentialData = do
 -- 'M.adRawData'. This function is needed for an authenticator implementation.
 encodeRawAuthenticatorData ::
   forall (c :: K.CeremonyKind) raw.
-  SingI c =>
+  (SingI c) =>
   M.AuthenticatorData c raw ->
   M.AuthenticatorData c 'True
 encodeRawAuthenticatorData M.AuthenticatorData {..} =
@@ -460,7 +460,7 @@ stripRawAuthenticatorData M.AuthenticatorData {..} =
 -- structure.
 decodeAuthenticatorData ::
   forall (c :: K.CeremonyKind).
-  SingI c =>
+  (SingI c) =>
   BS.ByteString ->
   Either Text (M.AuthenticatorData c 'True)
 decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes $ do

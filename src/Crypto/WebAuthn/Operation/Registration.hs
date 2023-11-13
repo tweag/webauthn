@@ -99,7 +99,7 @@ data RegistrationError
         reReceivedSigningAlgorithm :: Cose.CoseSignAlg
       }
   | -- | There was some exception in the statement format specific section
-    forall a. M.AttestationStatementFormat a => RegistrationAttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
+    forall a. (M.AttestationStatementFormat a) => RegistrationAttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
 
 deriving instance Show RegistrationError
 
@@ -455,7 +455,7 @@ verifyRegistrationResponse
 -- Results in the type of attestation and the model.
 validateAttestationChain ::
   forall raw p a.
-  M.AttestationStatementFormat a =>
+  (M.AttestationStatementFormat a) =>
   M.Credential 'M.Registration raw ->
   a ->
   M.AttestationType ('M.Verifiable p) ->

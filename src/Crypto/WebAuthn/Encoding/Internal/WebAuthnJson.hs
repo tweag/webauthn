@@ -65,7 +65,7 @@ class Encode a where
 
   -- | Encodes a value to its webauthn-json equivalent
   encode :: a -> JSON a
-  default encode :: Coercible a (JSON a) => a -> JSON a
+  default encode :: (Coercible a (JSON a)) => a -> JSON a
   encode = coerce
 
 -- | An extension of 'Encode' to decoding. This typeclass is parametrized by a
@@ -73,9 +73,9 @@ class Encode a where
 -- information to succeed, specifically
 -- 'M.SupportedAttestationStatementFormats', which can be provided with a
 -- 'MonadReader' constraint
-class Encode a => Decode m a where
+class (Encode a) => Decode m a where
   -- | Decodes a webauthn-json type, potentially throwing a 'Text' error
-  decode :: MonadError Text m => JSON a -> m a
+  decode :: (MonadError Text m) => JSON a -> m a
   default decode :: (MonadError Text m, Coercible (JSON a) a) => JSON a -> m a
   decode = pure . coerce
 
@@ -306,11 +306,11 @@ instance Decode m T.AuthenticationExtensionsClientOutputs where
     aecoCredProps <- decode credProps
     pure $ T.AuthenticationExtensionsClientOutputs {..}
 
-instance SingI c => Encode (T.CollectedClientData (c :: K.CeremonyKind) 'True) where
+instance (SingI c) => Encode (T.CollectedClientData (c :: K.CeremonyKind) 'True) where
   type JSON (T.CollectedClientData c 'True) = Base64UrlString
   encode = Base64UrlString . T.unRaw . T.ccdRawData
 
-instance SingI c => Decode m (T.CollectedClientData (c :: K.CeremonyKind) 'True) where
+instance (SingI c) => Decode m (T.CollectedClientData (c :: K.CeremonyKind) 'True) where
   decode = liftEither . B.decodeCollectedClientData . unBase64UrlString
 
 instance Encode (T.AttestationObject 'True) where
@@ -318,7 +318,7 @@ instance Encode (T.AttestationObject 'True) where
   encode = Base64UrlString . B.encodeAttestationObject
 
 instance
-  MonadReader T.SupportedAttestationStatementFormats m =>
+  (MonadReader T.SupportedAttestationStatementFormats m) =>
   Decode m (T.AttestationObject 'True)
   where
   decode (Base64UrlString bytes) = do
@@ -610,10 +610,10 @@ data PublicKeyCredential response = PublicKeyCredential
   }
   deriving (Eq, Show, Generic)
 
-instance Aeson.FromJSON response => Aeson.FromJSON (PublicKeyCredential response) where
+instance (Aeson.FromJSON response) => Aeson.FromJSON (PublicKeyCredential response) where
   parseJSON = Aeson.genericParseJSON jsonEncodingOptions
 
-instance Aeson.ToJSON response => Aeson.ToJSON (PublicKeyCredential response) where
+instance (Aeson.ToJSON response) => Aeson.ToJSON (PublicKeyCredential response) where
   toJSON = Aeson.genericToJSON jsonEncodingOptions
 
 instance Encode (T.Credential 'K.Registration 'True) where
@@ -626,7 +626,7 @@ instance Encode (T.Credential 'K.Registration 'True) where
       }
 
 instance
-  MonadReader T.SupportedAttestationStatementFormats m =>
+  (MonadReader T.SupportedAttestationStatementFormats m) =>
   Decode m (T.Credential 'K.Registration 'True)
   where
   decode PublicKeyCredential {..} = do
@@ -680,7 +680,7 @@ instance Encode (T.AuthenticatorResponse 'K.Registration 'True) where
       }
 
 instance
-  MonadReader T.SupportedAttestationStatementFormats m =>
+  (MonadReader T.SupportedAttestationStatementFormats m) =>
   Decode m (T.AuthenticatorResponse 'K.Registration 'True)
   where
   decode AuthenticatorAttestationResponse {..} = do

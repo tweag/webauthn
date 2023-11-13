@@ -586,7 +586,7 @@ deriving via PrettyHexByteString instance ToJSON UserHandle
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#user-handle)
 -- A user handle is an opaque [byte sequence](https://infra.spec.whatwg.org/#byte-sequence)
 -- with a maximum size of 64 bytes, and is not meant to be displayed to the user.
-generateUserHandle :: MonadRandom m => m UserHandle
+generateUserHandle :: (MonadRandom m) => m UserHandle
 generateUserHandle = UserHandle <$> getRandomBytes 16
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-displayname)
@@ -650,7 +650,7 @@ deriving via PrettyHexByteString instance ToJSON CredentialId
 -- Generates a random 'CredentialId' using 16 random bytes.
 -- This is only useful for authenticators, not for relying parties.
 -- This function is only included for completeness and testing purposes.
-generateCredentialId :: MonadRandom m => m CredentialId
+generateCredentialId :: (MonadRandom m) => m CredentialId
 generateCredentialId = CredentialId <$> getRandomBytes 16
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
@@ -668,7 +668,7 @@ deriving via PrettyHexByteString instance ToJSON Challenge
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-cryptographic-challenges)
 -- In order to prevent replay attacks, the challenges MUST contain enough entropy
 -- to make guessing them infeasible. Challenges SHOULD therefore be at least 16 bytes long.
-generateChallenge :: MonadRandom m => m Challenge
+generateChallenge :: (MonadRandom m) => m Challenge
 generateChallenge = Challenge <$> getRandomBytes 16
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-timeout)
@@ -1170,7 +1170,7 @@ data CollectedClientData (c :: CeremonyKind) raw = CollectedClientData
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-instance SingI c => ToJSON (CollectedClientData (c :: CeremonyKind) raw) where
+instance (SingI c) => ToJSON (CollectedClientData (c :: CeremonyKind) raw) where
   toJSON CollectedClientData {..} =
     object
       [ "webauthnKind" .= sing @c,
@@ -1379,7 +1379,7 @@ class
 -- This is used for 'singletonAttestationStatementFormat'
 data SomeAttestationStatementFormat
   = forall a.
-    AttestationStatementFormat a =>
+    (AttestationStatementFormat a) =>
     SomeAttestationStatementFormat a
 
 -- | A type representing the set of supported attestation statement formats.
@@ -1432,7 +1432,7 @@ lookupAttestationStatementFormat id (SupportedAttestationStatementFormats sasf) 
 -- 'Crypto.WebAuthn.Encoding.Binary.encodeAttestationObject' can be used to get
 -- the binary encoding of this type when @raw ~ 'True'@.
 data AttestationObject raw = forall a.
-  AttestationStatementFormat a =>
+  (AttestationStatementFormat a) =>
   AttestationObject
   { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#authenticator-data)
     -- The authenticator data structure encodes contextual bindings made by the

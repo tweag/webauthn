@@ -96,7 +96,7 @@ data MetadataEntry (p :: M.ProtocolKind) = MetadataEntry
 deriving instance ToJSON (MetadataEntry p)
 
 -- | Same as 'MetadataEntry', but with its type parameter erased
-data SomeMetadataEntry = forall p. SingI p => SomeMetadataEntry (MetadataEntry p)
+data SomeMetadataEntry = forall p. (SingI p) => SomeMetadataEntry (MetadataEntry p)
 
 -- | [(spec)](https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#statusreport-dictionary)
 -- Same as 'StatementIDL.StatusReport', but fully decoded.
