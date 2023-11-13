@@ -60,7 +60,7 @@ import Data.FileEmbed (embedFile)
 import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
-import Data.List.NonEmpty (NonEmpty, singleton)
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -186,7 +186,7 @@ jwtToJson blob rootCert now = runExcept $ do
 -- important.
 jsonToPayload :: HashMap Text Value -> These (NonEmpty Text) Service.MetadataPayload
 jsonToPayload value = case Aeson.parseEither metadataPayloadParser value of
-  Left err -> This (singleton $ Text.pack err)
+  Left err -> This (Text.pack err NE.:| [])
   Right payload -> decodeMetadataPayload payload
 
 metadataPayloadParser :: HashMap Text Aeson.Value -> Aeson.Parser ServiceIDL.MetadataBLOBPayload

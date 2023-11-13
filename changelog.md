@@ -1,3 +1,7 @@
+### Next release: 0.8.0.1
+
+* Restore GHC 8.8 compatibility.
+
 ### 0.8.0.0
 
 * [#178](https://github.com/tweag/webauthn/pull/178) Remove orphan instance for ToJSON ByteString.

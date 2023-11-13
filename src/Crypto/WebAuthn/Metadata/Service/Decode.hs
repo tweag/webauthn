@@ -32,7 +32,7 @@ decodeMetadataPayload :: ServiceIDL.MetadataBLOBPayload -> These (NE.NonEmpty Te
 decodeMetadataPayload ServiceIDL.MetadataBLOBPayload {..} = do
   let mpLegalHeader = legalHeader
       mpNo = no
-  mpNextUpdate <- either (This . NE.singleton) That $ decodeDate nextUpdate
+  mpNextUpdate <- either (This . (NE.:| [])) That $ decodeDate nextUpdate
   let errorOrEntries = mapMaybe decodeMetadataEntry entries
   let errors = lefts errorOrEntries
   let decodedEntries = rights errorOrEntries
