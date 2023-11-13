@@ -230,7 +230,7 @@ instance Serialise CoseSignAlg where
 -- | Converts a 'CoseSignAlg' to the corresponding integer value from the
 -- [COSE Algorithms registry](https://www.iana.org/assignments/cose/cose.xhtml#algorithms).
 -- The inverse operation is 'toCoseSignAlg'
-fromCoseSignAlg :: Num p => CoseSignAlg -> p
+fromCoseSignAlg :: (Num p) => CoseSignAlg -> p
 fromCoseSignAlg (CoseSignAlgRSA CoseHashAlgRSASHA1) = -65535
 fromCoseSignAlg (CoseSignAlgRSA CoseHashAlgRSASHA512) = -259
 fromCoseSignAlg (CoseSignAlgRSA CoseHashAlgRSASHA384) = -258

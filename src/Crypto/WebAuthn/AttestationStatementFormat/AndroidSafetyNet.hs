@@ -149,7 +149,7 @@ newtype VerificationHostName = VerificationHostName {unVerificationHostName :: X
   deriving newtype (IsString)
 
 -- | This instance doesn't actually perform any validation
-instance MonadError JOSE.Error m => JOSE.VerificationKeyStore m (JOSE.JWSHeader ()) p VerificationHostName where
+instance (MonadError JOSE.Error m) => JOSE.VerificationKeyStore m (JOSE.JWSHeader ()) p VerificationHostName where
   getVerificationKeys header _ hostName = do
     chain <- case header ^? JOSE.x5c . _Just . JOSE.param of
       Nothing -> throwError JOSE.JWSInvalidSignature

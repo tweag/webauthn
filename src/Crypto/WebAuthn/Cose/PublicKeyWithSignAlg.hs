@@ -255,7 +255,7 @@ instance Serialise CosePublicKey where
             pure P.PublicKeyRSA {..}
 
 -- | Same as 'os2ip', but throws an error if there are not exactly as many bytes as expected. Thus any successful result of this function will give the same 'BS.ByteString' back if encoded with @'i2ospOf_' size@.
-os2ipWithSize :: MonadFail m => Int -> BS.ByteString -> m Integer
+os2ipWithSize :: (MonadFail m) => Int -> BS.ByteString -> m Integer
 os2ipWithSize size bytes
   | BS.length bytes == size = pure $ os2ip bytes
   | otherwise =
@@ -267,7 +267,7 @@ os2ipWithSize size bytes
           <> " was expected"
 
 -- | Same as 'os2ip', but throws an error if there are leading zero bytes. Thus any successful result of this function will give the same 'BS.ByteString' back if encoded with 'i2osp'.
-os2ipNoLeading :: MonadFail m => BS.ByteString -> m Integer
+os2ipNoLeading :: (MonadFail m) => BS.ByteString -> m Integer
 os2ipNoLeading bytes
   | leadingZeroCount == 0 = pure $ os2ip bytes
   | otherwise =

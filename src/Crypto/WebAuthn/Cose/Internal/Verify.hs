@@ -29,7 +29,7 @@ module Crypto.WebAuthn.Cose.Internal.Verify
     Cose.Signature (..),
     verify,
 
-    -- * Hash Conversions to cryptonite types
+    -- * Hash Conversions to crypton types
     SomeHashAlgorithm (..),
     toCryptHashECDSA,
     SomeHashAlgorithmASN1 (..),
@@ -160,19 +160,19 @@ verify
       else Left "RSA Signature invalid"
 verify key _ _ = error $ "PublicKeyWithSignAlg invariant violated for public key " <> show key <> ". This should not occur unless the PublicKeyWithSignAlg module has a bug"
 
--- | Some cryptonite 'Hash.HashAlgorithm' type, used as a return value of 'toCryptHashECDSA'
-data SomeHashAlgorithm = forall a. Hash.HashAlgorithm a => SomeHashAlgorithm a
+-- | Some crypton 'Hash.HashAlgorithm' type, used as a return value of 'toCryptHashECDSA'
+data SomeHashAlgorithm = forall a. (Hash.HashAlgorithm a) => SomeHashAlgorithm a
 
--- | Returns the cryptonite 'SomeHashAlgorithm' corresponding to this hash algorithm
+-- | Returns the crypton 'SomeHashAlgorithm' corresponding to this hash algorithm
 toCryptHashECDSA :: Cose.CoseHashAlgECDSA -> SomeHashAlgorithm
 toCryptHashECDSA Cose.CoseHashAlgECDSASHA256 = SomeHashAlgorithm Hash.SHA256
 toCryptHashECDSA Cose.CoseHashAlgECDSASHA384 = SomeHashAlgorithm Hash.SHA384
 toCryptHashECDSA Cose.CoseHashAlgECDSASHA512 = SomeHashAlgorithm Hash.SHA512
 
--- | Some cryptonite 'RSA.HashAlgorithmASN1' type, used as a return value of 'toCryptHashRSA'
-data SomeHashAlgorithmASN1 = forall a. RSA.HashAlgorithmASN1 a => SomeHashAlgorithmASN1 a
+-- | Some crypton 'RSA.HashAlgorithmASN1' type, used as a return value of 'toCryptHashRSA'
+data SomeHashAlgorithmASN1 = forall a. (RSA.HashAlgorithmASN1 a) => SomeHashAlgorithmASN1 a
 
--- | Returns the cryptonite 'SomeHashAlgorithmASN1' corresponding to this hash algorithm
+-- | Returns the crypton 'SomeHashAlgorithmASN1' corresponding to this hash algorithm
 toCryptHashRSA :: Cose.CoseHashAlgRSA -> SomeHashAlgorithmASN1
 toCryptHashRSA Cose.CoseHashAlgRSASHA1 = SomeHashAlgorithmASN1 Hash.SHA1
 toCryptHashRSA Cose.CoseHashAlgRSASHA256 = SomeHashAlgorithmASN1 Hash.SHA256

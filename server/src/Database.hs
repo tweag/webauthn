@@ -226,7 +226,7 @@ toCredentialEntry (credentialId, userHandle, publicKey, signCounter, transportBy
 
 newtype AuthToken = AuthToken {unAuthToken :: BS.ByteString}
 
-generateAuthToken :: MonadRandom m => m AuthToken
+generateAuthToken :: (MonadRandom m) => m AuthToken
 generateAuthToken = AuthToken <$> getRandomBytes 16
 
 -- | Find a user from their `AuthToken` cookie

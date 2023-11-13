@@ -54,7 +54,7 @@ data KeyPair = KeyPair
   }
   deriving (Eq, Show)
 
-newKeyPair :: MonadRandom m => Cose.CoseSignAlg -> m KeyPair
+newKeyPair :: (MonadRandom m) => Cose.CoseSignAlg -> m KeyPair
 newKeyPair Cose.CoseSignAlgEdDSA = do
   privKey' <- Ed25519.generateSecretKey
   let privKey =
@@ -118,7 +118,7 @@ newKeyPair (Cose.CoseSignAlgRSA hash) = do
       cosePubKey = fromRight (error "unreachable") $ Cose.makePublicKeyWithSignAlg pubKey (Cose.CoseSignAlgRSA hash)
   pure KeyPair {..}
 
-sign :: MonadRandom m => Cose.CoseSignAlg -> PrivateKey -> BS.ByteString -> m BS.ByteString
+sign :: (MonadRandom m) => Cose.CoseSignAlg -> PrivateKey -> BS.ByteString -> m BS.ByteString
 sign Cose.CoseSignAlgEdDSA PrivateKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} msg = do
   let privKey = case Ed25519.secretKey eddsaBytes of
         CryptoFailed err -> error $ show err
@@ -158,7 +158,7 @@ sign signAlg privKey _ = error $ "sign: Combination of signature algorithm " <> 
 toX509 :: Cose.UncheckedPublicKey -> X509.PubKey
 toX509 Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
   let key = case Ed25519.publicKey $ Cose.unEdDSAKeyBytes eddsaX of
-        CryptoFailed err -> error $ "Failed to create a cryptonite Ed25519 public key of a bytestring with size " <> show (BS.length $ Cose.unEdDSAKeyBytes eddsaX) <> ": " <> show err
+        CryptoFailed err -> error $ "Failed to create a crypton Ed25519 public key of a bytestring with size " <> show (BS.length $ Cose.unEdDSAKeyBytes eddsaX) <> ": " <> show err
         CryptoPassed res -> res
    in X509.PubKeyEd25519 key
 toX509 Cose.PublicKeyECDSA {..} =

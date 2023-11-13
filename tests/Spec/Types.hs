@@ -140,17 +140,16 @@ data ArbitraryAttestationStatementFormat
 
 instance Arbitrary ArbitraryAttestationStatementFormat where
   arbitrary =
-    elements
-      [ ArbitraryAttestationStatementFormat None.Format
-      -- ArbitraryAttestationStatementFormat Packed.Format,
-      -- ArbitraryAttestationStatementFormat FidoU2F.Format,
-      -- ArbitraryAttestationStatementFormat AndroidKey.Format
-      ]
+    return (ArbitraryAttestationStatementFormat None.Format)
+
+-- ArbitraryAttestationStatementFormat Packed.Format,
+-- ArbitraryAttestationStatementFormat FidoU2F.Format,
+-- ArbitraryAttestationStatementFormat AndroidKey.Format
 
 instance Arbitrary M.SignatureCounter where
   arbitrary = M.SignatureCounter <$> arbitrary
 
-instance SingI c => Arbitrary (M.AuthenticatorData c 'False) where
+instance (SingI c) => Arbitrary (M.AuthenticatorData c 'False) where
   arbitrary = M.AuthenticatorData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary M.Challenge where
@@ -167,7 +166,7 @@ instance Arbitrary M.RpIdHash where
 instance Arbitrary M.AuthenticatorDataFlags where
   arbitrary = M.AuthenticatorDataFlags <$> arbitrary <*> arbitrary
 
-instance SingI c => Arbitrary (M.AttestedCredentialData c 'False) where
+instance (SingI c) => Arbitrary (M.AttestedCredentialData c 'False) where
   arbitrary = case sing @c of
     M.SRegistration -> M.AttestedCredentialData <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
     M.SAuthentication -> pure M.NoAttestedCredentialData
@@ -282,10 +281,10 @@ instance Arbitrary (M.Credential 'M.Authentication 'False) where
       <*> arbitrary
       <*> arbitrary
 
-shuffledSubsetWith :: Ord a => Set a -> Gen [a]
+shuffledSubsetWith :: (Ord a) => Set a -> Gen [a]
 shuffledSubsetWith set = subsetWith set >>= shuffle . Set.toList
 
-subsetWith :: Ord a => Set a -> Gen (Set a)
+subsetWith :: (Ord a) => Set a -> Gen (Set a)
 subsetWith set = Set.fromList <$> sublistOf (Set.toList set)
 
 parameters :: Gen [M.CredentialParameters]

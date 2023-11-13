@@ -34,7 +34,7 @@ instance Timeable UTCTime where
 instance Time UTCTime where
   timeFromElapsedP = posixSecondsToUTCTime . secondsToNominalDiffTime . realToFrac
 
-instance HasResolution a => Timeable (Fixed a) where
+instance (HasResolution a) => Timeable (Fixed a) where
   timeGetElapsedP value = ElapsedP seconds nanos
     where
       ns :: Nano

@@ -1,6 +1,6 @@
 -- | Stability: experimental
--- A function for decoding a [FIDO Alliance Metadata Service](https://fidoalliance.org/metadata/)
--- BLOB in order to be able to enforce a set of requirements on the authenticator
+-- A function for decoding a [FIDO Alliance Metadata Service](https://fidoalliance.org/metadata/).
+-- BLOB in order to be able to enforce a set of requirements on he uthenticator
 -- used, e.g. to only allow authenticators that have been
 -- [FIDO certified](https://fidoalliance.org/certification/functional-certification/).
 module Crypto.WebAuthn.Metadata

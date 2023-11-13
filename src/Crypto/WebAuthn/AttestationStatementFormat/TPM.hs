@@ -90,7 +90,7 @@ data TPMAlgId = TPMAlgRSA | TPMAlgSHA1 | TPMAlgSHA256 | TPMAlgECC
   deriving (Show, Eq, Generic, ToJSON)
 
 -- | [(spec)](https://trustedcomputinggroup.org/wp-content/uploads/TCG-_Algorithm_Registry_r1p32_pub.pdf)
-toTPMAlgId :: MonadFail m => Word16 -> m TPMAlgId
+toTPMAlgId :: (MonadFail m) => Word16 -> m TPMAlgId
 toTPMAlgId 0x0001 = pure TPMAlgRSA
 toTPMAlgId 0x0004 = pure TPMAlgSHA1
 toTPMAlgId 0x000B = pure TPMAlgSHA256
@@ -98,7 +98,7 @@ toTPMAlgId 0x0023 = pure TPMAlgECC
 toTPMAlgId _ = fail "Unsupported or invalid TPM_ALD_IG"
 
 -- | [(spec)](https://trustedcomputinggroup.org/wp-content/uploads/TCG-_Algorithm_Registry_r1p32_pub.pdf)
-toCurveId :: MonadFail m => Word16 -> m Cose.CoseCurveECDSA
+toCurveId :: (MonadFail m) => Word16 -> m Cose.CoseCurveECDSA
 toCurveId 0x0003 = pure Cose.CoseCurveP256
 toCurveId 0x0004 = pure Cose.CoseCurveP384
 toCurveId 0x0005 = pure Cose.CoseCurveP521
