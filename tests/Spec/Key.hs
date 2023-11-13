@@ -158,7 +158,7 @@ sign signAlg privKey _ = error $ "sign: Combination of signature algorithm " <> 
 toX509 :: Cose.UncheckedPublicKey -> X509.PubKey
 toX509 Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
   let key = case Ed25519.publicKey $ Cose.unEdDSAKeyBytes eddsaX of
-        CryptoFailed err -> error $ "Failed to create a cryptonite Ed25519 public key of a bytestring with size " <> show (BS.length $ Cose.unEdDSAKeyBytes eddsaX) <> ": " <> show err
+        CryptoFailed err -> error $ "Failed to create a crypton Ed25519 public key of a bytestring with size " <> show (BS.length $ Cose.unEdDSAKeyBytes eddsaX) <> ": " <> show err
         CryptoPassed res -> res
    in X509.PubKeyEd25519 key
 toX509 Cose.PublicKeyECDSA {..} =

@@ -15,7 +15,7 @@ let
   src = gitignoreSource ./.;
 
   # Keep this in sync with the `tested-with` field in `webauthn.cabal`
-  expectedGhcVersion = "9.2.4";
+  expectedGhcVersion = "9.4.7";
 
   hpkgs = pkgs.haskellPackages.extend
     (hself: hsuper: {
@@ -33,6 +33,12 @@ let
           (hself.callCabal2nix "webauthn" src { }));
 
       server = hself.callCabal2nix "server" (src + "/server") { };
+
+      jose = hself.callHackageDirect {
+        pkg = "jose";
+        ver = "0.11";
+        sha256 = "sha256-41u6RvbrtZwlccv2d94LsnTygvMXkex/jxWrz7Dngx8=";
+      } {};
     });
 
   deploy = pkgs.writeShellScriptBin "deploy" ''

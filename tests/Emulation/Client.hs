@@ -100,7 +100,7 @@ clientAttestation M.CredentialOptionsRegistration {..} AnnotatedOrigin {..} conf
 -- authenticator. MonadRandom is required for signing using Ed25519 which
 -- requires a random number to be generated during signing. There exists
 -- methods to not rely on a random number, but these have not been implemented
--- in the cryptonite library we rely on.
+-- in the crypton library we rely on.
 clientAssertion ::
   (MonadFail m, Random.MonadRandom m) =>
   M.CredentialOptions 'M.Authentication ->

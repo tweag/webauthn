@@ -1,5 +1,8 @@
-### Next release: 0.8.0.1
+### Next release: 0.9.0.0
 
+* [#182](https://github.com/tweag/webauthn/pull/182) Migrate to the crypton library ecosystem.
+  crypton is a hard fork of cryptonite, which was no longer maintained.
+  Minimum version bounds have been bumped accordingly.
 * Restore GHC 8.8 compatibility.
 
 ### 0.8.0.0
