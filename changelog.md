@@ -1,4 +1,4 @@
-### Next release: 0.9.0.0
+### 0.9.0.0
 
 * [#182](https://github.com/tweag/webauthn/pull/182) Migrate to the crypton library ecosystem.
   crypton is a hard fork of cryptonite, which was no longer maintained.
