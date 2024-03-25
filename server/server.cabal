@@ -9,9 +9,6 @@ executable server
   hs-source-dirs: src
   main-is: Main.hs
   other-modules:
-    Database,
-    MetadataFetch,
-    PendingCeremonies
   ghc-options:
     -Wall
     -Wmissing-export-lists
