@@ -56,6 +56,7 @@ import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import GHC.Generics (Generic)
+import qualified Data.List.NonEmpty as NonEmpty
 
 -- | All the errors that can result from a call to 'verifyRegistrationResponse'
 data RegistrationError
@@ -72,7 +73,7 @@ data RegistrationError
     RegistrationOriginMismatch
       { -- | The origin explicitly passed to the `verifyRegistrationResponse`
         -- response, set by the RP
-        reExpectedOrigin :: M.Origin,
+        reExpectedOrigin :: NonEmpty.NonEmpty M.Origin,
         -- | The origin received from the client as part of the client data
         reReceivedOrigin :: M.Origin
       }
@@ -270,7 +271,7 @@ deriving instance ToJSON RegistrationResult
 -- authenticators/attempted entry creations based on policy.
 verifyRegistrationResponse ::
   -- | The origin of the server
-  M.Origin ->
+  NonEmpty.NonEmpty M.Origin ->
   -- | The relying party id
   M.RpIdHash ->
   -- | The metadata registry, used for verifying the validity of the
@@ -287,7 +288,7 @@ verifyRegistrationResponse ::
   -- Or () in case of a result.
   Validation (NonEmpty RegistrationError) RegistrationResult
 verifyRegistrationResponse
-  rpOrigin
+  origins
   rpIdHash
   registry
   currentTime
@@ -349,9 +350,9 @@ verifyRegistrationResponse
           RegistrationChallengeMismatch corChallenge (M.ccdChallenge c)
 
       -- 9. Verify that the value of C.origin matches the Relying Party's origin.
-      unless (rpOrigin == M.ccdOrigin c) $
+      unless (M.ccdOrigin c `elem` NonEmpty.toList origins) $
         failure $
-          RegistrationOriginMismatch rpOrigin (M.ccdOrigin c)
+          RegistrationOriginMismatch  origins (M.ccdOrigin c)
 
       -- 10. Verify that the value of C.tokenBinding.status matches the state of
       -- Token Binding for the TLS connection over which the assertion was

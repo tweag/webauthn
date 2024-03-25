@@ -38,6 +38,7 @@ import Emulation.Client.Arbitrary ()
 import Spec.Util (predeterminedDateTime)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 import Test.QuickCheck (property)
+import qualified Data.List.NonEmpty as NonEmpty
 
 -- | Custom type to combine the MonadPseudoRandom with the Except monad. We
 -- force the ChaChaDRG to ensure the App type is completely pure, and
@@ -84,7 +85,7 @@ register ao conformance authenticator registry now = do
   let registerResult =
         toEither $
           O.verifyRegistrationResponse
-            (aoOrigin ao)
+            (NonEmpty.singleton $ aoOrigin ao)
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
             registry
             now
@@ -109,7 +110,7 @@ login ao conformance authenticator ce@O.CredentialEntry {..} = do
     . second O.arSignatureCounterResult
     . toEither
     $ O.verifyAuthenticationResponse
-      (aoOrigin ao)
+      (pure (aoOrigin ao))
       (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
       (Just ceUserHandle)
       ce

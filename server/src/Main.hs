@@ -18,7 +18,7 @@ import qualified Data.Aeson.Encode.Pretty as AP
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
-import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.List.NonEmpty (NonEmpty ((:|)), singleton)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -47,6 +47,7 @@ import System.Hourglass (dateCurrent)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
+import qualified Data.List.NonEmpty as NonEmpty
 
 data RegisterBeginReq = RegisterBeginReq
   { accountName :: Text,
@@ -261,7 +262,7 @@ completeRegistration origin rpIdHash db pending registryVar = do
   -- FIXME
   registry <- Scotty.liftAndCatchIO $ readTVarIO registryVar
   now <- Scotty.liftAndCatchIO dateCurrent
-  result <- case WA.verifyRegistrationResponse origin rpIdHash registry now options cred of
+  result <- case WA.verifyRegistrationResponse (NonEmpty.singleton origin) rpIdHash registry now options cred of
     Failure errs@(err :| _) -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete had errors: " <> Text.pack (show errs)
       fail $ show err
@@ -376,7 +377,7 @@ completeLogin origin rpIdHash db pending = do
   -- not be verified.
   let verificationResult =
         WA.verifyAuthenticationResponse
-          origin
+          (singleton origin)
           rpIdHash
           (Just (WA.ceUserHandle entry))
           entry

@@ -36,6 +36,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Validation (Validation)
+import qualified Data.List.NonEmpty as NonEmpty
 
 -- | Errors that may occur during [assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 data AuthenticationError
@@ -78,7 +79,7 @@ data AuthenticationError
     AuthenticationOriginMismatch
       { -- | The origin explicitly passed to the `verifyAuthenticationResponse`
         -- response, set by the RP
-        aeExpectedOrigin :: M.Origin,
+        aeExpectedOrigin :: NonEmpty.NonEmpty M.Origin,
         -- | The origin received from the client as part of the client data
         aeReceivedOrigin :: M.Origin
       }
@@ -161,7 +162,7 @@ newtype AuthenticationResult = AuthenticationResult
 -- enforce Relying Party policy regarding potentially cloned authenticators.
 verifyAuthenticationResponse ::
   -- | The origin of the server
-  M.Origin ->
+  NonEmpty.NonEmpty M.Origin ->
   -- | The hash of the relying party id
   M.RpIdHash ->
   -- | The user handle, in case the user is identified already
@@ -179,7 +180,7 @@ verifyAuthenticationResponse ::
   -- Or in case of success a signature counter result, which should be dealt
   -- with
   Validation (NonEmpty AuthenticationError) AuthenticationResult
-verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options credential = do
+verifyAuthenticationResponse origins rpIdHash midentifiedUser entry options credential = do
   -- 1. Let options be a new PublicKeyCredentialRequestOptions structure
   -- configured to the Relying Party's needs for the ceremony.
   -- NOTE: Implemented by caller
@@ -290,9 +291,9 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
       AuthenticationChallengeMismatch (M.coaChallenge options) (M.ccdChallenge c)
 
   -- 13. Verify that the value of C.origin matches the Relying Party's origin.
-  unless (M.ccdOrigin c == origin) $
+  unless (M.ccdOrigin c `elem` NonEmpty.toList origins) $
     failure $
-      AuthenticationOriginMismatch origin (M.ccdOrigin c)
+      AuthenticationOriginMismatch  origins (M.ccdOrigin c)
 
   -- 14. Verify that the value of C.tokenBinding.status matches the state of
   -- Token Binding for the TLS connection over which the attestation was
