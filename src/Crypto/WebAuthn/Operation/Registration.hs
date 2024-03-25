@@ -43,8 +43,7 @@ import Crypto.WebAuthn.Operation.CredentialEntry
         ceCredentialId,
         cePublicKeyBytes,
         ceSignCounter,
-        ceTransports,
-        ceUserHandle
+        ceTransports
       ),
   )
 import Data.Aeson (ToJSON, Value (String), object, toJSON, (.=))
@@ -442,8 +441,7 @@ verifyRegistrationResponse
         RegistrationResult
           { rrEntry =
               CredentialEntry
-                { ceUserHandle = M.cueId $ M.corUser options,
-                  ceCredentialId = M.cIdentifier credential,
+                { ceCredentialId = M.cIdentifier credential,
                   cePublicKeyBytes = M.PublicKeyBytes $ M.unRaw acdCredentialPublicKeyBytes,
                   ceSignCounter = M.adSignCount authData,
                   ceTransports = M.arrTransports $ M.cResponse credential

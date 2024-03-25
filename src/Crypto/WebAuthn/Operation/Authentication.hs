@@ -1,6 +1,7 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Stability: experimental
 -- This module implements assertion of the received authenticator response.
@@ -25,17 +26,19 @@ where
 import qualified Codec.CBOR.Read as CBOR
 import Codec.Serialise (decode)
 import Control.Exception (Exception)
-import Control.Monad (unless)
+import Control.Monad.Except
+  ( MonadError (throwError),
+    MonadTrans (lift),
+    runExceptT,
+    unless,
+  )
 import qualified Crypto.Hash as Hash
 import qualified Crypto.WebAuthn.Cose.Internal.Verify as Cose
-import Crypto.WebAuthn.Internal.Utils (failure)
 import qualified Crypto.WebAuthn.Model as M
-import Crypto.WebAuthn.Operation.CredentialEntry (CredentialEntry (cePublicKeyBytes, ceSignCounter, ceUserHandle))
+import Crypto.WebAuthn.Operation.CredentialEntry (CredentialEntry (cePublicKeyBytes, ceSignCounter))
 import Data.ByteArray (convert)
 import qualified Data.ByteString.Lazy as LBS
-import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
-import Data.Validation (Validation)
 
 -- | Errors that may occur during [assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 data AuthenticationError
@@ -54,14 +57,6 @@ data AuthenticationError
         -- `verifyAuthenticationResponse` function (retrieved from the
         -- database)
         aeRegisteredUser :: M.UserHandle
-      }
-  | -- | The stored credential does not match the user specified in the
-    -- response
-    AuthenticationCredentialUserHandleMismatch
-      { -- | The `M.UserHandle` of the user who is attempting authentication
-        aeIdentifiedUser :: M.UserHandle,
-        -- | The `M.UserHandle` reported by the authenticator in the response
-        aeAuthenticatorUser :: M.UserHandle
       }
   | -- | No user was identified and the response did not specify a user
     AuthenticationCannotVerifyUserHandle
@@ -148,10 +143,12 @@ data SignatureCounterResult
   deriving (Eq, Show)
 
 -- | A successful result of 'verifyAuthenticationResponse', it should be inspected by the Relying Party to enforce its policy regarding logins.
-newtype AuthenticationResult = AuthenticationResult
+data AuthenticationResult = AuthenticationResult
   { -- | How the signature counter of the credential changed compared to the
     -- existing database entry
-    arSignatureCounterResult :: SignatureCounterResult
+    arSignatureCounterResult :: SignatureCounterResult,
+    -- | The user identified and subsequently authenticated by the ceremony
+    arAuthenticatedUser :: M.UserHandle
   }
   deriving (Eq, Show)
 
@@ -160,26 +157,28 @@ newtype AuthenticationResult = AuthenticationResult
 -- The 'arSignatureCounterResult' field of the result should be inspected to
 -- enforce Relying Party policy regarding potentially cloned authenticators.
 verifyAuthenticationResponse ::
+  (Monad m) =>
   -- | The origin of the server
   M.Origin ->
   -- | The hash of the relying party id
   M.RpIdHash ->
-  -- | The user handle, in case the user is identified already
-  -- TODO: Mention that this would be empty for username-less authentication
+  -- | The currently identified user. Set if the user was identified  before
+  -- the ceremony was initiated, e.g., via a username or cookie.
+  -- This should be set to 'Nothing' if you are implementing a login flow where
+  -- passkeys are automatically filled in by the browser in the login form.
   Maybe M.UserHandle ->
-  -- | The database entry for the credential, as created in the initial
-  -- attestation and optionally updated in subsequent assertions
-  CredentialEntry ->
+  -- | Function to look up the credential in the database. This function is used
+  -- to verify that the credential belongs to the user identified by either the
+  -- 'userIdentified' parameter if it is not 'Nothinbg' or the 'M.araUserHandle'
+  -- field of the response.
+  (M.UserHandle -> M.CredentialId -> m (Maybe CredentialEntry)) ->
   -- | The options that were passed to the get() method
   M.CredentialOptions 'M.Authentication ->
   -- | The credential returned from get()
   M.Credential 'M.Authentication 'True ->
-  -- | Either a non-empty list of validation errors in case of the assertion
-  -- being invalid
-  -- Or in case of success a signature counter result, which should be dealt
-  -- with
-  Validation (NonEmpty AuthenticationError) AuthenticationResult
-verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options credential = do
+  -- | Either an error or the result of the authentication ceremony
+  m (Either AuthenticationError AuthenticationResult)
+verifyAuthenticationResponse origin rpIdHash userIdentified lookupCredential options credential = runExceptT $ do
   -- 1. Let options be a new PublicKeyCredentialRequestOptions structure
   -- configured to the Relying Party's needs for the ceremony.
   -- NOTE: Implemented by caller
@@ -189,6 +188,7 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- registered.
   -- TODO: The transports property is currently not propagated by webauthn-json.
   -- see: <https://github.com/github/webauthn-json/pull/44>
+  -- NOTE(arianvp): In webauthn L3 the suggestion to store the transports has been removed.
 
   -- 2. Call navigator.credentials.get() and pass options as the publicKey
   -- option. Let credential be the result of the successfully resolved promise.
@@ -215,55 +215,49 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   let allowCredentials = M.coaAllowCredentials options
   unless
     (null allowCredentials || M.cIdentifier credential `elem` map M.cdId allowCredentials)
-    . failure
+    . throwError
     $ AuthenticationCredentialDisallowed allowCredentials credential
 
   -- 6. Identify the user being authenticated and verify that this user is the
   -- owner of the public key credential source credentialSource identified by
   -- credential.id:
-  --
-  -- -> If the user was identified before the authentication ceremony was
-  -- initiated, e.g., via a username or cookie, verify that the identified
-  -- user is the owner of credentialSource. If response.userHandle is present,
-  -- let userHandle be its value. Verify that userHandle also maps to the same
-  -- user.
-  --
-  -- -> If the user was not identified before the authentication ceremony was
-  -- initiated, verify that response.userHandle is present, and that the user
-  -- identified by this value is the owner of credentialSource.
-  let owner = ceUserHandle entry
-
-  -- According to the [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialuserentity-id)
-  -- The user handle MUST NOT be empty, though it MAY be null.
-  -- For clarification see https://github.com/w3c/webauthn/issues/1722
-  -- However, Safari returns an empty string instead of null, see the bug report:
-  -- https://bugs.webkit.org/show_bug.cgi?id=239737
-  let mUserHandler = case M.araUserHandle response of
-        Just (M.UserHandle "") -> Nothing
-        userHandle -> userHandle
-
-  case (midentifiedUser, mUserHandler) of
-    (Just identifiedUser, Just userHandle)
-      | identifiedUser /= owner ->
-          failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
-      | userHandle /= owner ->
-          failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
-      | otherwise -> pure ()
-    (Just identifiedUser, Nothing)
-      | identifiedUser /= owner ->
-          failure $ AuthenticationIdentifiedUserHandleMismatch identifiedUser owner
-      | otherwise -> pure ()
-    (Nothing, Just userHandle)
-      | userHandle /= owner ->
-          failure $ AuthenticationCredentialUserHandleMismatch userHandle owner
-      | otherwise -> pure ()
-    (Nothing, Nothing) ->
-      failure AuthenticationCannotVerifyUserHandle
+  (credentialRecord, userHandle) <- case userIdentified of
+    -- NOTE(arianvp):  There is some duplication in this code. But writing it
+    -- word for word as per the spec
+    -- If the user was identified before the authentication ceremony was
+    -- initiated, e.g., via a username or cookie,
+    Just identifiedUser -> do
+      -- verify that the identified user is the owner of credentialSource.
+      mCredentialRecord <- lift $ lookupCredential identifiedUser (M.cIdentifier credential)
+      case mCredentialRecord of
+        Nothing -> throwError $ AuthenticationCredentialDisallowed allowCredentials credential
+        Just credentialRecord ->
+          --  If response.userHandle is present, let userHandle be its value.
+          --  Verify that userHandle also maps to the same user.
+          case M.araUserHandle response of
+            Nothing -> pure (credentialRecord, identifiedUser)
+            Just userHandle -> do
+              unless (userHandle == identifiedUser) $
+                throwError $
+                  AuthenticationIdentifiedUserHandleMismatch userHandle identifiedUser
+              pure (credentialRecord, identifiedUser)
+    -- If the user was not identified before the authentication ceremony was initiated,
+    Nothing ->
+      -- verify that response.userHandle is present,
+      case M.araUserHandle response of
+        Nothing -> throwError AuthenticationCannotVerifyUserHandle
+        -- and that the user identified by this value is the owner of credentialSource.
+        Just userHandle -> do
+          -- verify that the identified user is the owner of credentialSource.
+          mCredentialRecord <- lift $ lookupCredential userHandle (M.cIdentifier credential)
+          case mCredentialRecord of
+            Nothing -> throwError $ AuthenticationCredentialDisallowed allowCredentials credential
+            Just credentialRecord -> pure (credentialRecord, userHandle)
 
   -- 7. Using credential.id (or credential.rawId, if base64url encoding is
   -- inappropriate for your use case), look up the corresponding credential
   -- public key and let credentialPublicKey be that credential public key.
-  -- NOTE: Done by the caller, passed with entry
+  let credentialPublicKey = cePublicKeyBytes credentialRecord
 
   -- 8. Let cData, authData and sig denote the value of response’s
   -- clientDataJSON, authenticatorData, and signature respectively.
@@ -284,46 +278,44 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- 11. Verify that the value of C.type is the string webauthn.get.
   -- NOTE: Done as part of decoding
 
-  -- 12. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
+  -- 12. Verify that the value of C.challenge equals the base64url encoding of
+  -- options.challenge.
   unless (M.ccdChallenge c == M.coaChallenge options) $
-    failure $
+    throwError $
       AuthenticationChallengeMismatch (M.coaChallenge options) (M.ccdChallenge c)
 
-  -- 13. Verify that the value of C.origin matches the Relying Party's origin.
+  -- 13. Verify that the value of C.origin is an origin expected by the
+  -- Relying Party. See § 13.4.9 Validating the origin of a credential for
+  -- guidance.
   unless (M.ccdOrigin c == origin) $
-    failure $
+    throwError $
       AuthenticationOriginMismatch origin (M.ccdOrigin c)
 
-  -- 14. Verify that the value of C.tokenBinding.status matches the state of
-  -- Token Binding for the TLS connection over which the attestation was
-  -- obtained. If Token Binding was used on that TLS connection, also verify
-  -- that C.tokenBinding.id matches the base64url encoding of the Token
-  -- Binding ID for the connection.
-  -- TODO: We do not implement TokenBinding, see the documentation of
-  -- `CollectedClientData` for more information.
+  -- 14. Token binding. NOTE: not implemented. Is also removed in Webauthn L3
 
   -- 15. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID
   -- expected by the Relying Party.
   -- Note: If using the appid extension, this step needs some special logic.
   -- See § 10.1 FIDO AppID Extension (appid) for details.
   unless (M.adRpIdHash authData == rpIdHash) $
-    failure $
+    throwError $
       AuthenticationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
-  -- 16. Verify that the User Present bit of the flags in authData is set.
+  -- 16. Verify that the UP bit of the flags in authData is set.
   unless (M.adfUserPresent (M.adFlags authData)) $
-    failure AuthenticationUserNotPresent
+    throwError AuthenticationUserNotPresent
 
-  -- 17. If user verification is required for this assertion, verify that the
-  -- User Verified bit of the flags in authData is set.
-  -- NOTE: The spec is interpreted to mean that the userVerification option
-  -- being set to "required" is what is meant by whether user verification is
-  -- required
+  -- 17. Determine whether user verification is required for this assertion.
+  -- User verification SHOULD be required if, and only if,
+  -- options.userVerification is set to required.
+  -- If user verification was determined to be required, verify that the UV
+  -- bit of the flags in authData is set. Otherwise, ignore the value of the
+  -- UV flag.
   case ( M.coaUserVerification options,
          M.adfUserVerified (M.adFlags authData)
        ) of
     (M.UserVerificationRequirementRequired, True) -> pure ()
-    (M.UserVerificationRequirementRequired, False) -> failure AuthenticationUserNotVerified
+    (M.UserVerificationRequirementRequired, False) -> throwError AuthenticationUserNotVerified
     (M.UserVerificationRequirementPreferred, True) -> pure ()
     (M.UserVerificationRequirementPreferred, False) -> pure ()
     (M.UserVerificationRequirementDiscouraged, True) -> pure ()
@@ -347,14 +339,14 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
 
   -- 20. Using credentialPublicKey, verify that sig is a valid signature over
   -- the binary concatenation of authData and hash.
-  let pubKeyBytes = LBS.fromStrict $ M.unPublicKeyBytes $ cePublicKeyBytes entry
+  let pubKeyBytes = LBS.fromStrict $ M.unPublicKeyBytes credentialPublicKey
       message = Cose.Message $ rawData <> convert (M.unClientDataHash hash)
   case CBOR.deserialiseFromBytes decode pubKeyBytes of
-    Left err -> failure $ AuthenticationSignatureDecodingError err
+    Left err -> throwError $ AuthenticationSignatureDecodingError err
     Right (_, coseKey) ->
       case Cose.verify coseKey message (Cose.Signature $ M.unAssertionSignature sig) of
         Right () -> pure ()
-        Left err -> failure $ AuthenticationSignatureInvalid err
+        Left err -> throwError $ AuthenticationSignatureInvalid err
 
   -- 21. Let storedSignCount be the stored signature counter value associated
   -- with credential.id. If authData.signCount is nonzero or storedSignCount
@@ -369,7 +361,7 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   --      into their risk scoring. Whether the Relying Party updates
   --      storedSignCount in this case, or not, or fails the authentication
   --      ceremony or not, is Relying Party-specific.
-  signCountResult <- case (M.adSignCount authData, ceSignCounter entry) of
+  signCountResult <- case (M.adSignCount authData, ceSignCounter credentialRecord) of
     (0, 0) -> pure SignatureCounterZero
     (returned, stored)
       | returned > stored -> pure $ SignatureCounterUpdated returned
@@ -380,5 +372,6 @@ verifyAuthenticationResponse origin rpIdHash midentifiedUser entry options crede
   -- authentication ceremony.
   pure $
     AuthenticationResult
-      { arSignatureCounterResult = signCountResult
+      { arSignatureCounterResult = signCountResult,
+        arAuthenticatedUser = userHandle
       }

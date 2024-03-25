@@ -11,9 +11,9 @@ import Control.Monad.Except (ExceptT (ExceptT), MonadError, runExceptT, throwErr
 import Control.Monad.Trans (MonadTrans (lift))
 import Crypto.Hash (hash)
 import qualified Crypto.Random as Random
+import qualified Crypto.WebAuthn as M
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Meta
-import qualified Crypto.WebAuthn.Model as M
 import qualified Crypto.WebAuthn.Operation as O
 import Data.Bifunctor (Bifunctor (second))
 import Data.Hourglass (DateTime)
@@ -65,7 +65,7 @@ register ::
   Authenticator ->
   Meta.MetadataServiceRegistry ->
   DateTime ->
-  m (Either (NE.NonEmpty O.RegistrationError) O.RegistrationResult, Authenticator, M.CredentialOptions 'M.Registration)
+  m (Either (NE.NonEmpty O.RegistrationError) O.RegistrationResult, Authenticator, M.CredentialOptions 'M.Registration, M.UserHandle)
 register ao conformance authenticator registry now = do
   -- Generate new random input
   assertionChallenge <- M.generateChallenge
@@ -90,31 +90,30 @@ register ao conformance authenticator registry now = do
             now
             options
             mPkcCreate
-  pure (registerResult, authenticator, options)
+  pure (registerResult, authenticator, options, userId)
 
 login ::
   (Random.MonadRandom m, MonadFail m) =>
   AnnotatedOrigin ->
   UserAgentConformance ->
   Authenticator ->
+  Maybe M.UserHandle ->
+  (M.UserHandle -> M.CredentialId -> m (Maybe O.CredentialEntry)) ->
   O.CredentialEntry ->
-  m (Either (NE.NonEmpty O.AuthenticationError) O.SignatureCounterResult)
-login ao conformance authenticator ce@O.CredentialEntry {..} = do
+  m (Either O.AuthenticationError O.AuthenticationResult)
+login ao conformance authenticator identifiedUser lookupCredential O.CredentialEntry {..} = do
   attestationChallenge <- M.generateChallenge
   let options = defaultCog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
   -- authenticator should now store the created credential
   (mPkcGet, _) <- clientAssertion options ao conformance authenticator
-  pure
-    . second O.arSignatureCounterResult
-    . toEither
-    $ O.verifyAuthenticationResponse
-      (aoOrigin ao)
-      (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
-      (Just ceUserHandle)
-      ce
-      options
-      mPkcGet
+  O.verifyAuthenticationResponse
+    (aoOrigin ao)
+    (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
+    identifiedUser
+    lookupCredential
+    options
+    mPkcGet
 
 spec :: SpecWith ()
 spec =
@@ -131,29 +130,35 @@ spec =
         -- We are not currently interested in client or authenticator fails, we
         -- only wish to test our relying party implementation and are thus only
         -- interested in its errors.
-        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry predeterminedDateTime)
+        let Right (registerResult, authenticator', options, registerUserHandle) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry predeterminedDateTime)
         -- Since we only do None attestation, we only care about the resulting entry
         let registerResult' = second O.rrEntry registerResult
-        registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options
+        registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options registerUserHandle
+
         -- Only if attestation succeeded can we continue with assertion
         case registerResult' of
           Right credentialEntry -> do
-            let Right loginResult = runApp (seed + 1) (login annotatedOrigin userAgentConformance authenticator' credentialEntry)
-            loginResult `shouldSatisfy` validAssertionResult authenticator userAgentConformance
+            let lookupCredential userHandle credentialId
+                  | userHandle == registerUserHandle && credentialId == M.ceCredentialId credentialEntry = pure $ Just credentialEntry
+                  | otherwise = pure Nothing
+            let Right loginResult = runApp (seed + 1) (login annotatedOrigin userAgentConformance authenticator' (Just registerUserHandle) lookupCredential credentialEntry)
+            loginResult `shouldSatisfy` validAssertionResult authenticator registerUserHandle userAgentConformance
+            let Right discoverResult = runApp (seed + 1) (login annotatedOrigin userAgentConformance authenticator' Nothing lookupCredential credentialEntry)
+            discoverResult `shouldSatisfy` validAssertionResult authenticator registerUserHandle userAgentConformance
           _ -> pure ()
 
 -- | Validates the result of attestation. Ensures that the proper errors are
 -- resulted in if the authenticator exhibits nonconforming behaviour, and
 -- checks if the correct result was given if the authenticator does not exhibit
 -- any nonconforming behaviour.
-validAttestationResult :: Authenticator -> UserAgentConformance -> M.CredentialOptions 'M.Registration -> Either (NE.NonEmpty O.RegistrationError) O.CredentialEntry -> Bool
+validAttestationResult :: Authenticator -> UserAgentConformance -> M.CredentialOptions 'M.Registration -> M.UserHandle -> Either (NE.NonEmpty O.RegistrationError) O.CredentialEntry -> Bool
 -- A valid result can only happen if we exhibited no non-conforming behaviour
 -- The userHandle must be the one specified by the options
-validAttestationResult _ _ M.CredentialOptionsRegistration {..} (Right O.CredentialEntry {..}) = ceUserHandle == M.cueId corUser
+validAttestationResult _ _ M.CredentialOptionsRegistration {..} userHandle (Right O.CredentialEntry {..}) = userHandle == M.cueId corUser
 -- If we did result in errors, we want every error to be validated by some
 -- configuration issue (NOTE: We cannot currently exhibit non conforming
 -- behaviour during attestation)
-validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = all isValidated errors
+validAttestationResult AuthenticatorNone {..} uaConformance _ _ (Left errors) = all isValidated errors
   where
     isValidated :: O.RegistrationError -> Bool
     isValidated (O.RegistrationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
@@ -170,24 +175,25 @@ validAttestationResult AuthenticatorNone {..} uaConformance _ (Left errors) = al
 -- resulted in if the authenticator exhibits nonconforming behaviour, and
 -- checks if the correct result was given if the authenticator does not exhibit
 -- any nonconforming behaviour.
-validAssertionResult :: Authenticator -> UserAgentConformance -> Either (NE.NonEmpty O.AuthenticationError) O.SignatureCounterResult -> Bool
+validAssertionResult :: Authenticator -> M.UserHandle -> UserAgentConformance -> Either O.AuthenticationError O.AuthenticationResult -> Bool
 -- We can only result in a 0 signature counter if the authenticator doesn't
 -- have a counter and is either conforming or only has a static counter
-validAssertionResult AuthenticatorNone {..} _ (Right O.SignatureCounterZero) =
-  aSignatureCounter == Unsupported && (Set.null aConformance || aConformance == Set.singleton StaticCounter)
+validAssertionResult AuthenticatorNone {..} expectedUser _ (Right (O.AuthenticationResult O.SignatureCounterZero authenticatedUser)) =
+  authenticatedUser == expectedUser && aSignatureCounter == Unsupported && (Set.null aConformance || aConformance == Set.singleton StaticCounter)
 -- A valid response must only happen if we have no non-confirming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right (O.SignatureCounterUpdated _)) = Set.null aConformance
+validAssertionResult AuthenticatorNone {..} expectedUser _ (Right (O.AuthenticationResult (O.SignatureCounterUpdated _) authetnicatedUser)) =
+  authetnicatedUser == expectedUser && Set.null aConformance
 -- A potentially cloned counter must imply that we only exhibited the static
 -- counter non-conforming behaviour
-validAssertionResult AuthenticatorNone {..} _ (Right O.SignatureCounterPotentiallyCloned) = Set.singleton StaticCounter == aConformance
+validAssertionResult AuthenticatorNone {..} expectedUser _ (Right (O.AuthenticationResult O.SignatureCounterPotentiallyCloned authenticatedUser)) = 
+  authenticatedUser == expectedUser && Set.singleton StaticCounter == aConformance
 -- If we did result in errors, we want every error to be validated by some
 -- non-conforming behaviour or configuration issue
-validAssertionResult AuthenticatorNone {..} uaConformance (Left errors) = all isValidated errors
+validAssertionResult AuthenticatorNone {..} expectedUser uaConformance (Left error) = isValidated error
   where
     isValidated :: O.AuthenticationError -> Bool
     isValidated (O.AuthenticationCredentialDisallowed _ _) = False
     isValidated (O.AuthenticationIdentifiedUserHandleMismatch _ _) = False
-    isValidated (O.AuthenticationCredentialUserHandleMismatch _ _) = False
     isValidated O.AuthenticationCannotVerifyUserHandle = False
     isValidated (O.AuthenticationChallengeMismatch _ _) = RandomChallenge `elem` uaConformance
     isValidated (O.AuthenticationOriginMismatch _ _) = False

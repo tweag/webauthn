@@ -9,6 +9,7 @@ module Main
   )
 where
 
+import Control.Monad.Identity (Identity (Identity, runIdentity))
 import Crypto.Hash (hash)
 import qualified Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Crypto.WebAuthn.Encoding.WebAuthnJson as WJ
@@ -140,19 +141,18 @@ main = Hspec.hspec $ do
               "tests/responses/assertion/01-none.json"
         let M.Credential {M.cResponse = cResponse} = loginReq
             signInResult =
-              toEither $
-                O.verifyAuthenticationResponse
-                  (M.Origin "http://localhost:8080")
-                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
-                  (Just (M.UserHandle "UserId"))
-                  credentialEntry
-                  (defaultPublicKeyCredentialRequestOptions loginReq)
-                  M.Credential
-                    { M.cIdentifier = O.ceCredentialId credentialEntry,
-                      M.cResponse = cResponse,
-                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
-                    }
-        signInResult `shouldSatisfy` isRight
+              O.verifyAuthenticationResponse
+                (M.Origin "http://localhost:8080")
+                (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
+                (Just (M.UserHandle "UserId"))
+                (\_userHandle _credentialId -> Identity $ Just credentialEntry)
+                (defaultPublicKeyCredentialRequestOptions loginReq)
+                M.Credential
+                  { M.cIdentifier = O.ceCredentialId credentialEntry,
+                    M.cResponse = cResponse,
+                    M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
+                  }
+        signInResult `shouldSatisfy` (isRight . runIdentity)
     it "tests whether the fixed register and login responses are matching with empty user handle" $
       do
         pkCredential <-
@@ -178,19 +178,18 @@ main = Hspec.hspec $ do
               "tests/responses/assertion/01-none-empty-user-handle.json"
         let M.Credential {M.cResponse = cResponse} = loginReq
             signInResult =
-              toEither $
-                O.verifyAuthenticationResponse
-                  (M.Origin "http://localhost:8080")
-                  (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
-                  (Just (M.UserHandle "UserId"))
-                  credentialEntry
-                  (defaultPublicKeyCredentialRequestOptions loginReq)
-                  M.Credential
-                    { M.cIdentifier = O.ceCredentialId credentialEntry,
-                      M.cResponse = cResponse,
-                      M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
-                    }
-        signInResult `shouldSatisfy` isRight
+              O.verifyAuthenticationResponse
+                (M.Origin "http://localhost:8080")
+                (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
+                Nothing
+                (\_userHandle _credentialId -> Identity $ Just credentialEntry)
+                (defaultPublicKeyCredentialRequestOptions loginReq)
+                M.Credential
+                  { M.cIdentifier = O.ceCredentialId credentialEntry,
+                    M.cResponse = cResponse,
+                    M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
+                  }
+        signInResult `shouldSatisfy` (isRight . runIdentity)
   describe "Packed register" $ do
     it "tests whether the fixed packed register has a valid attestation" $
       registerTestFromFile
@@ -373,7 +372,6 @@ isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration 
     expectedCredentialEntry =
       O.CredentialEntry
         { ceCredentialId = cIdentifier,
-          ceUserHandle = M.cueId corUser,
           cePublicKeyBytes =
             M.PublicKeyBytes
               . M.unRaw

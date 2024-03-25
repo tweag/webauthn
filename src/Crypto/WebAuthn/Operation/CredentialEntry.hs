@@ -16,7 +16,6 @@ import GHC.Generics (Generic)
 -- store for each credential that's registered to a user
 data CredentialEntry = CredentialEntry
   { ceCredentialId :: M.CredentialId,
-    ceUserHandle :: M.UserHandle,
     cePublicKeyBytes :: M.PublicKeyBytes,
     ceSignCounter :: M.SignatureCounter,
     ceTransports :: [M.AuthenticatorTransport]
