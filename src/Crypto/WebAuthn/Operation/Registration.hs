@@ -370,9 +370,11 @@ verifyRegistrationResponse
           RegistrationChallengeMismatch corChallenge (M.ccdChallenge c)
 
       -- 9. Verify that the value of C.origin matches the Relying Party's origin.
+      -- NOTE: We follow the L3 draft of the spec here, which allows for multiple origins.
+      -- https://www.w3.org/TR/webauthn-3/#sctn-validating-origin
       unless (M.ccdOrigin c `elem` NonEmpty.toList origins) $
         failure $
-          RegistrationOriginMismatch  origins (M.ccdOrigin c)
+          RegistrationOriginMismatch origins (M.ccdOrigin c)
 
       -- 10. Verify that the value of C.tokenBinding.status matches the state of
       -- Token Binding for the TLS connection over which the assertion was

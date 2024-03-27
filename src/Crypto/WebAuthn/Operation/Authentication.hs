@@ -164,7 +164,7 @@ newtype AuthenticationResult = AuthenticationResult
 --
 -- Though this library implements the WebAuthn L2 spec, for origin validation we
 -- follow the L3 draft. This is because allowing multiple origins is often
--- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin) 
+-- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/tr/webauthn-3/#sctn-validating-origin) 
 -- more details.
 -- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
 --
@@ -312,9 +312,11 @@ verifyAuthenticationResponse origins rpIdHash midentifiedUser entry options cred
       AuthenticationChallengeMismatch (M.coaChallenge options) (M.ccdChallenge c)
 
   -- 13. Verify that the value of C.origin matches the Relying Party's origin.
+  -- NOTE: We follow the L3 draft of the spec here, which allows for multiple origins.
+  -- https://www.w3.org/TR/webauthn-3/#sctn-validating-origin
   unless (M.ccdOrigin c `elem` NonEmpty.toList origins) $
     failure $
-      AuthenticationOriginMismatch  origins (M.ccdOrigin c)
+      AuthenticationOriginMismatch origins (M.ccdOrigin c)
 
   -- 14. Verify that the value of C.tokenBinding.status matches the state of
   -- Token Binding for the TLS connection over which the attestation was
