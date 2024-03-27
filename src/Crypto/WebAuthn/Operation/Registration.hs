@@ -265,12 +265,32 @@ data RegistrationResult = RegistrationResult
 deriving instance ToJSON RegistrationResult
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
--- The resulting 'rrEntry' of this call should be stored in a database by the
--- Relying Party. The 'rrAttestationStatement' contains the result of the
--- attempted attestation, allowing the Relying Party to reject certain
--- authenticators/attempted entry creations based on policy.
+-- Verifies a 'M.Credential' response for a [registration ceremony](https://www.w3.org/TR/webauthn-2/#registration-ceremony). 
+--
+-- The 'arSignatureCounterResult' field of the result should be inspected to
+-- enforce Relying Party policy regarding potentially cloned authenticators.
+--
+-- Though this library implements the WebAuthn L2 spec, for origin validation we
+-- follow the L3 draft. This is because allowing multiple origins is often
+-- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin) 
+-- more details.
+-- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
+--
+-- > verifyRegistrationResponse (NonEmpty.singleton (M.Origin "https://example.org")) ...
+--
+-- In the more complex case, multiple origins are allowed:
+--
+-- > verifyRegistrationResponse (M.Origin <$> "https://example.org" :| ["https://signin.example.org"]) ...
+--
+-- One might also allow native apps to authenticate:
+--
+-- > verifyRegistrationResponse (M.Origin <$> "https://example.org" :| ["ios:bundle-id:org.example.ourapp"]) ...
+--
+-- See Apple's documentation on [associated domains](https://developer.apple.com/documentation/authenticationservices/public-private_key_authentication/supporting_passkeys/)
+-- and Google's documentation on [Digital Asset Links](https://developers.google.com/identity/passkeys/developer-guides) for more information on how to link app
+-- origins to your Relying Party ID.
 verifyRegistrationResponse ::
-  -- | The origin of the server
+  -- | The list of allowed origins for the ceremony
   NonEmpty.NonEmpty M.Origin ->
   -- | The relying party id
   M.RpIdHash ->

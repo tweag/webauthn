@@ -158,10 +158,31 @@ newtype AuthenticationResult = AuthenticationResult
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 -- Verifies a 'M.Credential' response for an [authentication ceremony](https://www.w3.org/TR/webauthn-2/#authentication).
+--
 -- The 'arSignatureCounterResult' field of the result should be inspected to
 -- enforce Relying Party policy regarding potentially cloned authenticators.
+--
+-- Though this library implements the WebAuthn L2 spec, for origin validation we
+-- follow the L3 draft. This is because allowing multiple origins is often
+-- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin) 
+-- more details.
+-- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
+--
+-- > verifyAuthenticationResponse (NonEmpty.singleton (M.Origin "https://example.org")) ...
+--
+-- In the more complex case, multiple origins are allowed:
+--
+-- > verifyAuthenticationResponse (M.Origin <$> "https://example.org" :| ["https://signin.example.org"]) ...
+--
+-- One might also allow native apps to authenticate:
+--
+-- > verifyAuthenticationResponse (M.Origin <$> "https://example.org" :| ["ios:bundle-id:org.example.ourapp"]) ...
+--
+-- See Apple's documentation on [associated domains](https://developer.apple.com/documentation/authenticationservices/public-private_key_authentication/supporting_passkeys/)
+-- and Google's documentation on [Digital Asset Links](https://developers.google.com/identity/passkeys/developer-guides) for more information on how to link app
+-- origins to your Relying Party ID.
 verifyAuthenticationResponse ::
-  -- | The origin of the server
+  -- | The list of allowed origins for the ceremony
   NonEmpty.NonEmpty M.Origin ->
   -- | The hash of the relying party id
   M.RpIdHash ->
