@@ -1,3 +1,13 @@
+### 0.10.0.0
+
+* [#183](https://github.com/tweag/webauthn/pull/183) Pass a list of allowed origins instead of a single origin.
+  This is a breaking change needed for allowing native apps to use WebAuthn. It is also needed for Relying Parties
+  that want to allow multiple subdomains to access WebAuthn credentials.
+  Unlike the rest of this library, which strictly follows the L2 version of this spec, this feature is defined
+  in the [L3 draft](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin). However because WebAuthn on
+  Native Apps is widely deployed through the push of Passkeys we decided to include this feature in this library early.
+
+
 ### 0.9.0.0
 
 * [#182](https://github.com/tweag/webauthn/pull/182) Migrate to the crypton library ecosystem.
