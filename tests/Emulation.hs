@@ -37,7 +37,7 @@ import Emulation.Client
 import Emulation.Client.Arbitrary ()
 import Spec.Util (predeterminedDateTime)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
-import Test.QuickCheck (property)
+import Test.QuickCheck (property, (==>))
 
 -- | Custom type to combine the MonadPseudoRandom with the Except monad. We
 -- force the ChaChaDRG to ensure the App type is completely pure, and
@@ -61,12 +61,13 @@ runApp seed (App except) =
 register ::
   (Random.MonadRandom m, MonadFail m) =>
   AnnotatedOrigin ->
+  NE.NonEmpty M.Origin ->
   UserAgentConformance ->
   Authenticator ->
   Meta.MetadataServiceRegistry ->
   DateTime ->
   m (Either (NE.NonEmpty O.RegistrationError) O.RegistrationResult, Authenticator, M.CredentialOptions 'M.Registration)
-register ao conformance authenticator registry now = do
+register ao allowedOrigins conformance authenticator registry now = do
   -- Generate new random input
   assertionChallenge <- M.generateChallenge
   userId <- M.generateUserHandle
@@ -84,7 +85,7 @@ register ao conformance authenticator registry now = do
   let registerResult =
         toEither $
           O.verifyRegistrationResponse
-            (NE.singleton $ aoOrigin ao)
+            allowedOrigins
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
             registry
             now
@@ -95,11 +96,12 @@ register ao conformance authenticator registry now = do
 login ::
   (Random.MonadRandom m, MonadFail m) =>
   AnnotatedOrigin ->
+  NE.NonEmpty M.Origin ->
   UserAgentConformance ->
   Authenticator ->
   O.CredentialEntry ->
   m (Either (NE.NonEmpty O.AuthenticationError) O.SignatureCounterResult)
-login ao conformance authenticator ce@O.CredentialEntry {..} = do
+login ao allowedOrigins conformance authenticator ce@O.CredentialEntry {..} = do
   attestationChallenge <- M.generateChallenge
   let options = defaultCog attestationChallenge
   -- Perform client assertion emulation with the same authenticator, this
@@ -109,7 +111,7 @@ login ao conformance authenticator ce@O.CredentialEntry {..} = do
     . second O.arSignatureCounterResult
     . toEither
     $ O.verifyAuthenticationResponse
-      (NE.singleton (aoOrigin ao))
+      allowedOrigins
       (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
       (Just ceUserHandle)
       ce
@@ -118,27 +120,60 @@ login ao conformance authenticator ce@O.CredentialEntry {..} = do
 
 spec :: SpecWith ()
 spec =
-  describe "None" $
+  describe "None" $ do
+    it "rejects unknown origin during registration" $  do
+      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 0 && not (origin' `elem` allowedOrigins') ==> do
+        let origin = M.Origin origin'
+        let allowedOrigins = M.Origin <$> NE.fromList allowedOrigins'
+        let annotatedOrigin = AnnotatedOrigin { aoRpId = M.RpId "localhost", aoOrigin = origin }
+        let registry = mempty
+        let userAgentConformance = mempty
+        let Right (registerResult, _, _) = runApp seed (register annotatedOrigin allowedOrigins userAgentConformance authenticator registry predeterminedDateTime)
+        registerResult `shouldSatisfy` \case
+          Left errors -> any (\case O.RegistrationOriginMismatch _ _ -> True; _ -> False) errors
+          Right _ -> False
+    it "rejects unknown origin during login" $ do
+      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 1  ==> do
+        let allowedOrigins = M.Origin <$> NE.fromList allowedOrigins'
+        let origin = NE.head allowedOrigins
+        let wrongOrigin = M.Origin origin'
+        let annotatedOrigin = AnnotatedOrigin { aoRpId = M.RpId "localhost", aoOrigin = origin }
+        let wrongAnnotatedOrigin = AnnotatedOrigin { aoRpId = M.RpId "localhost", aoOrigin = wrongOrigin }
+        let registry = mempty
+        let userAgentConformance = mempty
+        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin allowedOrigins userAgentConformance authenticator registry predeterminedDateTime)
+        let registerResult' = second O.rrEntry registerResult
+        registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options
+        case registerResult' of
+          Right credentialEntry -> do
+            let Right loginResult = runApp (seed + 1) (login wrongAnnotatedOrigin allowedOrigins userAgentConformance authenticator' credentialEntry)
+            loginResult `shouldSatisfy` \case
+              Left errors -> any (\case O.AuthenticationOriginMismatch _ _ -> True; _ -> False) errors
+              Right _ -> False
+          _ -> pure ()
+
     it "succeeds" $
-      property $ \seed authenticator userAgentConformance -> do
+      property $ \seed authenticator userAgentConformance  allowedOrigins' -> length allowedOrigins' > 1 ==> do
+        let allowedOrigins = M.Origin <$> NE.fromList allowedOrigins'
         let annotatedOrigin =
               AnnotatedOrigin
                 { aoRpId = M.RpId "localhost",
-                  aoOrigin = M.Origin "https://localhost:8080"
+                  aoOrigin = NE.head allowedOrigins
                 }
+        
         -- Since our emulator only supports None attestation the registry can be left empty.
         let registry = mempty
         -- We are not currently interested in client or authenticator fails, we
         -- only wish to test our relying party implementation and are thus only
         -- interested in its errors.
-        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin userAgentConformance authenticator registry predeterminedDateTime)
+        let Right (registerResult, authenticator', options) = runApp seed (register annotatedOrigin allowedOrigins userAgentConformance authenticator registry predeterminedDateTime)
         -- Since we only do None attestation, we only care about the resulting entry
         let registerResult' = second O.rrEntry registerResult
         registerResult' `shouldSatisfy` validAttestationResult authenticator userAgentConformance options
         -- Only if attestation succeeded can we continue with assertion
         case registerResult' of
           Right credentialEntry -> do
-            let Right loginResult = runApp (seed + 1) (login annotatedOrigin userAgentConformance authenticator' credentialEntry)
+            let Right loginResult = runApp (seed + 1) (login annotatedOrigin allowedOrigins userAgentConformance authenticator' credentialEntry)
             loginResult `shouldSatisfy` validAssertionResult authenticator userAgentConformance
           _ -> pure ()
 
