@@ -18,7 +18,7 @@ import qualified Data.Aeson.Encode.Pretty as AP
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
-import Data.List.NonEmpty (NonEmpty ((:|)), singleton)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
