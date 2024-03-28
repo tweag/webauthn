@@ -109,7 +109,7 @@ login ao conformance authenticator ce@O.CredentialEntry {..} = do
     . second O.arSignatureCounterResult
     . toEither
     $ O.verifyAuthenticationResponse
-      (pure (aoOrigin ao))
+      (NE.singleton (aoOrigin ao))
       (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ aoRpId ao)
       (Just ceUserHandle)
       ce
