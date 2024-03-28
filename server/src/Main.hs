@@ -47,7 +47,7 @@ import System.Hourglass (dateCurrent)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
-import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.List.NonEmpty as NE
 
 data RegisterBeginReq = RegisterBeginReq
   { accountName :: Text,
@@ -262,7 +262,7 @@ completeRegistration origin rpIdHash db pending registryVar = do
   -- FIXME
   registry <- Scotty.liftAndCatchIO $ readTVarIO registryVar
   now <- Scotty.liftAndCatchIO dateCurrent
-  result <- case WA.verifyRegistrationResponse (NonEmpty.singleton origin) rpIdHash registry now options cred of
+  result <- case WA.verifyRegistrationResponse (NE.singleton origin) rpIdHash registry now options cred of
     Failure errs@(err :| _) -> do
       Scotty.liftAndCatchIO $ TIO.putStrLn $ "Register complete had errors: " <> Text.pack (show errs)
       fail $ show err

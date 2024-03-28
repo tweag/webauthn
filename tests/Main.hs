@@ -27,7 +27,6 @@ import qualified Data.Hourglass as HG
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import Data.These (These (That, These, This))
@@ -81,7 +80,7 @@ registerTestFromFile fp origin rpId verifiable service now = do
   let registerResult =
         toEither $
           O.verifyRegistrationResponse
-            (NonEmpty.singleton origin)
+            (NE.singleton origin)
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ rpId)
             service
             now
@@ -126,7 +125,7 @@ main = Hspec.hspec $ do
             registerResult =
               toEither $
                 O.verifyRegistrationResponse
-                  (NonEmpty.singleton $ M.Origin "http://localhost:8080")
+                  (NE.singleton $ M.Origin "http://localhost:8080")
                   (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   registry
                   predeterminedDateTime
@@ -143,7 +142,7 @@ main = Hspec.hspec $ do
             signInResult =
               toEither $
                 O.verifyAuthenticationResponse
-                  (NonEmpty.singleton $ M.Origin "http://localhost:8080")
+                  (NE.singleton $ M.Origin "http://localhost:8080")
                   (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   (Just (M.UserHandle "UserId"))
                   credentialEntry
@@ -164,7 +163,7 @@ main = Hspec.hspec $ do
             registerResult =
               toEither $
                 O.verifyRegistrationResponse
-                  (NonEmpty.singleton $ M.Origin "http://localhost:8080")
+                  (NE.singleton $ M.Origin "http://localhost:8080")
                   (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   registry
                   predeterminedDateTime
@@ -181,7 +180,7 @@ main = Hspec.hspec $ do
             signInResult =
               toEither $
                 O.verifyAuthenticationResponse
-                  (NonEmpty.singleton $ M.Origin "http://localhost:8080")
+                  (NE.singleton $ M.Origin "http://localhost:8080")
                   (M.RpIdHash . hash $ ("localhost" :: ByteString.ByteString))
                   (Just (M.UserHandle "UserId"))
                   credentialEntry
