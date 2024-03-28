@@ -267,8 +267,10 @@ deriving instance ToJSON RegistrationResult
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
 -- Verifies a 'M.Credential' response for a [registration ceremony](https://www.w3.org/TR/webauthn-2/#registration-ceremony). 
 --
--- The 'arSignatureCounterResult' field of the result should be inspected to
--- enforce Relying Party policy regarding potentially cloned authenticators.
+-- The resulting 'rrEntry' of this call should be stored in a database by the
+-- Relying Party. The 'rrAttestationStatement' contains the result of the
+-- attempted attestation, allowing the Relying Party to reject certain
+-- authenticators/attempted entry creations based on policy.
 --
 -- Though this library implements the WebAuthn L2 spec, for origin validation we
 -- follow the L3 draft. This is because allowing multiple origins is often
