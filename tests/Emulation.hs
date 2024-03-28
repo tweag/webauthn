@@ -122,7 +122,7 @@ spec :: SpecWith ()
 spec =
   describe "None" $ do
     it "rejects unknown origin during registration" $  do
-      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 0 && not (origin' `elem` allowedOrigins') ==> do
+      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 0 && origin' `notElem` allowedOrigins' ==> do
         let origin = M.Origin origin'
         let allowedOrigins = M.Origin <$> NE.fromList allowedOrigins'
         let annotatedOrigin = AnnotatedOrigin { aoRpId = M.RpId "localhost", aoOrigin = origin }
@@ -133,7 +133,7 @@ spec =
           Left errors -> any (\case O.RegistrationOriginMismatch _ _ -> True; _ -> False) errors
           Right _ -> False
     it "rejects unknown origin during login" $ do
-      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 1 && not (origin' `elem` allowedOrigins')  ==> do
+      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 1 && origin' `notElem` allowedOrigins'  ==> do
         let allowedOrigins = M.Origin <$> NE.fromList allowedOrigins'
         let origin = NE.head allowedOrigins
         let wrongOrigin = M.Origin origin'
