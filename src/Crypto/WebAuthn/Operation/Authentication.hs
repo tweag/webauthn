@@ -36,7 +36,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Validation (Validation)
-import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.List.NonEmpty as NE
 
 -- | Errors that may occur during [assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 data AuthenticationError
@@ -79,7 +79,7 @@ data AuthenticationError
     AuthenticationOriginMismatch
       { -- | The origin explicitly passed to the `verifyAuthenticationResponse`
         -- response, set by the RP
-        aeExpectedOrigin :: NonEmpty.NonEmpty M.Origin,
+        aeExpectedOrigin :: NonEmpty M.Origin,
         -- | The origin received from the client as part of the client data
         aeReceivedOrigin :: M.Origin
       }
@@ -168,7 +168,7 @@ newtype AuthenticationResult = AuthenticationResult
 -- more details.
 -- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
 --
--- > verifyAuthenticationResponse (NonEmpty.singleton (M.Origin "https://example.org")) ...
+-- > verifyAuthenticationResponse (NE.singleton (M.Origin "https://example.org")) ...
 --
 -- In the more complex case, multiple origins are allowed:
 --
@@ -183,7 +183,7 @@ newtype AuthenticationResult = AuthenticationResult
 -- origins to your Relying Party ID.
 verifyAuthenticationResponse ::
   -- | The list of allowed origins for the ceremony
-  NonEmpty.NonEmpty M.Origin ->
+  NonEmpty M.Origin ->
   -- | The hash of the relying party id
   M.RpIdHash ->
   -- | The user handle, in case the user is identified already
@@ -314,7 +314,7 @@ verifyAuthenticationResponse origins rpIdHash midentifiedUser entry options cred
   -- 13. Verify that the value of C.origin matches the Relying Party's origin.
   -- NOTE: We follow the L3 draft of the spec here, which allows for multiple origins.
   -- https://www.w3.org/TR/webauthn-3/#rp-op-verifying-assertion-step-origin
-  unless (M.ccdOrigin c `elem` NonEmpty.toList origins) $
+  unless (M.ccdOrigin c `elem` NE.toList origins) $
     failure $
       AuthenticationOriginMismatch origins (M.ccdOrigin c)
 

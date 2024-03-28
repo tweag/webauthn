@@ -56,7 +56,6 @@ import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
 import GHC.Generics (Generic)
-import qualified Data.List.NonEmpty as NonEmpty
 
 -- | All the errors that can result from a call to 'verifyRegistrationResponse'
 data RegistrationError
@@ -73,7 +72,7 @@ data RegistrationError
     RegistrationOriginMismatch
       { -- | The origin explicitly passed to the `verifyRegistrationResponse`
         -- response, set by the RP
-        reExpectedOrigin :: NonEmpty.NonEmpty M.Origin,
+        reExpectedOrigin :: NonEmpty M.Origin,
         -- | The origin received from the client as part of the client data
         reReceivedOrigin :: M.Origin
       }
@@ -278,7 +277,7 @@ deriving instance ToJSON RegistrationResult
 -- more details.
 -- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
 --
--- > verifyRegistrationResponse (NonEmpty.singleton (M.Origin "https://example.org")) ...
+-- > verifyRegistrationResponse (NE.singleton (M.Origin "https://example.org")) ...
 --
 -- In the more complex case, multiple origins are allowed:
 --
@@ -293,7 +292,7 @@ deriving instance ToJSON RegistrationResult
 -- origins to your Relying Party ID.
 verifyRegistrationResponse ::
   -- | The list of allowed origins for the ceremony
-  NonEmpty.NonEmpty M.Origin ->
+  NonEmpty M.Origin ->
   -- | The relying party id
   M.RpIdHash ->
   -- | The metadata registry, used for verifying the validity of the
@@ -374,7 +373,7 @@ verifyRegistrationResponse
       -- 9. Verify that the value of C.origin matches the Relying Party's origin.
       -- NOTE: We follow the L3 draft of the spec here, which allows for multiple origins.
       -- https://www.w3.org/TR/webauthn-3/#rp-op-registering-a-new-credential-step-origin
-      unless (M.ccdOrigin c `elem` NonEmpty.toList origins) $
+      unless (M.ccdOrigin c `elem` NE.toList origins) $
         failure $
           RegistrationOriginMismatch origins (M.ccdOrigin c)
 
