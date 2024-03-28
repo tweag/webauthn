@@ -377,7 +377,7 @@ completeLogin origin rpIdHash db pending = do
   -- not be verified.
   let verificationResult =
         WA.verifyAuthenticationResponse
-          (singleton origin)
+          (NE.singleton origin)
           rpIdHash
           (Just (WA.ceUserHandle entry))
           entry
