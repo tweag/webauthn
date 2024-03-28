@@ -133,7 +133,7 @@ spec =
           Left errors -> any (\case O.RegistrationOriginMismatch _ _ -> True; _ -> False) errors
           Right _ -> False
     it "rejects unknown origin during login" $ do
-      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 1  ==> do
+      property $ \seed authenticator allowedOrigins' origin' -> length allowedOrigins' > 1 && not (origin' `elem` allowedOrigins')  ==> do
         let allowedOrigins = M.Origin <$> NE.fromList allowedOrigins'
         let origin = NE.head allowedOrigins
         let wrongOrigin = M.Origin origin'
