@@ -72,7 +72,7 @@ data RegistrationError
     RegistrationOriginMismatch
       { -- | The origin explicitly passed to the `verifyRegistrationResponse`
         -- response, set by the RP
-        reExpectedOrigin :: M.Origin,
+        reExpectedOrigin :: NonEmpty M.Origin,
         -- | The origin received from the client as part of the client data
         reReceivedOrigin :: M.Origin
       }
@@ -264,13 +264,35 @@ data RegistrationResult = RegistrationResult
 deriving instance ToJSON RegistrationResult
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
+-- Verifies a 'M.Credential' response for a [registration ceremony](https://www.w3.org/TR/webauthn-2/#registration-ceremony). 
+--
 -- The resulting 'rrEntry' of this call should be stored in a database by the
 -- Relying Party. The 'rrAttestationStatement' contains the result of the
 -- attempted attestation, allowing the Relying Party to reject certain
 -- authenticators/attempted entry creations based on policy.
+--
+-- Though this library implements the WebAuthn L2 spec, for origin validation we
+-- follow the L3 draft. This is because allowing multiple origins is often
+-- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin) 
+-- more details.
+-- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
+--
+-- > verifyRegistrationResponse (NE.singleton (M.Origin "https://example.org")) ...
+--
+-- In the more complex case, multiple origins are allowed:
+--
+-- > verifyRegistrationResponse (M.Origin <$> "https://example.org" :| ["https://signin.example.org"]) ...
+--
+-- One might also allow native apps to authenticate:
+--
+-- > verifyRegistrationResponse (M.Origin <$> "https://example.org" :| ["ios:bundle-id:org.example.ourapp"]) ...
+--
+-- See Apple's documentation on [associated domains](https://developer.apple.com/documentation/authenticationservices/public-private_key_authentication/supporting_passkeys/)
+-- and Google's documentation on [Digital Asset Links](https://developers.google.com/identity/passkeys/developer-guides) for more information on how to link app
+-- origins to your Relying Party ID.
 verifyRegistrationResponse ::
-  -- | The origin of the server
-  M.Origin ->
+  -- | The list of allowed origins for the ceremony
+  NonEmpty M.Origin ->
   -- | The relying party id
   M.RpIdHash ->
   -- | The metadata registry, used for verifying the validity of the
@@ -287,7 +309,7 @@ verifyRegistrationResponse ::
   -- Or () in case of a result.
   Validation (NonEmpty RegistrationError) RegistrationResult
 verifyRegistrationResponse
-  rpOrigin
+  origins
   rpIdHash
   registry
   currentTime
@@ -349,9 +371,11 @@ verifyRegistrationResponse
           RegistrationChallengeMismatch corChallenge (M.ccdChallenge c)
 
       -- 9. Verify that the value of C.origin matches the Relying Party's origin.
-      unless (rpOrigin == M.ccdOrigin c) $
+      -- NOTE: We follow the L3 draft of the spec here, which allows for multiple origins.
+      -- https://www.w3.org/TR/webauthn-3/#rp-op-registering-a-new-credential-step-origin
+      unless (M.ccdOrigin c `elem` NE.toList origins) $
         failure $
-          RegistrationOriginMismatch rpOrigin (M.ccdOrigin c)
+          RegistrationOriginMismatch origins (M.ccdOrigin c)
 
       -- 10. Verify that the value of C.tokenBinding.status matches the state of
       -- Token Binding for the TLS connection over which the assertion was
