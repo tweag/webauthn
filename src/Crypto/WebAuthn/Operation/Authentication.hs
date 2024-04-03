@@ -75,11 +75,11 @@ data AuthenticationError
         -- | The challenge received from the client, part of the response
         aeReceivedChallenge :: M.Challenge
       }
-  | -- | The origin derived by the client does match the assumed origin
+  | -- | The origin derived by the client does match any of the assumed origins
     AuthenticationOriginMismatch
-      { -- | The origin explicitly passed to the `verifyAuthenticationResponse`
+      { -- | The origins explicitly passed to the `verifyAuthenticationResponse`
         -- response, set by the RP
-        aeExpectedOrigin :: NonEmpty M.Origin,
+        aeExpectedOrigins :: NonEmpty M.Origin,
         -- | The origin received from the client as part of the client data
         aeReceivedOrigin :: M.Origin
       }

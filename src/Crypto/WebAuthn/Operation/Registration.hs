@@ -68,11 +68,11 @@ data RegistrationError
         -- | The challenge received from the client, part of the response
         reReceivedChallenge :: M.Challenge
       }
-  | -- | The returned origin does not match the relying party's origin
+  | -- | The returned origin does not match any of the the relying party's origins
     RegistrationOriginMismatch
-      { -- | The origin explicitly passed to the `verifyRegistrationResponse`
+      { -- | The origins explicitly passed to the `verifyRegistrationResponse`
         -- response, set by the RP
-        reExpectedOrigin :: NonEmpty M.Origin,
+        reExpectedOrigins :: NonEmpty M.Origin,
         -- | The origin received from the client as part of the client data
         reReceivedOrigin :: M.Origin
       }
