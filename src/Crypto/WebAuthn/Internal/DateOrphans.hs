@@ -21,7 +21,7 @@
 module Crypto.WebAuthn.Internal.DateOrphans () where
 
 import Control.Monad.Reader (ReaderT, asks)
-import Control.Monad.Time (MonadTime, currentTime)
+import Control.Monad.Time (MonadTime, currentTime, monotonicTime)
 import Data.Fixed (Fixed (MkFixed), HasResolution, Nano)
 import Data.Hourglass (Elapsed (Elapsed), ElapsedP (ElapsedP), NanoSeconds (NanoSeconds), Seconds (Seconds), Time, Timeable, timeConvert, timeFromElapsedP, timeGetElapsedP)
 import Data.Time (UTCTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
@@ -45,3 +45,4 @@ instance (HasResolution a) => Timeable (Fixed a) where
 
 instance (Timeable t, Monad m) => MonadTime (ReaderT t m) where
   currentTime = asks timeConvert
+  monotonicTime = asks (realToFrac . timeGetElapsedP)
