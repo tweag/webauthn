@@ -1,3 +1,7 @@
+### Next release: 0.10.1.0
+
+* [#187](https://github.com/tweag/webauthn/pull/187) Implement monotonicTime in MonadTime to resolve build-time warning
+
 ### 0.10.0.0
 
 * [#184](https://github.com/tweag/webauthn/pull/184) Pass a list of allowed origins instead of a single origin.
