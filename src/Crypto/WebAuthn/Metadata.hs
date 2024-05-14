@@ -9,6 +9,7 @@ module Crypto.WebAuthn.Metadata
   )
 where
 
+import qualified Crypto.WebAuthn.Metadata.Service.Decode as Service
 import qualified Crypto.WebAuthn.Metadata.Service.Processing as Service
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
 import Data.Bifunctor (Bifunctor (second), first)
@@ -30,6 +31,6 @@ metadataBlobToRegistry ::
   -- | Either a certifcate error or a list of errors, a registry of metadata entries or both where the MDS has bad entries
   Either Text (These (NE.NonEmpty Text) Service.MetadataServiceRegistry)
 metadataBlobToRegistry bytes now = do
-  json <- first (Text.pack . show) (Service.jwtToJson bytes Service.fidoAllianceRootCertificate now)
-  let payload = Service.jsonToPayload json
+  metadataPayload <- first (Text.pack . show) (Service.jwtToAdditionalData bytes Service.fidoAllianceRootCertificate now)
+  let payload = Service.decodeMetadataPayload metadataPayload
   pure $ second (Service.createMetadataRegistry . Service.mpEntries) payload

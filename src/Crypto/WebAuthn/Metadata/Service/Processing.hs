@@ -16,6 +16,7 @@ module Crypto.WebAuthn.Metadata.Service.Processing
     createMetadataRegistry,
     queryMetadata,
     jwtToJson,
+    jwtToAdditionalData,
     jsonToPayload,
     fidoAllianceRootCertificate,
   )
@@ -40,6 +41,7 @@ import Crypto.JWT
     param,
     unregisteredClaims,
     verifyClaims,
+    verifyJWT,
   )
 import Crypto.WebAuthn.Internal.DateOrphans ()
 import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
@@ -163,6 +165,20 @@ instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationK
         return [jwk]
       Just errors ->
         throwError $ ProcessingValidationErrors errors
+
+jwtToAdditionalData ::
+  Aeson.FromJSON addData =>
+  -- | The bytes of the JWT blob
+  BS.ByteString ->
+  -- | The root certificate the blob is signed with
+  RootCertificate ->
+  -- | The current time for which to validate the JWT blob
+  DateTime ->
+  Either ProcessingError addData
+jwtToAdditionalData blob rootCert now = runExcept $ do
+  jwt <- decodeCompact $ LBS.fromStrict blob
+  payload <- runReaderT (verifyJWT (defaultJWTValidationSettings (const True)) rootCert jwt) now
+  return $ Service.additionalData payload
 
 -- | Extracts a FIDO Metadata payload JSON value from a JWT bytestring according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
 jwtToJson ::
