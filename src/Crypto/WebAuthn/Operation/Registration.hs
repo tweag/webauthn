@@ -264,7 +264,7 @@ data RegistrationResult = RegistrationResult
 deriving instance ToJSON RegistrationResult
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential)
--- Verifies a 'M.Credential' response for a [registration ceremony](https://www.w3.org/TR/webauthn-2/#registration-ceremony). 
+-- Verifies a 'M.Credential' response for a [registration ceremony](https://www.w3.org/TR/webauthn-2/#registration-ceremony).
 --
 -- The resulting 'rrEntry' of this call should be stored in a database by the
 -- Relying Party. The 'rrAttestationStatement' contains the result of the
@@ -273,7 +273,7 @@ deriving instance ToJSON RegistrationResult
 --
 -- Though this library implements the WebAuthn L2 spec, for origin validation we
 -- follow the L3 draft. This is because allowing multiple origins is often
--- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin) 
+-- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin)
 -- more details.
 -- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
 --

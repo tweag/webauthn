@@ -19,6 +19,7 @@ import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -47,7 +48,6 @@ import System.Hourglass (dateCurrent)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
-import qualified Data.List.NonEmpty as NE
 
 data RegisterBeginReq = RegisterBeginReq
   { accountName :: Text,

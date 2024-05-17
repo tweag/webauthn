@@ -13,14 +13,16 @@ module Crypto.WebAuthn.Metadata.Service.Types
     MetadataEntry (..),
     SomeMetadataEntry (..),
     StatusReport (..),
+    ClaimSetSubtype (..),
   )
 where
 
+import qualified Crypto.JWT as JWT
 import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import Crypto.WebAuthn.Metadata.Statement.Types (MetadataStatement)
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Identifier (AAGUID, AuthenticatorIdentifier, SubjectKeyIdentifier)
-import Data.Aeson (ToJSON)
+import qualified Data.Aeson as Aeson
 import Data.HashMap.Strict (HashMap)
 import Data.Hourglass (Date)
 import Data.List.NonEmpty (NonEmpty)
@@ -93,7 +95,7 @@ data MetadataEntry (p :: M.ProtocolKind) = MetadataEntry
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-deriving instance ToJSON (MetadataEntry p)
+deriving instance Aeson.ToJSON (MetadataEntry p)
 
 -- | Same as 'MetadataEntry', but with its type parameter erased
 data SomeMetadataEntry = forall p. (SingI p) => SomeMetadataEntry (MetadataEntry p)
@@ -125,4 +127,18 @@ data StatusReport = StatusReport
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
-deriving instance ToJSON StatusReport
+deriving instance Aeson.ToJSON StatusReport
+
+data ClaimSetSubtype addData = ClaimSetSubtype
+  { additionalData :: addData,
+    claimSet :: JWT.ClaimsSet
+  }
+
+instance (Aeson.FromJSON addData) => Aeson.FromJSON (ClaimSetSubtype addData) where
+  parseJSON = Aeson.withObject "ClaimSetSubtype" $ \o ->
+    ClaimSetSubtype
+      <$> Aeson.parseJSON (Aeson.Object o)
+      <*> Aeson.parseJSON (Aeson.Object o)
+
+instance JWT.HasClaimsSet (ClaimSetSubtype a) where
+  claimsSet f s = fmap (\cs -> s {claimSet = cs}) (f (claimSet s))

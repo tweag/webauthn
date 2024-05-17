@@ -15,13 +15,12 @@ module Crypto.WebAuthn.Metadata.Service.Processing
     ProcessingError (..),
     createMetadataRegistry,
     queryMetadata,
-    jwtToJson,
-    jsonToPayload,
+    jwtToAdditionalData,
     fidoAllianceRootCertificate,
   )
 where
 
-import Control.Lens ((^.), (^?), _Just)
+import Control.Lens ((^?), _Just)
 import Control.Lens.Combinators (makeClassyPrisms)
 import Control.Monad.Except (MonadError, runExcept, throwError)
 import Control.Monad.Reader (MonadReader, ask, runReaderT)
@@ -38,37 +37,27 @@ import Crypto.JWT
     decodeCompact,
     defaultJWTValidationSettings,
     param,
-    unregisteredClaims,
-    verifyClaims,
+    verifyJWT,
   )
 import Crypto.WebAuthn.Internal.DateOrphans ()
-import Crypto.WebAuthn.Metadata.Service.Decode (decodeMetadataPayload)
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
-import qualified Crypto.WebAuthn.Metadata.Service.WebIDL as ServiceIDL
 import qualified Crypto.WebAuthn.Model as M
 import Crypto.WebAuthn.Model.Identifier
   ( AAGUID,
     AuthenticatorIdentifier (AuthenticatorIdentifierFido2, AuthenticatorIdentifierFidoU2F),
     SubjectKeyIdentifier,
   )
-import Data.Aeson (Value)
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Either (partitionEithers)
 import Data.FileEmbed (embedFile)
-import Data.HashMap.Strict (HashMap, (!?))
 import qualified Data.HashMap.Strict as HashMap
 import Data.Hourglass (DateTime)
-import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
-import Data.Text (Text)
-import qualified Data.Text as Text
-import Data.These (These (This))
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
-import GHC.Exts (fromList, toList)
 
 -- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate
@@ -164,41 +153,20 @@ instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationK
       Just errors ->
         throwError $ ProcessingValidationErrors errors
 
--- | Extracts a FIDO Metadata payload JSON value from a JWT bytestring according to https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
-jwtToJson ::
+-- | Extracts additional data from a JWT bytestring
+jwtToAdditionalData ::
+  (Aeson.FromJSON addData) =>
   -- | The bytes of the JWT blob
   BS.ByteString ->
   -- | The root certificate the blob is signed with
   RootCertificate ->
   -- | The current time for which to validate the JWT blob
   DateTime ->
-  Either ProcessingError (HashMap Text Value)
-jwtToJson blob rootCert now = runExcept $ do
+  Either ProcessingError addData
+jwtToAdditionalData blob rootCert now = runExcept $ do
   jwt <- decodeCompact $ LBS.fromStrict blob
-  claims <- runReaderT (verifyClaims (defaultJWTValidationSettings (const True)) rootCert jwt) now
-  return . fromList . toList $ claims ^. unregisteredClaims
-
--- | Decodes a FIDO Metadata payload JSON value to a 'Service.MetadataPayload',
--- returning an error when the JSON is invalid, and ignoring any entries not
--- relevant for webauthn. For the purposes of implementing the
--- relying party the `Crypto.WebAuthn.Metadata.Service.Types.mpNextUpdate`
--- and `Crypto.WebAuthn.Metadata.Service.Types.mpEntries` fields are most
--- important.
-jsonToPayload :: HashMap Text Value -> These (NonEmpty Text) Service.MetadataPayload
-jsonToPayload value = case Aeson.parseEither metadataPayloadParser value of
-  Left err -> This (Text.pack err NE.:| [])
-  Right payload -> decodeMetadataPayload payload
-
-metadataPayloadParser :: HashMap Text Aeson.Value -> Aeson.Parser ServiceIDL.MetadataBLOBPayload
-metadataPayloadParser hm = case (hm !? "legalHeader", hm !? "no", hm !? "nextUpdate", hm !? "entries") of
-  (Just legalHeader, Just no, Just nextUpdate, Just entries) -> do
-    legalHeader <- Aeson.parseJSON legalHeader
-    no <- Aeson.parseJSON no
-    nextUpdate <- Aeson.parseJSON nextUpdate
-    entries <- Aeson.parseJSON entries
-    pure $
-      ServiceIDL.MetadataBLOBPayload {..}
-  _ -> fail "Could not decode MetadataBLOB: missing fields"
+  payload <- runReaderT (verifyJWT (defaultJWTValidationSettings (const True)) rootCert jwt) now
+  return $ Service.additionalData payload
 
 -- | Creates a 'Service.MetadataServiceRegistry' from a list of
 -- 'Service.SomeMetadataEntry', which can either be obtained from a
