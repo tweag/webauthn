@@ -34,9 +34,9 @@ import Crypto.WebAuthn.Operation.CredentialEntry (CredentialEntry (cePublicKeyBy
 import Data.ByteArray (convert)
 import qualified Data.ByteString.Lazy as LBS
 import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import Data.Validation (Validation)
-import qualified Data.List.NonEmpty as NE
 
 -- | Errors that may occur during [assertion](https://www.w3.org/TR/webauthn-2/#sctn-verifying-assertion)
 data AuthenticationError
@@ -164,7 +164,7 @@ newtype AuthenticationResult = AuthenticationResult
 --
 -- Though this library implements the WebAuthn L2 spec, for origin validation we
 -- follow the L3 draft. This is because allowing multiple origins is often
--- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/tr/webauthn-3/#sctn-validating-origin) 
+-- needed in the wild. See [Validating the origin of a credential](https://www.w3.org/tr/webauthn-3/#sctn-validating-origin)
 -- more details.
 -- In the simplest case, just a single origin is allowed and this is the 'M.RpId' with @https://@ prepended:
 --

@@ -4,7 +4,7 @@
 module MetadataSpec (spec) where
 
 import Crypto.WebAuthn.Metadata (metadataBlobToRegistry)
-import Crypto.WebAuthn.Metadata.Service.Processing (RootCertificate (RootCertificate), ProcessingError, fidoAllianceRootCertificate, jwtToAdditionalData)
+import Crypto.WebAuthn.Metadata.Service.Processing (ProcessingError, RootCertificate (RootCertificate), fidoAllianceRootCertificate, jwtToAdditionalData)
 import Crypto.WebAuthn.Metadata.Service.WebIDL (MetadataBLOBPayload)
 import Data.Aeson (Result (Success), ToJSON (toJSON), decodeFileStrict, fromJSON)
 import Data.Aeson.Types (Result (Error))

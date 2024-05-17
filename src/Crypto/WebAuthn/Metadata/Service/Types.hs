@@ -134,10 +134,11 @@ data ClaimSetSubtype addData = ClaimSetSubtype
     claimSet :: JWT.ClaimsSet
   }
 
-instance Aeson.FromJSON addData => Aeson.FromJSON (ClaimSetSubtype addData) where
-  parseJSON = Aeson.withObject "ClaimSetSubtype" $ \o -> ClaimSetSubtype
-    <$> Aeson.parseJSON (Aeson.Object o)
-    <*> Aeson.parseJSON (Aeson.Object o)
+instance (Aeson.FromJSON addData) => Aeson.FromJSON (ClaimSetSubtype addData) where
+  parseJSON = Aeson.withObject "ClaimSetSubtype" $ \o ->
+    ClaimSetSubtype
+      <$> Aeson.parseJSON (Aeson.Object o)
+      <*> Aeson.parseJSON (Aeson.Object o)
 
 instance JWT.HasClaimsSet (ClaimSetSubtype a) where
-  claimsSet f s = fmap (\cs -> s { claimSet = cs }) (f (claimSet s))
+  claimsSet f s = fmap (\cs -> s {claimSet = cs}) (f (claimSet s))

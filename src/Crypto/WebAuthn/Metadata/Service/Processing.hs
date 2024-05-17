@@ -155,7 +155,7 @@ instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationK
 
 -- | Extracts additional data from a JWT bytestring
 jwtToAdditionalData ::
-  Aeson.FromJSON addData =>
+  (Aeson.FromJSON addData) =>
   -- | The bytes of the JWT blob
   BS.ByteString ->
   -- | The root certificate the blob is signed with
