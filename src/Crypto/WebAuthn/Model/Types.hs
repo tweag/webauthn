@@ -1023,7 +1023,7 @@ data CredentialOptions (c :: CeremonyKind) where
       -- that wish to limit the creation of multiple credentials for the same account on a single authenticator.
       -- The [client](https://www.w3.org/TR/webauthn-2/#client) is requested to return an error if the new credential
       -- would be created on an authenticator that also contains one of the credentials enumerated in this parameter.
-      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.corExcludeCredentials'.
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.corExcludeCredentialsDefault'.
       corExcludeCredentials :: [CredentialDescriptor],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
