@@ -149,22 +149,34 @@ data TPMSAttest = TPMSAttest
 -- section 8.3
 type TPMAObject = Word32
 
+-- | The TPMS_RSA_PARMS structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 12.2.3.5.
+data TPMSRSAParms = TPMSRSAParms
+  { tpmsrpSymmetric :: Word16,
+    tpmsrpScheme :: Word16,
+    tpmsrpKeyBits :: Word16,
+    tpmsrpExponent :: Word32
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
+-- | The TPMS_ECC_PARMS structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 12.2.3.6.
+data TPMSECCParms = TPMSECCParms
+  { tpmsepSymmetric :: Word16,
+    tpmsepScheme :: Word16,
+    tpmsepCurveId :: Cose.CoseCurveECDSA,
+    tpmsepkdf :: Word16
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
 -- | The TPMU_PUBLIC_PARMS structure as specified in
 -- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
 -- section 12.2.3.7.
 data TPMUPublicParms
-  = TPMSRSAParms
-      { tpmsrpSymmetric :: Word16,
-        tpmsrpScheme :: Word16,
-        tpmsrpKeyBits :: Word16,
-        tpmsrpExponent :: Word32
-      }
-  | TPMSECCParms
-      { tpmsepSymmetric :: Word16,
-        tpmsepScheme :: Word16,
-        tpmsepCurveId :: Cose.CoseCurveECDSA,
-        tpmsepkdf :: Word16
-      }
+  = TPMUPublicParmsRSA TPMSRSAParms
+  | TPMUPublicParmsECC TPMSECCParms
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | The TPMU_PUBLIC_ID structure as specified in
@@ -472,7 +484,7 @@ instance M.AttestationStatementFormat Format where
         tpmsrpKeyBits <- Get.getWord16be
         -- An exponent of zero indicates that the exponent is the default of 2^16 + 1
         tpmsrpExponent <- (\e -> if e == 0 then 65537 else e) <$> Get.getWord32be
-        pure TPMSRSAParms {..}
+        pure (TPMUPublicParmsRSA TPMSRSAParms {..})
       getTPMUPublicParms TPMAlgSHA1 = fail "SHA1 does not have public key parameters"
       getTPMUPublicParms TPMAlgSHA256 = fail "SHA256 does not have public key parameters"
       getTPMUPublicParms TPMAlgECC = do
@@ -480,7 +492,7 @@ instance M.AttestationStatementFormat Format where
         tpmsepScheme <- Get.getWord16be
         tpmsepCurveId <- toCurveId =<< Get.getWord16be
         tpmsepkdf <- Get.getWord16be
-        pure TPMSECCParms {..}
+        pure (TPMUPublicParmsECC TPMSECCParms {..})
 
       getTPMUPublicId :: TPMAlgId -> Get.Get TPMUPublicId
       getTPMUPublicId TPMAlgRSA = TPM2BPublicKeyRSA <$> getTPMByteString
@@ -495,7 +507,7 @@ instance M.AttestationStatementFormat Format where
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgRSA,
-            tpmtpParameters = TPMSRSAParms {..},
+            tpmtpParameters = TPMUPublicParmsRSA TPMSRSAParms {..},
             tpmtpUnique = TPM2BPublicKeyRSA (PrettyHexByteString nb)
           } =
           Cose.checkPublicKey
@@ -506,7 +518,7 @@ instance M.AttestationStatementFormat Format where
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgECC,
-            tpmtpParameters = TPMSECCParms {..},
+            tpmtpParameters = TPMUPublicParmsECC TPMSECCParms {..},
             tpmtpUnique = TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
           } =
           Cose.checkPublicKey
