@@ -47,11 +47,10 @@ data VerificationError
     CredentialPublicKeyNotCoseEC2 Cose.CosePublicKey
   | -- | The x and/or y coordinates of the credential public key are longer than 32 bytes
     CoordinateSizeInvalid
-      { -- | Actual length in bytes of the x coordinate
-        xLength :: Int,
-        -- | Actual length in bytes of the y coordinate
-        yLength :: Int
-      }
+      -- | Actual length in bytes of the x coordinate
+      Int
+      -- | Actual length in bytes of the y coordinate
+      Int
   | -- | The provided public key cannot validate the signature over the verification data
     SignatureInvalid X509.SignatureFailure
   deriving (Show, Exception)
