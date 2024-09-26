@@ -179,15 +179,23 @@ data TPMUPublicParms
   | TPMUPublicParmsECC TPMSECCParms
   deriving (Eq, Show, Generic, ToJSON)
 
+-- | The TPMS_ECC_POINT structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 11.2.5.2.
+data TPMSECCPoint = TPMSECCPoint
+  { -- | X coordinate.
+    tpmseX :: PrettyHexByteString,
+    -- | Y coordinate.
+    tpmseY :: PrettyHexByteString
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
 -- | The TPMU_PUBLIC_ID structure as specified in
 -- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
 -- section 12.2.3.2.
 data TPMUPublicId
   = TPM2BPublicKeyRSA PrettyHexByteString
-  | TPMSECCPoint
-      { tpmseX :: PrettyHexByteString,
-        tpmseY :: PrettyHexByteString
-      }
+  | TPMUPublicIdECCPoint TPMSECCPoint
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | The TPMT_PUBLIC structure (see [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf) section 12.2.4) used by the TPM to represent the credential public key.
@@ -501,7 +509,7 @@ instance M.AttestationStatementFormat Format where
       getTPMUPublicId TPMAlgECC = do
         tpmseX <- getTPMByteString
         tpmseY <- getTPMByteString
-        pure TPMSECCPoint {..}
+        pure (TPMUPublicIdECCPoint TPMSECCPoint {..})
 
       extractPublicKey :: TPMTPublic -> Either Text Cose.PublicKey
       extractPublicKey
@@ -519,7 +527,7 @@ instance M.AttestationStatementFormat Format where
         TPMTPublic
           { tpmtpType = TPMAlgECC,
             tpmtpParameters = TPMUPublicParmsECC TPMSECCParms {..},
-            tpmtpUnique = TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
+            tpmtpUnique = TPMUPublicIdECCPoint TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
           } =
           Cose.checkPublicKey
             Cose.PublicKeyECDSA
