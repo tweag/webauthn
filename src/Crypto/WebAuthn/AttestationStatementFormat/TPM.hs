@@ -518,23 +518,25 @@ instance M.AttestationStatementFormat Format where
             tpmtpParameters = TPMUPublicParmsRSA TPMSRSAParms {..},
             tpmtpUnique = TPM2BPublicKeyRSA (PrettyHexByteString nb)
           } =
-          Cose.checkPublicKey
+          Cose.checkPublicKey $
             Cose.PublicKeyRSA
-              { rsaN = os2ip nb,
-                rsaE = toInteger tpmsrpExponent
-              }
+              Cose.RSAPublicKey
+                { rsaN = os2ip nb,
+                  rsaE = toInteger tpmsrpExponent
+                }
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgECC,
             tpmtpParameters = TPMUPublicParmsECC TPMSECCParms {..},
             tpmtpUnique = TPMUPublicIdECCPoint TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
           } =
-          Cose.checkPublicKey
+          Cose.checkPublicKey $
             Cose.PublicKeyECDSA
-              { ecdsaCurve = tpmsepCurveId,
-                ecdsaX = os2ip tpmseX,
-                ecdsaY = os2ip tpmseY
-              }
+              Cose.ECDSAPublicKey
+                { ecdsaCurve = tpmsepCurveId,
+                  ecdsaX = os2ip tpmseX,
+                  ecdsaY = os2ip tpmseY
+                }
       extractPublicKey key = Left $ "Unsupported TPM public key: " <> Text.pack (show key)
 
   asfEncode _ Statement {..} =

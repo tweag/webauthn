@@ -12,6 +12,9 @@ module Crypto.WebAuthn.Cose.PublicKey
     checkPublicKey,
     PublicKey (PublicKey),
     EdDSAKeyBytes (..),
+    EdDSAPublicKey (..),
+    ECDSAPublicKey (..),
+    RSAPublicKey (..),
 
     -- * COSE Elliptic Curves
     CoseCurveEdDSA (..),
@@ -39,6 +42,83 @@ newtype EdDSAKeyBytes = EdDSAKeyBytes {unEdDSAKeyBytes :: BS.ByteString}
   deriving newtype (Eq)
   deriving (Show, ToJSON) via PrettyHexByteString
 
+-- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2)
+-- EdDSA Signature Algorithm
+--
+-- [RFC8032](https://datatracker.ietf.org/doc/html/rfc8032) describes the
+-- elliptic curve signature scheme Edwards-curve
+-- Digital Signature Algorithm (EdDSA). In that document, the signature
+-- algorithm is instantiated using parameters for edwards25519 and
+-- edwards448 curves. The document additionally describes two variants
+-- of the EdDSA algorithm: Pure EdDSA, where no hash function is applied
+-- to the content before signing, and HashEdDSA, where a hash function
+-- is applied to the content before signing and the result of that hash
+-- function is signed. For EdDSA, the content to be signed (either the
+-- message or the pre-hash value) is processed twice inside of the
+-- signature algorithm. For use with COSE, only the pure EdDSA version
+-- is used.
+--
+-- Security considerations are [here](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2.1)
+data EdDSAPublicKey = EdDSAPublicKey
+  { -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
+    -- The elliptic curve to use
+    eddsaCurve :: CoseCurveEdDSA,
+    -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
+    -- This contains the public key bytes.
+    eddsaX :: EdDSAKeyBytes
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
+-- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1)
+-- ECDSA Signature Algorithm
+--
+-- This document defines ECDSA to work only with the curves P-256,
+-- P-384, and P-521. Future documents may define it to work with other
+-- curves and points in the future.
+--
+-- In order to promote interoperability, it is suggested that SHA-256 be
+-- used only with curve P-256, SHA-384 be used only with curve P-384,
+-- and SHA-512 be used with curve P-521. This is aligned with the recommendation in
+-- [Section 4 of RFC5480](https://datatracker.ietf.org/doc/html/rfc5480#section-4).
+--
+-- Security considerations are [here](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1.1)
+data ECDSAPublicKey = ECDSAPublicKey
+  { -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
+    -- The elliptic curve to use
+    ecdsaCurve :: CoseCurveECDSA,
+    -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
+    -- This contains the x-coordinate for the EC point. The integer is
+    -- converted to a byte string as defined in [SEC1]. Leading zero
+    -- octets MUST be preserved.
+    ecdsaX :: Integer,
+    -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
+    -- This contains the value of the
+    -- y-coordinate for the EC point. When encoding the value y, the
+    -- integer is converted to an byte string (as defined in
+    -- [SEC1](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#ref-SEC1))
+    -- and encoded as a CBOR bstr. Leading zero octets MUST be
+    -- preserved.
+    ecdsaY :: Integer
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
+-- | [(spec)](https://www.rfc-editor.org/rfc/rfc8812.html#section-2)
+-- [RSASSA-PKCS1-v1_5](https://www.rfc-editor.org/rfc/rfc8017#section-8.2) Signature Algorithm
+--
+-- A key of size 2048 bits or larger MUST be used with these algorithms.
+-- Security considerations are [here](https://www.rfc-editor.org/rfc/rfc8812.html#section-5)
+data RSAPublicKey = RSAPublicKey
+  { -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8230.html#section-4)
+    -- The RSA modulus n is a product of u distinct odd primes
+    -- r_i, i = 1, 2, ..., u, where u >= 2
+    rsaN :: Integer,
+    -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8230.html#section-4)
+    -- The RSA public exponent e is an integer between 3 and n - 1 satisfying
+    -- GCD(e,\\lambda(n)) = 1, where \\lambda(n) = LCM(r_1 - 1, ..., r_u - 1)
+    rsaE :: Integer
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#credentialpublickey)
 -- A structured representation of a [COSE_Key](https://datatracker.ietf.org/doc/html/rfc8152#section-7)
 -- limited to what is know to be necessary for Webauthn public keys for the
@@ -51,74 +131,18 @@ data UncheckedPublicKey
   = -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2)
     -- EdDSA Signature Algorithm
     --
-    -- [RFC8032](https://datatracker.ietf.org/doc/html/rfc8032) describes the
-    -- elliptic curve signature scheme Edwards-curve
-    -- Digital Signature Algorithm (EdDSA). In that document, the signature
-    -- algorithm is instantiated using parameters for edwards25519 and
-    -- edwards448 curves. The document additionally describes two variants
-    -- of the EdDSA algorithm: Pure EdDSA, where no hash function is applied
-    -- to the content before signing, and HashEdDSA, where a hash function
-    -- is applied to the content before signing and the result of that hash
-    -- function is signed. For EdDSA, the content to be signed (either the
-    -- message or the pre-hash value) is processed twice inside of the
-    -- signature algorithm. For use with COSE, only the pure EdDSA version
-    -- is used.
-    --
     -- Security considerations are [here](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.2.1)
-    PublicKeyEdDSA
-      { -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
-        -- The elliptic curve to use
-        eddsaCurve :: CoseCurveEdDSA,
-        -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.2)
-        -- This contains the public key bytes.
-        eddsaX :: EdDSAKeyBytes
-      }
+    PublicKeyEdDSA EdDSAPublicKey
   | -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1)
     -- ECDSA Signature Algorithm
     --
-    -- This document defines ECDSA to work only with the curves P-256,
-    -- P-384, and P-521. Future documents may define it to work with other
-    -- curves and points in the future.
-    --
-    -- In order to promote interoperability, it is suggested that SHA-256 be
-    -- used only with curve P-256, SHA-384 be used only with curve P-384,
-    -- and SHA-512 be used with curve P-521. This is aligned with the recommendation in
-    -- [Section 4 of RFC5480](https://datatracker.ietf.org/doc/html/rfc5480#section-4).
-    --
     -- Security considerations are [here](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-2.1.1)
-    PublicKeyECDSA
-      { -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
-        -- The elliptic curve to use
-        ecdsaCurve :: CoseCurveECDSA,
-        -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
-        -- This contains the x-coordinate for the EC point. The integer is
-        -- converted to a byte string as defined in [SEC1]. Leading zero
-        -- octets MUST be preserved.
-        ecdsaX :: Integer,
-        -- | [(spec)](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#section-7.1.1)
-        -- This contains the value of the
-        -- y-coordinate for the EC point. When encoding the value y, the
-        -- integer is converted to an byte string (as defined in
-        -- [SEC1](https://datatracker.ietf.org/doc/html/draft-ietf-cose-rfc8152bis-algs-12#ref-SEC1))
-        -- and encoded as a CBOR bstr. Leading zero octets MUST be
-        -- preserved.
-        ecdsaY :: Integer
-      }
+    PublicKeyECDSA ECDSAPublicKey
   | -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8812.html#section-2)
     -- [RSASSA-PKCS1-v1_5](https://www.rfc-editor.org/rfc/rfc8017#section-8.2) Signature Algorithm
     --
-    -- A key of size 2048 bits or larger MUST be used with these algorithms.
     -- Security considerations are [here](https://www.rfc-editor.org/rfc/rfc8812.html#section-5)
-    PublicKeyRSA
-      { -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8230.html#section-4)
-        -- The RSA modulus n is a product of u distinct odd primes
-        -- r_i, i = 1, 2, ..., u, where u >= 2
-        rsaN :: Integer,
-        -- | [(spec)](https://www.rfc-editor.org/rfc/rfc8230.html#section-4)
-        -- The RSA public exponent e is an integer between 3 and n - 1 satisfying
-        -- GCD(e,\\lambda(n)) = 1, where \\lambda(n) = LCM(r_1 - 1, ..., r_u - 1)
-        rsaE :: Integer
-      }
+    PublicKeyRSA RSAPublicKey
   deriving (Eq, Show, Generic)
 
 -- | An arbitrary and potentially unstable JSON encoding, only intended for
@@ -144,7 +168,7 @@ pattern PublicKey k <- CheckedPublicKey k
 
 -- | Checks whether an 'UncheckedPublicKey' is valid. This is the only way to construct a t'PublicKey'
 checkPublicKey :: UncheckedPublicKey -> Either Text PublicKey
-checkPublicKey key@PublicKeyEdDSA {..}
+checkPublicKey key@(PublicKeyEdDSA EdDSAPublicKey {..})
   | actualSize == expectedSize = Right $ CheckedPublicKey key
   | otherwise =
       Left $
@@ -159,7 +183,7 @@ checkPublicKey key@PublicKeyEdDSA {..}
   where
     actualSize = BS.length $ unEdDSAKeyBytes eddsaX
     expectedSize = coordinateSizeEdDSA eddsaCurve
-checkPublicKey key@PublicKeyECDSA {..}
+checkPublicKey key@(PublicKeyECDSA ECDSAPublicKey {..})
   | ECC.isPointValid curve point = Right $ CheckedPublicKey key
   | otherwise =
       Left $
