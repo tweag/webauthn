@@ -178,44 +178,40 @@ data VerificationError
   = -- | The public key in the certificate is different from the on in the
     -- attested credential data
     PublicKeyMismatch
-      { -- | The public key part of the credential data
-        credentialDataPublicKey :: Cose.PublicKey,
-        -- | The public key extracted from the signed certificate
-        certificatePublicKey :: Cose.PublicKey
-      }
+      -- | The public key part of the credential data
+      Cose.PublicKey
+      -- | The public key extracted from the signed certificate
+      Cose.PublicKey
   | -- | The challenge field of the certificate extension does not match the
     -- clientDataHash
     -- (first: challenge from certificate extension, second: clientDataHash)
     HashMismatch
-      { -- | The challenge part of the
-        -- [@attestation-extension@](https://source.android.com/security/keystore/attestation#attestation-extension)
-        certificateChallenge :: Digest SHA256,
-        -- | The client data hash
-        clientDataHash :: Digest SHA256
-      }
+      -- | The challenge part of the
+      -- [@attestation-extension@](https://source.android.com/security/keystore/attestation#attestation-extension)
+      (Digest SHA256)
+      -- | The client data hash
+      (Digest SHA256)
   | -- | The "attestation" extension is scoped to all applications instead of just the RpId
     AndroidKeyAllApplicationsFieldFound
   | -- | The origin field(s) were not equal to KM_ORIGIN_GENERATED (0)
     -- (first: tee-enforced origin, second: software-enforced origin (if allowed by the specified Format))
     AndroidKeyOriginFieldInvalid
-      { -- | The origin enforced by the trusted execution environment
-        teeEnforcedOrigin :: Maybe Integer,
-        -- | The origin enforced by software. NOTE: This field is explicitly
-        -- set to `Nothing` if the `Format` specified `TeeEnforced` as the
-        -- `requiredTrustLevel`.
-        softwareEnforcedOrigin :: Maybe Integer
-      }
+      -- | The origin enforced by the trusted execution environment
+      (Maybe Integer)
+      -- | The origin enforced by software. NOTE: This field is explicitly
+      -- set to `Nothing` if the `Format` specified `TeeEnforced` as the
+      -- `requiredTrustLevel`.
+      (Maybe Integer)
   | -- | The purpose field(s) were not equal to the singleton set containing
     -- KM_PURPOSE_SIGN (2)
     -- (first: tee-enforced purpose, second: software-enforced purpose (if allowed by the specified Format))
     AndroidKeyPurposeFieldInvalid
-      { -- | The purpose enforced by the trusted execution environment
-        teeEnforcedPurpose :: Maybe (Set Integer),
-        -- | The purpose enforced by software. NOTE: This field is explicitly
-        -- set to `Nothing` if the `Format` specified `TeeEnforced` as the
-        -- `requiredTrustLevel`.
-        softwareEnforcedPurpose :: Maybe (Set Integer)
-      }
+      -- | The purpose enforced by the trusted execution environment
+      (Maybe (Set Integer))
+      -- | The purpose enforced by software. NOTE: This field is explicitly
+      -- set to `Nothing` if the `Format` specified `TeeEnforced` as the
+      -- `requiredTrustLevel`.
+      (Maybe (Set Integer))
   | -- | The Public key cannot verify the signature over the authenticatorData
     -- and the clientDataHash.
     VerificationFailure Text

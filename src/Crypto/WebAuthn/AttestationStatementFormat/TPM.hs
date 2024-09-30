@@ -149,22 +149,45 @@ data TPMSAttest = TPMSAttest
 -- section 8.3
 type TPMAObject = Word32
 
+-- | The TPMS_RSA_PARMS structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 12.2.3.5.
+data TPMSRSAParms = TPMSRSAParms
+  { tpmsrpSymmetric :: Word16,
+    tpmsrpScheme :: Word16,
+    tpmsrpKeyBits :: Word16,
+    tpmsrpExponent :: Word32
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
+-- | The TPMS_ECC_PARMS structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 12.2.3.6.
+data TPMSECCParms = TPMSECCParms
+  { tpmsepSymmetric :: Word16,
+    tpmsepScheme :: Word16,
+    tpmsepCurveId :: Cose.CoseCurveECDSA,
+    tpmsepkdf :: Word16
+  }
+  deriving (Eq, Show, Generic, ToJSON)
+
 -- | The TPMU_PUBLIC_PARMS structure as specified in
 -- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
 -- section 12.2.3.7.
 data TPMUPublicParms
-  = TPMSRSAParms
-      { tpmsrpSymmetric :: Word16,
-        tpmsrpScheme :: Word16,
-        tpmsrpKeyBits :: Word16,
-        tpmsrpExponent :: Word32
-      }
-  | TPMSECCParms
-      { tpmsepSymmetric :: Word16,
-        tpmsepScheme :: Word16,
-        tpmsepCurveId :: Cose.CoseCurveECDSA,
-        tpmsepkdf :: Word16
-      }
+  = TPMUPublicParmsRSA TPMSRSAParms
+  | TPMUPublicParmsECC TPMSECCParms
+  deriving (Eq, Show, Generic, ToJSON)
+
+-- | The TPMS_ECC_POINT structure as specified in
+-- [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf)
+-- section 11.2.5.2.
+data TPMSECCPoint = TPMSECCPoint
+  { -- | X coordinate.
+    tpmseX :: PrettyHexByteString,
+    -- | Y coordinate.
+    tpmseY :: PrettyHexByteString
+  }
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | The TPMU_PUBLIC_ID structure as specified in
@@ -172,10 +195,7 @@ data TPMUPublicParms
 -- section 12.2.3.2.
 data TPMUPublicId
   = TPM2BPublicKeyRSA PrettyHexByteString
-  | TPMSECCPoint
-      { tpmseX :: PrettyHexByteString,
-        tpmseY :: PrettyHexByteString
-      }
+  | TPMUPublicIdECCPoint TPMSECCPoint
   deriving (Eq, Show, Generic, ToJSON)
 
 -- | The TPMT_PUBLIC structure (see [TPMv2-Part2](https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf) section 12.2.4) used by the TPM to represent the credential public key.
@@ -246,11 +266,10 @@ data VerificationError
   = -- | The public key in the certificate is different from the on in the
     -- attested credential data
     PublicKeyMismatch
-      { -- | The public key extracted from the certificate
-        certificatePublicKey :: Cose.PublicKey,
-        -- | The public key part of the credential data
-        credentialDataPublicKey :: Cose.PublicKey
-      }
+      -- | The public key extracted from the certificate
+      Cose.PublicKey
+      -- | The public key part of the credential data
+      Cose.PublicKey
   | -- | The magic number in certInfo was not set to TPM_GENERATED_VALUE (0xff544347)
     MagicNumberInvalid Word32
   | -- | The type in certInfo was not set to TPM_ST_ATTEST_CERTIFY (0x8017)
@@ -260,13 +279,12 @@ data VerificationError
     NameAlgorithmInvalid TPMAlgId
   | -- | The calulated name does not match the provided name.
     NameMismatch
-      { -- | The name calculated from the TPMT_PUBLIC structure with the name
-        -- algorithm.
-        pubAreaName :: BS.ByteString,
-        -- | The expected name from TPMS_CERTIFY_INFO of the TPMS_ATTEST
-        -- structure
-        certifyInfoName :: BS.ByteString
-      }
+      -- | The name calculated from the TPMT_PUBLIC structure with the name
+      -- algorithm.
+      BS.ByteString
+      -- | The expected name from TPMS_CERTIFY_INFO of the TPMS_ATTEST
+      -- structure
+      BS.ByteString
   | -- | The public key in the certificate was invalid, either because the it
     -- had an unexpected algorithm, or because it was otherwise malformed
     PublicKeyInvalid Text
@@ -286,11 +304,10 @@ data VerificationError
   | -- | The AAGUID in the attested credential data does not match the AAGUID
     -- in the fido certificate extension
     CertificateAAGUIDMismatch
-      { -- | AAGUID from the id-fido-gen-ce-aaguid certificate extension
-        certificateExtensionAAGUID :: AAGUID,
-        -- | AAGUID from the attested credential data
-        attestedCredentialDataAAGUID :: AAGUID
-      }
+      -- | AAGUID from the id-fido-gen-ce-aaguid certificate extension
+      AAGUID
+      -- | AAGUID from the attested credential data
+      AAGUID
   | -- | The (supposedly) ASN1 encoded certificate extension could not be
     -- decoded
     ASN1Error ASN1Error
@@ -301,13 +318,12 @@ data VerificationError
   | -- | The calculated hash over the attToBeSigned does not match the received
     -- hash
     HashMismatch
-      { -- | The hash of the concatenation of the @authenticatorData@ and
-        -- @clientDataHash@ (@attToBeSigned@) calculated by the @alg@ specified in
-        -- the @Statement@.
-        calculatedHash :: BS.ByteString,
-        -- | The extra data from the TPMS_ATTEST structure.
-        extraData :: BS.ByteString
-      }
+      -- | The hash of the concatenation of the @authenticatorData@ and
+      -- @clientDataHash@ (@attToBeSigned@) calculated by the @alg@ specified in
+      -- the @Statement@.
+      BS.ByteString
+      -- | The extra data from the TPMS_ATTEST structure.
+      BS.ByteString
   deriving (Show, Exception)
 
 -- [(spec)](https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf)
@@ -476,7 +492,7 @@ instance M.AttestationStatementFormat Format where
         tpmsrpKeyBits <- Get.getWord16be
         -- An exponent of zero indicates that the exponent is the default of 2^16 + 1
         tpmsrpExponent <- (\e -> if e == 0 then 65537 else e) <$> Get.getWord32be
-        pure TPMSRSAParms {..}
+        pure (TPMUPublicParmsRSA TPMSRSAParms {..})
       getTPMUPublicParms TPMAlgSHA1 = fail "SHA1 does not have public key parameters"
       getTPMUPublicParms TPMAlgSHA256 = fail "SHA256 does not have public key parameters"
       getTPMUPublicParms TPMAlgECC = do
@@ -484,7 +500,7 @@ instance M.AttestationStatementFormat Format where
         tpmsepScheme <- Get.getWord16be
         tpmsepCurveId <- toCurveId =<< Get.getWord16be
         tpmsepkdf <- Get.getWord16be
-        pure TPMSECCParms {..}
+        pure (TPMUPublicParmsECC TPMSECCParms {..})
 
       getTPMUPublicId :: TPMAlgId -> Get.Get TPMUPublicId
       getTPMUPublicId TPMAlgRSA = TPM2BPublicKeyRSA <$> getTPMByteString
@@ -493,32 +509,34 @@ instance M.AttestationStatementFormat Format where
       getTPMUPublicId TPMAlgECC = do
         tpmseX <- getTPMByteString
         tpmseY <- getTPMByteString
-        pure TPMSECCPoint {..}
+        pure (TPMUPublicIdECCPoint TPMSECCPoint {..})
 
       extractPublicKey :: TPMTPublic -> Either Text Cose.PublicKey
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgRSA,
-            tpmtpParameters = TPMSRSAParms {..},
+            tpmtpParameters = TPMUPublicParmsRSA TPMSRSAParms {..},
             tpmtpUnique = TPM2BPublicKeyRSA (PrettyHexByteString nb)
           } =
-          Cose.checkPublicKey
+          Cose.checkPublicKey $
             Cose.PublicKeyRSA
-              { rsaN = os2ip nb,
-                rsaE = toInteger tpmsrpExponent
-              }
+              Cose.RSAPublicKey
+                { rsaN = os2ip nb,
+                  rsaE = toInteger tpmsrpExponent
+                }
       extractPublicKey
         TPMTPublic
           { tpmtpType = TPMAlgECC,
-            tpmtpParameters = TPMSECCParms {..},
-            tpmtpUnique = TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
+            tpmtpParameters = TPMUPublicParmsECC TPMSECCParms {..},
+            tpmtpUnique = TPMUPublicIdECCPoint TPMSECCPoint {tpmseX = PrettyHexByteString tpmseX, tpmseY = PrettyHexByteString tpmseY}
           } =
-          Cose.checkPublicKey
+          Cose.checkPublicKey $
             Cose.PublicKeyECDSA
-              { ecdsaCurve = tpmsepCurveId,
-                ecdsaX = os2ip tpmseX,
-                ecdsaY = os2ip tpmseY
-              }
+              Cose.ECDSAPublicKey
+                { ecdsaCurve = tpmsepCurveId,
+                  ecdsaX = os2ip tpmseX,
+                  ecdsaY = os2ip tpmseY
+                }
       extractPublicKey key = Left $ "Unsupported TPM public key: " <> Text.pack (show key)
 
   asfEncode _ Statement {..} =

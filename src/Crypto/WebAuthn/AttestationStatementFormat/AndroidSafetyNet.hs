@@ -122,21 +122,19 @@ data VerificationError
   = -- | The receiced nonce was not set to the concatenation of the
     -- authenticator data and client data hash
     NonceMismatch
-      { -- | Nonce from the AndroidSafetyNet response
-        responseNonce :: Text,
-        -- | Base64 encoding of the SHA-256 hash of the concatenation of
-        -- authenticatorData and clientDataHash
-        calculatedNonce :: Text
-      }
+      -- | Nonce from the AndroidSafetyNet response
+      Text
+      -- | Base64 encoding of the SHA-256 hash of the concatenation of
+      -- authenticatorData and clientDataHash
+      Text
   | -- | The response was created to far in the past or future
     ResponseTimeInvalid
-      { -- | The UTC time minus the allowed drift specified in the `Format`.
-        lowerBound :: HG.DateTime,
-        -- | The UTC time plus the allowed drift specified in the `Format`.
-        upperBound :: HG.DateTime,
-        -- | The UTC time when the Android SafetyNet response was generated
-        generatedtime :: HG.DateTime
-      }
+      -- | The UTC time minus the allowed drift specified in the `Format`.
+      HG.DateTime
+      -- | The UTC time plus the allowed drift specified in the `Format`.
+      HG.DateTime
+      -- | The UTC time when the Android SafetyNet response was generated
+      HG.DateTime
   | -- | The integrity check failed based on the required integrity from the
     -- format
     IntegrityCheckFailed Integrity

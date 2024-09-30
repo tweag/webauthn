@@ -62,30 +62,27 @@ data RegistrationError
   = -- | The received challenge does not match the originally created
     -- challenge
     RegistrationChallengeMismatch
-      { -- | The challenge created by the relying party and part of the
-        -- `M.CredentialOptions`
-        reCreatedChallenge :: M.Challenge,
-        -- | The challenge received from the client, part of the response
-        reReceivedChallenge :: M.Challenge
-      }
+      -- | The challenge created by the relying party and part of the
+      -- `M.CredentialOptions`
+      M.Challenge
+      -- | The challenge received from the client, part of the response
+      M.Challenge
   | -- | The returned origin does not match any of the the relying party's origins
     RegistrationOriginMismatch
-      { -- | The origins explicitly passed to the `verifyRegistrationResponse`
-        -- response, set by the RP
-        reExpectedOrigins :: NonEmpty M.Origin,
-        -- | The origin received from the client as part of the client data
-        reReceivedOrigin :: M.Origin
-      }
+      -- | The origins explicitly passed to the `verifyRegistrationResponse`
+      -- response, set by the RP
+      (NonEmpty M.Origin)
+      -- | The origin received from the client as part of the client data
+      M.Origin
   | -- | The rpIdHash in the authData is not a valid hash over the RpId
     -- expected by the Relying party
     RegistrationRpIdHashMismatch
-      { -- | The RP ID hash explicitly passed to the
-        -- `verifyRegistrationResponse` response, set by the RP
-        reExpectedRpIdHash :: M.RpIdHash,
-        -- | The RP ID hash received from the client as part of the authenticator
-        -- data
-        reReceivedRpIdHash :: M.RpIdHash
-      }
+      -- | The RP ID hash explicitly passed to the
+      -- `verifyRegistrationResponse` response, set by the RP
+      M.RpIdHash
+      -- | The RP ID hash received from the client as part of the authenticator
+      -- data
+      M.RpIdHash
   | -- | The userpresent bit in the authdata was not set
     RegistrationUserNotPresent
   | -- | The userverified bit in the authdata was not set
@@ -93,11 +90,10 @@ data RegistrationError
   | -- | The algorithm received from the client was not one of the algorithms
     -- we (the relying party) requested from the client.
     RegistrationPublicKeyAlgorithmDisallowed
-      { -- | The signing algorithms requested by the RP
-        reAllowedSigningAlgorithms :: [Cose.CoseSignAlg],
-        -- | The signing algorithm received from the client
-        reReceivedSigningAlgorithm :: Cose.CoseSignAlg
-      }
+      -- | The signing algorithms requested by the RP
+      [Cose.CoseSignAlg]
+      -- | The signing algorithm received from the client
+      Cose.CoseSignAlg
   | -- | There was some exception in the statement format specific section
     forall a. (M.AttestationStatementFormat a) => RegistrationAttestationFormatError a (NonEmpty (M.AttStmtVerificationError a))
 

@@ -50,21 +50,19 @@ data VerificationError
   = -- | The nonce found in the certificate extension does not match the
     -- expected nonce
     NonceMismatch
-      { -- | The SHA256 hash of the concatenation of the @authenticatorData@
-        -- and @clientDataHash@
-        calculatedNonce :: Digest SHA256,
-        -- | The nonce from the Apple nonce certificate extension
-        -- (1.2.840.113635.100.8.2)
-        receivedNonce :: Digest SHA256
-      }
+      -- | The SHA256 hash of the concatenation of the @authenticatorData@
+      -- and @clientDataHash@
+      (Digest SHA256)
+      -- | The nonce from the Apple nonce certificate extension
+      -- (1.2.840.113635.100.8.2)
+      (Digest SHA256)
   | -- | The public Key found in the certificate does not match the
     -- credential's public key.
     PublicKeyMismatch
-      { -- | The public key part of the credential data
-        credentialDataPublicKey :: Cose.PublicKey,
-        -- | The public key extracted from the signed certificate
-        certificatePublicKey :: Cose.PublicKey
-      }
+      -- | The public key part of the credential data
+      Cose.PublicKey
+      -- | The public key extracted from the signed certificate
+      Cose.PublicKey
   deriving (Show, Exception)
 
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#sctn-apple-anonymous-attestation)

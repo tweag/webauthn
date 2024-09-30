@@ -61,11 +61,12 @@ import qualified Data.X509.EC as X509
 -- | Turns a X.509 certificates 'X509.PubKey' into a 'Cose.PublicKey'
 fromX509 :: X509.PubKey -> Either Text Cose.PublicKey
 fromX509 (X509.PubKeyEd25519 key) =
-  Cose.checkPublicKey
+  Cose.checkPublicKey $
     Cose.PublicKeyEdDSA
-      { eddsaCurve = Cose.CoseCurveEd25519,
-        eddsaX = Cose.EdDSAKeyBytes $ convert key
-      }
+      Cose.EdDSAPublicKey
+        { eddsaCurve = Cose.CoseCurveEd25519,
+          eddsaX = Cose.EdDSAKeyBytes $ convert key
+        }
 fromX509 (X509.PubKeyEC X509.PubKeyEC_Named {..}) = do
   let curve = ECC.getCurveByName pubkeyEC_name
   ecdsaCurve <- Cose.fromCryptCurveECDSA pubkeyEC_name
@@ -73,15 +74,16 @@ fromX509 (X509.PubKeyEC X509.PubKeyEC_Named {..}) = do
     Nothing -> Left "Failed to unserialize ECDSA point in X509 certificate"
     Just res -> pure res
   unchecked <- case point of
-    ECC.Point ecdsaX ecdsaY -> Right $ Cose.PublicKeyECDSA {..}
+    ECC.Point ecdsaX ecdsaY -> Right $ Cose.PublicKeyECDSA Cose.ECDSAPublicKey {..}
     ECC.PointO -> Left "The infinity point is not supported"
   Cose.checkPublicKey unchecked
 fromX509 (X509.PubKeyRSA RSA.PublicKey {..}) =
-  Cose.checkPublicKey
+  Cose.checkPublicKey $
     Cose.PublicKeyRSA
-      { rsaN = public_n,
-        rsaE = public_e
-      }
+      Cose.RSAPublicKey
+        { rsaN = public_n,
+          rsaE = public_e
+        }
 fromX509 key = Left $ "X509 public key algorithm is not supported: " <> Text.pack (show (X509.pubkeyToAlg key))
 
 -- | Verifies an asymmetric signature for a message using a
@@ -92,7 +94,7 @@ fromX509 key = Left $ "X509 public key algorithm is not supported: " <> Text.pac
 verify :: Cose.PublicKeyWithSignAlg -> Cose.Message -> Cose.Signature -> Either Text ()
 verify
   Cose.PublicKeyWithSignAlg
-    { publicKey = Cose.PublicKey Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..},
+    { publicKey = Cose.PublicKey (Cose.PublicKeyEdDSA Cose.EdDSAPublicKey {eddsaCurve = Cose.CoseCurveEd25519, ..}),
       signAlg = Cose.CoseSignAlgEdDSA
     }
   msg
@@ -108,7 +110,7 @@ verify
       else Left "EdDSA Signature invalid"
 verify
   Cose.PublicKeyWithSignAlg
-    { publicKey = Cose.PublicKey Cose.PublicKeyECDSA {..},
+    { publicKey = Cose.PublicKey (Cose.PublicKeyECDSA Cose.ECDSAPublicKey {..}),
       signAlg = Cose.CoseSignAlgECDSA (toCryptHashECDSA -> SomeHashAlgorithm hash)
     }
   msg
@@ -138,7 +140,7 @@ verify
       else Left "ECDSA Signature invalid"
 verify
   Cose.PublicKeyWithSignAlg
-    { publicKey = Cose.PublicKey Cose.PublicKeyRSA {..},
+    { publicKey = Cose.PublicKey (Cose.PublicKeyRSA Cose.RSAPublicKey {..}),
       signAlg = Cose.CoseSignAlgRSA (toCryptHashRSA -> SomeHashAlgorithmASN1 hash)
     }
   msg

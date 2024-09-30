@@ -107,13 +107,13 @@ makePublicKeyWithSignAlg key@(P.PublicKey k) alg =
 -- using the [CTAP2 canonical CBOR encoding form](https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#ctap2-canonical-cbor-encoding-form)
 instance Serialise CosePublicKey where
   encode PublicKeyWithSignAlg {..} = case publicKey of
-    P.PublicKey P.PublicKeyEdDSA {..} ->
+    P.PublicKey (P.PublicKeyEdDSA P.EdDSAPublicKey {..}) ->
       common R.CoseKeyTypeOKP
         <> encode R.CoseKeyTypeParameterOKPCrv
         <> encode (fromCurveEdDSA eddsaCurve)
         <> encode R.CoseKeyTypeParameterOKPX
         <> encodeBytes (P.unEdDSAKeyBytes eddsaX)
-    P.PublicKey P.PublicKeyECDSA {..} ->
+    P.PublicKey (P.PublicKeyECDSA P.ECDSAPublicKey {..}) ->
       common R.CoseKeyTypeEC2
         <> encode R.CoseKeyTypeParameterEC2Crv
         <> encode (fromCurveECDSA ecdsaCurve)
@@ -127,7 +127,7 @@ instance Serialise CosePublicKey where
         <> encodeBytes (i2ospOf_ size ecdsaY)
       where
         size = P.coordinateSizeECDSA ecdsaCurve
-    P.PublicKey P.PublicKeyRSA {..} ->
+    P.PublicKey (P.PublicKeyRSA P.RSAPublicKey {..}) ->
       common R.CoseKeyTypeRSA
         -- https://www.rfc-editor.org/rfc/rfc8230.html#section-4
         -- > The octet sequence MUST utilize the minimum
@@ -218,7 +218,7 @@ instance Serialise CosePublicKey where
             eddsaCurve <- toCurveEdDSA <$> decode
             decodeExpected R.CoseKeyTypeParameterOKPX
             eddsaX <- P.EdDSAKeyBytes <$> decodeBytesCanonical
-            pure P.PublicKeyEdDSA {..}
+            pure (P.PublicKeyEdDSA P.EdDSAPublicKey {..})
 
           decodeECDSAKey :: Decoder s P.UncheckedPublicKey
           decodeECDSAKey = do
@@ -239,7 +239,7 @@ instance Serialise CosePublicKey where
                 TypeBool -> fail "Compressed EC2 y coordinate not yet supported"
                 typ -> fail $ "Unexpected type in EC2 y parameter: " <> show typ
 
-            pure P.PublicKeyECDSA {..}
+            pure (P.PublicKeyECDSA P.ECDSAPublicKey {..})
 
           decodeRSAKey :: Decoder s P.UncheckedPublicKey
           decodeRSAKey = do
@@ -252,7 +252,7 @@ instance Serialise CosePublicKey where
             rsaN <- os2ipNoLeading =<< decodeBytesCanonical
             decodeExpected R.CoseKeyTypeParameterRSAE
             rsaE <- os2ipNoLeading =<< decodeBytesCanonical
-            pure P.PublicKeyRSA {..}
+            pure (P.PublicKeyRSA P.RSAPublicKey {..})
 
 -- | Same as 'os2ip', but throws an error if there are not exactly as many bytes as expected. Thus any successful result of this function will give the same 'BS.ByteString' back if encoded with @'i2ospOf_' size@.
 os2ipWithSize :: (MonadFail m) => Int -> BS.ByteString -> m Integer

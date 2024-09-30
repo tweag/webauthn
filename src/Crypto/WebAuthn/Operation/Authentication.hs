@@ -42,57 +42,51 @@ import Data.Validation (Validation)
 data AuthenticationError
   = -- | The provided Credential was not one explicitly allowed by the server
     AuthenticationCredentialDisallowed
-      { -- | The credentials allowed by the server
-        aeAllowedCredentials :: [M.CredentialDescriptor],
-        -- | The credential returned by the client
-        aeReceivedCredential :: M.Credential 'M.Authentication 'True
-      }
+      -- | The credentials allowed by the server
+      [M.CredentialDescriptor]
+      -- | The credential returned by the client
+      (M.Credential 'M.Authentication 'True)
   | -- | The received credential does not match the currently identified user
     AuthenticationIdentifiedUserHandleMismatch
-      { -- | The `M.UserHandle` of the user who is attempting authentication
-        aeIdentifiedUser :: M.UserHandle,
-        -- | The owner of the credential passed to the
-        -- `verifyAuthenticationResponse` function (retrieved from the
-        -- database)
-        aeRegisteredUser :: M.UserHandle
-      }
+      -- | The `M.UserHandle` of the user who is attempting authentication
+      M.UserHandle
+      -- | The owner of the credential passed to the
+      -- `verifyAuthenticationResponse` function (retrieved from the
+      -- database)
+      M.UserHandle
   | -- | The stored credential does not match the user specified in the
     -- response
     AuthenticationCredentialUserHandleMismatch
-      { -- | The `M.UserHandle` of the user who is attempting authentication
-        aeIdentifiedUser :: M.UserHandle,
-        -- | The `M.UserHandle` reported by the authenticator in the response
-        aeAuthenticatorUser :: M.UserHandle
-      }
+      -- | The `M.UserHandle` of the user who is attempting authentication
+      M.UserHandle
+      -- | The `M.UserHandle` reported by the authenticator in the response
+      M.UserHandle
   | -- | No user was identified and the response did not specify a user
     AuthenticationCannotVerifyUserHandle
   | -- | The received challenge does not match the originally created
     -- challenge
     AuthenticationChallengeMismatch
-      { -- | The challenge created by the relying party and part of the
-        -- `M.CredentialOptions`
-        aeCreatedChallenge :: M.Challenge,
-        -- | The challenge received from the client, part of the response
-        aeReceivedChallenge :: M.Challenge
-      }
+      -- | The challenge created by the relying party and part of the
+      -- `M.CredentialOptions`
+      M.Challenge
+      -- | The challenge received from the client, part of the response
+      M.Challenge
   | -- | The origin derived by the client does match any of the assumed origins
     AuthenticationOriginMismatch
-      { -- | The origins explicitly passed to the `verifyAuthenticationResponse`
-        -- response, set by the RP
-        aeExpectedOrigins :: NonEmpty M.Origin,
-        -- | The origin received from the client as part of the client data
-        aeReceivedOrigin :: M.Origin
-      }
+      -- | The origins explicitly passed to the `verifyAuthenticationResponse`
+      -- response, set by the RP
+      (NonEmpty M.Origin)
+      -- | The origin received from the client as part of the client data
+      M.Origin
   | -- | The rpIdHash in the authData is not a valid hash over the RpId
     -- expected by the Relying party
     AuthenticationRpIdHashMismatch
-      { -- | The RP ID hash explicitly passed to the
-        -- `verifyAuthenticationResponse` response, set by the RP
-        aeExpectedRpIdHash :: M.RpIdHash,
-        -- | The RP ID hash received from the client as part of the authenticator
-        -- data
-        aeReceivedRpIdHash :: M.RpIdHash
-      }
+      -- | The RP ID hash explicitly passed to the
+      -- `verifyAuthenticationResponse` response, set by the RP
+      M.RpIdHash
+      -- | The RP ID hash received from the client as part of the authenticator
+      -- data
+      M.RpIdHash
   | -- | The UserPresent bit was not set in the authData
     AuthenticationUserNotPresent
   | -- | The UserVerified bit was not set in the authData while user

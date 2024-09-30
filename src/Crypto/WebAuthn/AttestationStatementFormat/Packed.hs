@@ -65,11 +65,10 @@ data VerificationError
   = -- | The Algorithm from the attestation format does not match the algorithm
     -- of the key in the credential data
     AlgorithmMismatch
-      { -- | The algorithm received in the attestation statement
-        statementAlg :: Cose.CoseSignAlg,
-        -- | The algorithm of the credentialPublicKey in authenticatorData
-        credentialAlg :: Cose.CoseSignAlg
-      }
+      -- | The algorithm received in the attestation statement
+      Cose.CoseSignAlg
+      -- | The algorithm of the credentialPublicKey in authenticatorData
+      Cose.CoseSignAlg
   | -- | The statement key cannot verify the signature over the attested
     -- credential data and client data for self attestation
     InvalidSignature Text
@@ -83,12 +82,11 @@ data VerificationError
   | -- | The AAGUID in the certificate extension does not match the AAGUID in
     -- the authenticator data
     CertificateAAGUIDMismatch
-      { -- | AAGUID from the id-fido-gen-ce-aaguid certificate extension
-        certificateExtensionAAGUID :: AAGUID,
-        -- | A AGUID from the attested credential data in the authenticator
-        -- data
-        attestedCredentialDataAAGUID :: AAGUID
-      }
+      -- | AAGUID from the id-fido-gen-ce-aaguid certificate extension
+      AAGUID
+      -- | A AGUID from the attested credential data in the authenticator
+      -- data
+      AAGUID
   deriving (Show, Exception)
 
 instance M.AttestationStatementFormat Format where

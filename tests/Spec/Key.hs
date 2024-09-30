@@ -65,9 +65,10 @@ newKeyPair Cose.CoseSignAlgEdDSA = do
       pubKey' = Ed25519.toPublic privKey'
       unchecked =
         Cose.PublicKeyEdDSA
-          { eddsaCurve = Cose.CoseCurveEd25519,
-            eddsaX = Cose.EdDSAKeyBytes $ convert pubKey'
-          }
+          Cose.EdDSAPublicKey
+            { eddsaCurve = Cose.CoseCurveEd25519,
+              eddsaX = Cose.EdDSAKeyBytes $ convert pubKey'
+            }
       pubKey = fromRight (error "unreachable") $ Cose.checkPublicKey unchecked
       cosePubKey = fromRight (error "unreachable") $ Cose.makePublicKeyWithSignAlg pubKey Cose.CoseSignAlgEdDSA
   pure KeyPair {..}
@@ -85,10 +86,11 @@ newKeyPair (Cose.CoseSignAlgECDSA hash) = do
 
       unchecked =
         Cose.PublicKeyECDSA
-          { ecdsaCurve = coseCurve,
-            ecdsaX = x,
-            ecdsaY = y
-          }
+          Cose.ECDSAPublicKey
+            { ecdsaCurve = coseCurve,
+              ecdsaX = x,
+              ecdsaY = y
+            }
       privKey =
         PrivateKeyECDSA
           { ecdsaCurve = coseCurve,
@@ -104,10 +106,11 @@ newKeyPair (Cose.CoseSignAlgRSA hash) = do
   (RSA.PublicKey {..}, RSA.PrivateKey {..}) <- RSA.generate publicSizeBytes 65537
   let unchecked =
         Cose.PublicKeyRSA
-          { -- rsaHash = hash,
-            rsaN = public_n,
-            rsaE = public_e
-          }
+          Cose.RSAPublicKey
+            { -- rsaHash = hash,
+              rsaN = public_n,
+              rsaE = public_e
+            }
       privKey =
         PrivateKeyRSA
           { rsaN = public_n,
@@ -156,18 +159,18 @@ sign (Cose.CoseSignAlgRSA (Cose.toCryptHashRSA -> Cose.SomeHashAlgorithmASN1 has
 sign signAlg privKey _ = error $ "sign: Combination of signature algorithm " <> show signAlg <> " and private key " <> show privKey <> " is not valid or supported"
 
 toX509 :: Cose.UncheckedPublicKey -> X509.PubKey
-toX509 Cose.PublicKeyEdDSA {eddsaCurve = Cose.CoseCurveEd25519, ..} =
+toX509 (Cose.PublicKeyEdDSA Cose.EdDSAPublicKey {eddsaCurve = Cose.CoseCurveEd25519, ..}) =
   let key = case Ed25519.publicKey $ Cose.unEdDSAKeyBytes eddsaX of
         CryptoFailed err -> error $ "Failed to create a crypton Ed25519 public key of a bytestring with size " <> show (BS.length $ Cose.unEdDSAKeyBytes eddsaX) <> ": " <> show err
         CryptoPassed res -> res
    in X509.PubKeyEd25519 key
-toX509 Cose.PublicKeyECDSA {..} =
+toX509 (Cose.PublicKeyECDSA Cose.ECDSAPublicKey {..}) =
   let curveName = Cose.toCryptCurveECDSA ecdsaCurve
       size = Cose.coordinateSizeECDSA ecdsaCurve
       serialisedPoint = X509.SerializedPoint $ BS.singleton 0x04 <> i2ospOf_ size ecdsaX <> i2ospOf_ size ecdsaY
       key = X509.PubKeyEC_Named curveName serialisedPoint
    in X509.PubKeyEC key
-toX509 Cose.PublicKeyRSA {..} =
+toX509 (Cose.PublicKeyRSA Cose.RSAPublicKey {..}) =
   let key =
         RSA.PublicKey
           { public_size = BS.length (i2osp rsaN),
