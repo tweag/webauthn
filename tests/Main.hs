@@ -368,7 +368,7 @@ main = Hspec.hspec $ do
         registry
         predeterminedDateTime
   describe "Conditional create register" $ do
-    it "tests whether conditional create registration bypases UP check" $
+    it "tests whether conditional create registration bypasses UP check" $
       registerTestFromFileConditional
         "tests/responses/attestation/conditional-create.json"
         "http://localhost:8080"
