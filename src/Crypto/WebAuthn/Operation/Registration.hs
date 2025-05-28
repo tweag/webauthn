@@ -299,6 +299,8 @@ verifyRegistrationResponse ::
   DateTime ->
   -- | The options passed to the create() method
   M.CredentialOptions 'M.Registration ->
+  -- | The credential mediation requirement expected for the ceremony
+  M.CredentialMediationRequirement ->
   -- | The response from the authenticator
   M.Credential 'M.Registration 'True ->
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
@@ -310,6 +312,7 @@ verifyRegistrationResponse
   registry
   currentTime
   options@M.CredentialOptionsRegistration {..}
+  credentialMediationRequirement
   credential@M.Credential
     { M.cResponse =
         M.AuthenticatorResponseRegistration
@@ -399,8 +402,8 @@ verifyRegistrationResponse
         failure $
           RegistrationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
-      -- 14. Verify that the User Present bit of the flags in authData is set.
-      unless (M.adfUserPresent (M.adFlags authData)) $
+      -- 14. If credentialMediationRequirement is not Conditional, verify that the User Present bit of the flags in authData is set.
+      unless (credentialMediationRequirement == M.CredentialMediationRequirementConditional || M.adfUserPresent (M.adFlags authData)) $
         failure RegistrationUserNotPresent
 
       -- 15. If user verification is required for this registration, verify that

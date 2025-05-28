@@ -65,6 +65,7 @@ module Crypto.WebAuthn.Model.Types
     AttestationKind (..),
     AttestationType (..),
     VerifiableAttestationType (..),
+    CredentialMediationRequirement (..),
 
     -- * Newtypes
     RpId (..),
@@ -1667,3 +1668,10 @@ data Credential (c :: CeremonyKind) raw = Credential
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
 deriving instance ToJSON (Credential c raw)
+
+data CredentialMediationRequirement = 
+  CredentialMediationRequirementSilent |
+  CredentialMediationRequirementOptional |
+  CredentialMediationRequirementConditional |
+  CredentialMediationRequirementRequired
+  deriving (Eq, Show)

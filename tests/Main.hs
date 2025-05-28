@@ -85,6 +85,7 @@ registerTestFromFile fp origin rpId verifiable service now = do
             service
             now
             options
+            M.CredentialMediationRequirementOptional
             pkCredential
   registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options verifiable
 
@@ -130,6 +131,7 @@ main = Hspec.hspec $ do
                   registry
                   predeterminedDateTime
                   options
+                  M.CredentialMediationRequirementOptional
                   pkCredential
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
@@ -168,6 +170,7 @@ main = Hspec.hspec $ do
                   registry
                   predeterminedDateTime
                   options
+                  M.CredentialMediationRequirementOptional
                   pkCredential
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
