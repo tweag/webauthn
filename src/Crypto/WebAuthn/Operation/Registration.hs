@@ -321,6 +321,8 @@ verifyRegistrationResponse
         M.CredentialMediationRequirementOptional
         credential
 
+-- | Like 'verifyRegistrationResponse', but allows passing the credential mediation requirement
+-- If you don't need conditional create functionality, use 'verifyRegistrationResponse' instead.
 verifyRegistrationResponse' ::
   -- | The list of allowed origins for the ceremony
   NonEmpty M.Origin ->
