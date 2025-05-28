@@ -73,6 +73,15 @@ registryFromBlobFile = do
 -- This is because some of our tests cannot be verfied (for different reasons).
 registerTestFromFile :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
 registerTestFromFile fp origin rpId verifiable service now = do
+  registerTestFromFile' fp origin rpId verifiable service now M.CredentialMediationRequirementOptional
+
+-- | Same as 'registerTestFromFile', but allows to specifies the mediation requirement as conditional.
+registerTestFromFileConditional :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
+registerTestFromFileConditional fp origin rpId verifiable service now = do
+  registerTestFromFile' fp origin rpId verifiable service now M.CredentialMediationRequirementConditional
+
+registerTestFromFile' :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> M.CredentialMediationRequirement -> IO ()
+registerTestFromFile' fp origin rpId verifiable service now mediation = do
   pkCredential <-
     either (error . show) id . WJ.wjDecodeCredentialRegistration
       <$> decodeFile fp
@@ -85,7 +94,7 @@ registerTestFromFile fp origin rpId verifiable service now = do
             service
             now
             options
-            M.CredentialMediationRequirementOptional
+            mediation
             pkCredential
   registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options verifiable
 
@@ -356,6 +365,15 @@ main = Hspec.hspec $ do
       registerTestFromFile
         "tests/responses/attestation/tpm-es256-01.json"
         "https://localhost:44329"
+        "localhost"
+        False -- Uses a fake certificate in the chain
+        registry
+        predeterminedDateTime
+  describe "Conditional create register" $ do
+    it "tests whether conditional create registration bypases UP check" $
+      registerTestFromFileConditional
+        "tests/responses/attestation/conditional-create.json"
+        "http://localhost:8080"
         "localhost"
         False -- Uses a fake certificate in the chain
         registry
