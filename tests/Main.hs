@@ -88,7 +88,7 @@ registerTestFromFile' fp origin rpId verifiable service now mediation = do
   let options = defaultPublicKeyCredentialCreationOptions pkCredential
   let registerResult =
         toEither $
-          O.verifyRegistrationResponse
+          O.verifyRegistrationResponse'
             (NE.singleton origin)
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ rpId)
             service
@@ -140,7 +140,6 @@ main = Hspec.hspec $ do
                   registry
                   predeterminedDateTime
                   options
-                  M.CredentialMediationRequirementOptional
                   pkCredential
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
@@ -179,7 +178,6 @@ main = Hspec.hspec $ do
                   registry
                   predeterminedDateTime
                   options
-                  M.CredentialMediationRequirementOptional
                   pkCredential
         registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult

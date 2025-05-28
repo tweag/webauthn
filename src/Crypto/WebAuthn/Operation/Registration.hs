@@ -19,6 +19,7 @@
 -- which is a high level overview of the registration procedure.
 module Crypto.WebAuthn.Operation.Registration
   ( verifyRegistrationResponse,
+    verifyRegistrationResponse',
     RegistrationError (..),
     RegistrationResult (..),
     AuthenticatorModel (..),
@@ -299,6 +300,40 @@ verifyRegistrationResponse ::
   DateTime ->
   -- | The options passed to the create() method
   M.CredentialOptions 'M.Registration ->
+  -- | The response from the authenticator
+  M.Credential 'M.Registration 'True ->
+  -- | Either a nonempty list of validation errors in case the attestation FailedReason
+  -- Or () in case of a result.
+  Validation (NonEmpty RegistrationError) RegistrationResult
+verifyRegistrationResponse
+  origins
+  rpIdHash
+  registry
+  currentTime
+  options
+  credential =
+      verifyRegistrationResponse'
+        origins
+        rpIdHash
+        registry
+        currentTime
+        options
+        M.CredentialMediationRequirementOptional
+        credential
+
+verifyRegistrationResponse' ::
+  -- | The list of allowed origins for the ceremony
+  NonEmpty M.Origin ->
+  -- | The relying party id
+  M.RpIdHash ->
+  -- | The metadata registry, used for verifying the validity of the
+  -- attestation by looking up root certificates
+  Meta.MetadataServiceRegistry ->
+  -- | The current time, used for verifying the validity of the attestation
+  -- statement certificate chain
+  DateTime ->
+  -- | The options passed to the create() method
+  M.CredentialOptions 'M.Registration ->
   -- | The credential mediation requirement expected for the ceremony
   M.CredentialMediationRequirement ->
   -- | The response from the authenticator
@@ -306,7 +341,7 @@ verifyRegistrationResponse ::
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
   -- Or () in case of a result.
   Validation (NonEmpty RegistrationError) RegistrationResult
-verifyRegistrationResponse
+verifyRegistrationResponse'
   origins
   rpIdHash
   registry

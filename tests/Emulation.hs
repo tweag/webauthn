@@ -90,7 +90,6 @@ register ao allowedOrigins conformance authenticator registry now = do
             registry
             now
             options
-            M.CredentialMediationRequirementOptional
             mPkcCreate
   pure (registerResult, authenticator, options)
 
