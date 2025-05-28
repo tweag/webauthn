@@ -1669,6 +1669,10 @@ data Credential (c :: CeremonyKind) raw = Credential
 -- "Crypto.WebAuthn.Encoding" modules
 deriving instance ToJSON (Credential c raw)
 
+-- | [(spec)](https://www.w3.org/TR/credential-management-1/#enumdef-credentialmediationrequirement)
+-- The 'CredentialMediationRequirement' enum defines the requirements for
+-- [user mediation](https://www.w3.org/TR/credential-management-1/#user-mediation).
+-- Currently only `CredentialMediationRequirementConditional` is supported during credential creation.
 data CredentialMediationRequirement = 
   CredentialMediationRequirementSilent |
   CredentialMediationRequirementOptional |
