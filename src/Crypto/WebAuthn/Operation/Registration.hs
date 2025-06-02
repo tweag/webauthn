@@ -19,7 +19,7 @@
 -- which is a high level overview of the registration procedure.
 module Crypto.WebAuthn.Operation.Registration
   ( verifyRegistrationResponse,
-    verifyRegistrationResponse',
+    verifyRegistrationResponseL3,
     RegistrationError (..),
     RegistrationResult (..),
     AuthenticatorModel (..),
@@ -311,19 +311,18 @@ verifyRegistrationResponse
   registry
   currentTime
   options
-  credential =
-      verifyRegistrationResponse'
+  =
+      verifyRegistrationResponseL3
         origins
         rpIdHash
         registry
         currentTime
         options
         M.CredentialMediationRequirementOptional
-        credential
 
 -- | Like 'verifyRegistrationResponse', but allows passing the credential mediation requirement
 -- If you don't need conditional create functionality, use 'verifyRegistrationResponse' instead.
-verifyRegistrationResponse' ::
+verifyRegistrationResponseL3 ::
   -- | The list of allowed origins for the ceremony
   NonEmpty M.Origin ->
   -- | The relying party id
@@ -343,7 +342,7 @@ verifyRegistrationResponse' ::
   -- | Either a nonempty list of validation errors in case the attestation FailedReason
   -- Or () in case of a result.
   Validation (NonEmpty RegistrationError) RegistrationResult
-verifyRegistrationResponse'
+verifyRegistrationResponseL3
   origins
   rpIdHash
   registry

@@ -88,7 +88,7 @@ registerTestFromFile' fp origin rpId verifiable service now mediation = do
   let options = defaultPublicKeyCredentialCreationOptions pkCredential
   let registerResult =
         toEither $
-          O.verifyRegistrationResponse'
+          O.verifyRegistrationResponseL3
             (NE.singleton origin)
             (M.RpIdHash . hash . encodeUtf8 . M.unRpId $ rpId)
             service
