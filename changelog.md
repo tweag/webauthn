@@ -1,13 +1,10 @@
-### Next release: 0.11.0.0
+### 0.11.0.0
 
 * [#195](https://github.com/tweag/webauthn/pull/195) Allow for conditional mediation during registration.
   Unlike the rest of this library, which strictly follows the L2 version of this spec, this feature is defined
   in the [L3 draft](https://www.w3.org/TR/webauthn-3/#sctn-validating-origin). However conditional create
   greatly reduces to barrier to entry for users to use passkeys we decided to include this feature in this
-  library early.
-
-### Next release: 0.10.1.0
-
+  library early. (Thanks to [nwalsh1995](https://github.com/nwalsh1995))
 * [#187](https://github.com/tweag/webauthn/pull/187) Implement monotonicTime in MonadTime to resolve build-time warning
 
 ### 0.10.0.0
