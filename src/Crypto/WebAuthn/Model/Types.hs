@@ -943,16 +943,26 @@ data AuthenticatorSelectionCriteria = AuthenticatorSelectionCriteria
 -- "Crypto.WebAuthn.Encoding" modules
 deriving instance ToJSON AuthenticatorSelectionCriteria
 
--- | [(spec)](https://www.w3.org/TR/webauthn-2/#flags)
+-- | [(spec)](https://www.w3.org/TR/webauthn-3/#flags)
 data AuthenticatorDataFlags = AuthenticatorDataFlags
-  { -- | [(spec)](https://www.w3.org/TR/webauthn-2/#concept-user-present)
-    -- Upon successful completion of a [user presence test](https://www.w3.org/TR/webauthn-2/#test-of-user-presence),
-    -- the user is said to be "[present](https://www.w3.org/TR/webauthn-2/#concept-user-present)".
+  { -- | [(spec)](https://www.w3.org/TR/webauthn-3/#concept-user-present)
+    -- Upon successful completion of a [user presence test](https://www.w3.org/TR/webauthn-3/#test-of-user-presence),
+    -- the user is said to be "[present](https://www.w3.org/TR/webauthn-3/#concept-user-present)".
     adfUserPresent :: Bool,
-    -- | [(spec)](https://www.w3.org/TR/webauthn-2/#concept-user-verified)
-    -- Upon successful completion of a [user verification](https://www.w3.org/TR/webauthn-2/#user-verification) process,
-    -- the user is said to be "[verified](https://www.w3.org/TR/webauthn-2/#concept-user-verified)".
-    adfUserVerified :: Bool
+    -- | [(spec)](https://www.w3.org/TR/webauthn-3/#concept-user-verified)
+    -- Upon successful completion of a [user verification](https://www.w3.org/TR/webauthn-3/#user-verification) process,
+    -- the user is said to be "[verified](https://www.w3.org/TR/webauthn-3/#concept-user-verified)".
+    adfUserVerified :: Bool,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-3/#backup-eligibility)
+    -- The backup eligibility (BE) flag. If set, the public key credential source
+    -- is backup eligible, meaning it can be backed up in some way (usually via
+    -- cloud sync of the authenticator's credentials).
+    adfBackupEligible :: Bool,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-3/#backup-state)
+    -- The backup state (BS) flag. If set, the public key credential source
+    -- is currently backed up. This flag can change over time based on the
+    -- authenticator's state.
+    adfBackupState :: Bool
   }
   deriving (Eq, Show, Generic)
 
