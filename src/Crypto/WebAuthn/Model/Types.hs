@@ -954,14 +954,17 @@ data AuthenticatorDataFlags = AuthenticatorDataFlags
     -- the user is said to be "[verified](https://www.w3.org/TR/webauthn-3/#concept-user-verified)".
     adfUserVerified :: Bool,
     -- | [(spec)](https://www.w3.org/TR/webauthn-3/#backup-eligibility)
-    -- The backup eligibility (BE) flag. If set, the public key credential source
-    -- is backup eligible, meaning it can be backed up in some way (usually via
-    -- cloud sync of the authenticator's credentials).
+    -- The backup eligibility (BE) flag. If set, the credential is a
+    -- [multi-device credential](https://www.w3.org/TR/webauthn-3/#multi-device-credential).
+    -- If not set, the credential is a
+    -- [single-device credential](https://www.w3.org/TR/webauthn-3/#single-device-credential).
+    -- This value is set during registration and MUST NOT change.
     adfBackupEligible :: Bool,
     -- | [(spec)](https://www.w3.org/TR/webauthn-3/#backup-state)
-    -- The backup state (BS) flag. If set, the public key credential source
-    -- is currently backed up. This flag can change over time based on the
-    -- authenticator's state.
+    -- The backup state (BS) flag. If set, the credential is currently backed up.
+    -- This flag can change over time based on the current state of the
+    -- public key credential source. This flag can only be set if 'adfBackupEligible'
+    -- is also set; the combination @(BE=False, BS=True)@ is not allowed.
     adfBackupState :: Bool
   }
   deriving (Eq, Show, Generic)
