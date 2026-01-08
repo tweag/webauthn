@@ -417,6 +417,7 @@ defaultPublicKeyCredentialCreationOptions c =
       M.corTimeout = Nothing,
       M.corExcludeCredentials = [],
       M.corAuthenticatorSelection = Nothing,
+      M.corHints = [],
       M.corAttestation = M.AttestationConveyancePreferenceNone,
       M.corExtensions = Nothing
     }
@@ -429,5 +430,6 @@ defaultPublicKeyCredentialRequestOptions c =
       M.coaRpId = Just "localhost",
       M.coaAllowCredentials = [],
       M.coaUserVerification = M.UserVerificationRequirementPreferred,
+      M.coaHints = [],
       M.coaExtensions = Nothing
     }

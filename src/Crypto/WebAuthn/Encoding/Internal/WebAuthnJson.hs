@@ -207,6 +207,13 @@ instance Encode T.AttestationConveyancePreference where
 instance Decode m T.AttestationConveyancePreference where
   decode = liftEither . S.decodeAttestationConveyancePreference
 
+instance Encode T.PublicKeyCredentialHint where
+  type JSON T.PublicKeyCredentialHint = Text
+  encode = S.encodePublicKeyCredentialHint
+
+instance Decode m T.PublicKeyCredentialHint where
+  decode = pure . S.decodePublicKeyCredentialHint
+
 instance Encode T.AuthenticatorTransport where
   type JSON T.AuthenticatorTransport = Text
   encode = S.encodeAuthenticatorTransport
@@ -348,6 +355,8 @@ data PublicKeyCredentialCreationOptions = PublicKeyCredentialCreationOptions
     excludeCredentials :: Maybe [PublicKeyCredentialDescriptor],
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-authenticatorselection)
     authenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialcreationoptions-hints)
+    hints :: Maybe [Text],
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
     attestation :: Maybe Text,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-extensions)
@@ -372,6 +381,7 @@ instance Encode (T.CredentialOptions 'K.Registration) where
         timeout = encode corTimeout,
         excludeCredentials = Just $ encode corExcludeCredentials,
         authenticatorSelection = encode corAuthenticatorSelection,
+        hints = Just $ encode corHints,
         attestation = Just $ encode corAttestation,
         extensions = encode corExtensions
       }
@@ -385,6 +395,7 @@ instance Decode m (T.CredentialOptions 'K.Registration) where
     corTimeout <- decode timeout
     corExcludeCredentials <- decodeWithDefault D.corExcludeCredentialsDefault excludeCredentials
     corAuthenticatorSelection <- decode authenticatorSelection
+    corHints <- decodeWithDefault D.corHintsDefault hints
     corAttestation <- decodeWithDefault D.corAttestationDefault attestation
     corExtensions <- decode extensions
     pure $ T.CredentialOptionsRegistration {..}
@@ -401,6 +412,8 @@ data PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions
     allowCredentials :: Maybe [PublicKeyCredentialDescriptor],
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
     userVerification :: Maybe Text,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialrequestoptions-hints)
+    hints :: Maybe [Text],
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
     extensions :: Maybe AuthenticationExtensionsClientInputs
   }
@@ -421,6 +434,7 @@ instance Encode (T.CredentialOptions 'K.Authentication) where
         rpId = encode coaRpId,
         allowCredentials = Just $ encode coaAllowCredentials,
         userVerification = Just $ encode coaUserVerification,
+        hints = Just $ encode coaHints,
         extensions = encode coaExtensions
       }
 
@@ -431,6 +445,7 @@ instance Decode m (T.CredentialOptions 'K.Authentication) where
     coaRpId <- decode rpId
     coaAllowCredentials <- decodeWithDefault D.coaAllowCredentialsDefault allowCredentials
     coaUserVerification <- decodeWithDefault D.coaUserVerificationDefault userVerification
+    coaHints <- decodeWithDefault D.coaHintsDefault hints
     coaExtensions <- decode extensions
     pure $ T.CredentialOptionsAuthentication {..}
 

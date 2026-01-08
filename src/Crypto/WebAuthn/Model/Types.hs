@@ -61,6 +61,7 @@ module Crypto.WebAuthn.Model.Types
     ResidentKeyRequirement (..),
     UserVerificationRequirement (..),
     AttestationConveyancePreference (..),
+    PublicKeyCredentialHint (..),
     AttestationChain (..),
     AttestationKind (..),
     AttestationType (..),
@@ -384,6 +385,46 @@ data AttestationConveyancePreference
 -- logging purposes. To actually encode and decode structures, use the
 -- "Crypto.WebAuthn.Encoding" modules
 deriving instance ToJSON AttestationConveyancePreference
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-3/#enumdef-publickeycredentialhint)
+-- [WebAuthn Relying Parties](https://www.w3.org/TR/webauthn-3/#webauthn-relying-party) may use
+-- this enumeration to communicate hints to the user-agent about how a request may be best completed.
+-- These hints are not requirements, and do not bind the user-agent, but may guide it in providing
+-- the best experience by using contextual information that the Relying Party has about the request.
+-- Hints are provided in order of decreasing preference so, if two hints are contradictory,
+-- the first one controls.
+--
+-- Note: It is important for backwards compatibility that client platforms and Relying Parties
+-- handle unknown values, which is why 'PublicKeyCredentialHintUnknown' exists.
+--
+-- To decode\/encode this type from\/to its standard string, use
+-- 'Crypto.WebAuthn.Encoding.Strings.decodePublicKeyCredentialHint'/'Crypto.WebAuthn.Encoding.Strings.encodePublicKeyCredentialHint'.
+data PublicKeyCredentialHint
+  = -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialhint-security-key)
+    -- Indicates that the Relying Party believes that users will satisfy this request with a physical
+    -- security key. For example, an enterprise Relying Party may set this hint if they have issued
+    -- security keys to their employees and will only accept those authenticators for registration
+    -- and authentication.
+    PublicKeyCredentialHintSecurityKey
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialhint-client-device)
+    -- Indicates that the Relying Party believes that users will satisfy this request with a platform
+    -- authenticator attached to the client device.
+    PublicKeyCredentialHintClientDevice
+  | -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialhint-hybrid)
+    -- Indicates that the Relying Party believes that users will satisfy this request with general-purpose
+    -- authenticators such as smartphones. For example, a consumer Relying Party may believe that only
+    -- a small fraction of their customers possesses dedicated security keys. This option also implies
+    -- that the local platform authenticator should not be promoted in the UI.
+    PublicKeyCredentialHintHybrid
+  | -- | An unknown credential hint value. This allows for forward compatibility
+    -- when new hint values are added to the specification.
+    PublicKeyCredentialHintUnknown Text
+  deriving (Eq, Show, Ord, Generic)
+
+-- | An arbitrary and potentially unstable JSON encoding, only intended for
+-- logging purposes. To actually encode and decode structures, use the
+-- "Crypto.WebAuthn.Encoding" modules
+deriving instance ToJSON PublicKeyCredentialHint
 
 -- | An X.509 certificate chain that can be used to verify an attestation
 -- statement
@@ -1030,6 +1071,12 @@ data CredentialOptions (c :: CeremonyKind) where
       -- that wish to select the appropriate authenticators to participate in the
       -- [create()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-create) operation.
       corAuthenticatorSelection :: Maybe AuthenticatorSelectionCriteria,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialcreationoptions-hints)
+      -- This OPTIONAL member contains zero or more elements from 'PublicKeyCredentialHint' to
+      -- guide the user agent in interacting with the user. Hints are provided in order of
+      -- decreasing preference so, if two hints are contradictory, the first one controls.
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.corHintsDefault'.
+      corHints :: [PublicKeyCredentialHint],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialcreationoptions-attestation)
       -- This member is intended for use by [Relying Parties](https://www.w3.org/TR/webauthn-2/#relying-party)
       -- that wish to express their preference for [attestation conveyance](https://www.w3.org/TR/webauthn-2/#attestation-conveyance).
@@ -1079,6 +1126,12 @@ data CredentialOptions (c :: CeremonyKind) where
       -- `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)` operation.
       -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.coaUserVerificationDefault'.
       coaUserVerification :: UserVerificationRequirement,
+      -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialrequestoptions-hints)
+      -- This OPTIONAL member contains zero or more elements from 'PublicKeyCredentialHint' to
+      -- guide the user agent in interacting with the user. Hints are provided in order of
+      -- decreasing preference so, if two hints are contradictory, the first one controls.
+      -- The default value of this field is 'Crypto.WebAuthn.Model.Defaults.coaHintsDefault'.
+      coaHints :: [PublicKeyCredentialHint],
       -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-extensions)
       -- This OPTIONAL member contains additional parameters requesting additional processing by the client and authenticator.
       -- For example, if transaction confirmation is sought from the user, then the prompt string might be included as an extension.
@@ -1105,6 +1158,7 @@ instance ToJSON (CredentialOptions c) where
         "corTimeout" .= corTimeout,
         "corExcludeCredentials" .= corExcludeCredentials,
         "corAuthenticatorSelection" .= corAuthenticatorSelection,
+        "corHints" .= corHints,
         "corAttestation" .= corAttestation,
         "corExtensions" .= corExtensions
       ]
@@ -1116,6 +1170,7 @@ instance ToJSON (CredentialOptions c) where
         "coaRpId" .= coaRpId,
         "coaAllowCredentials" .= coaAllowCredentials,
         "coaUserVerification" .= coaUserVerification,
+        "coaHints" .= coaHints,
         "coaExtensions" .= coaExtensions
       ]
 

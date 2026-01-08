@@ -289,6 +289,7 @@ defaultPkcoc userEntity challenge =
               M.ascResidentKey = M.ResidentKeyRequirementDiscouraged,
               M.ascUserVerification = M.UserVerificationRequirementPreferred
             },
+      M.corHints = [],
       M.corAttestation = M.AttestationConveyancePreferenceDirect,
       M.corExtensions = Nothing
     }
@@ -303,5 +304,6 @@ defaultCog challenge =
       -- We currently only support client-side discoverable credentials
       M.coaAllowCredentials = [],
       M.coaUserVerification = M.UserVerificationRequirementPreferred,
+      M.coaHints = [],
       M.coaExtensions = Nothing
     }
