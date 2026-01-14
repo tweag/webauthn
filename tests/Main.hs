@@ -160,6 +160,7 @@ main = Hspec.hspec $ do
                   M.Credential
                     { M.cIdentifier = O.ceCredentialId credentialEntry,
                       M.cResponse = cResponse,
+                      M.cAuthenticatorAttachment = Nothing,
                       M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
                     }
         signInResult `shouldSatisfy` isRight
@@ -198,6 +199,7 @@ main = Hspec.hspec $ do
                   M.Credential
                     { M.cIdentifier = O.ceCredentialId credentialEntry,
                       M.cResponse = cResponse,
+                      M.cAuthenticatorAttachment = Nothing,
                       M.cClientExtensionResults = M.AuthenticationExtensionsClientOutputs Nothing
                     }
         signInResult `shouldSatisfy` isRight
