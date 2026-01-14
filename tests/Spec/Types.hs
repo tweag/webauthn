@@ -175,7 +175,7 @@ instance Arbitrary M.RpIdHash where
     pure $ M.RpIdHash $ hash rpId
 
 instance Arbitrary M.AuthenticatorDataFlags where
-  arbitrary = M.AuthenticatorDataFlags <$> arbitrary <*> arbitrary
+  arbitrary = M.AuthenticatorDataFlags <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance (SingI c) => Arbitrary (M.AttestedCredentialData c 'False) where
   arbitrary = case sing @c of
