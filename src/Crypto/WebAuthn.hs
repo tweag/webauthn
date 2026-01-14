@@ -139,8 +139,10 @@ module Crypto.WebAuthn
     -- This is the main functionality implemented by the library. This module
     -- exports these two main symbols:
     --
+    -- * 'verifyRegistrationResponseL3': Verifies a 'Credential' response for
+    --   registration using the L3 spec, supporting conditional create.
     -- * 'verifyRegistrationResponse': Verifies a 'Credential' response for
-    --   registration.
+    --   registration using the L2 spec.
     -- * 'verifyAuthenticationResponse': Verifies a 'Credential' response for
     --   authentication.
     module Crypto.WebAuthn.Operation,

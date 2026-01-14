@@ -19,6 +19,7 @@
 -- which is a high level overview of the registration procedure.
 module Crypto.WebAuthn.Operation.Registration
   ( verifyRegistrationResponse,
+    verifyRegistrationResponseL3,
     RegistrationError (..),
     RegistrationResult (..),
     AuthenticatorModel (..),
@@ -309,7 +310,45 @@ verifyRegistrationResponse
   rpIdHash
   registry
   currentTime
+  options
+  =
+      verifyRegistrationResponseL3
+        origins
+        rpIdHash
+        registry
+        currentTime
+        options
+        M.CredentialMediationRequirementOptional
+
+-- | Like 'verifyRegistrationResponse', but allows passing the credential mediation requirement
+-- If you don't need conditional create functionality, use 'verifyRegistrationResponse' instead.
+verifyRegistrationResponseL3 ::
+  -- | The list of allowed origins for the ceremony
+  NonEmpty M.Origin ->
+  -- | The relying party id
+  M.RpIdHash ->
+  -- | The metadata registry, used for verifying the validity of the
+  -- attestation by looking up root certificates
+  Meta.MetadataServiceRegistry ->
+  -- | The current time, used for verifying the validity of the attestation
+  -- statement certificate chain
+  DateTime ->
+  -- | The options passed to the create() method
+  M.CredentialOptions 'M.Registration ->
+  -- | The credential mediation requirement expected for the ceremony
+  M.CredentialMediationRequirement ->
+  -- | The response from the authenticator
+  M.Credential 'M.Registration 'True ->
+  -- | Either a nonempty list of validation errors in case the attestation FailedReason
+  -- Or () in case of a result.
+  Validation (NonEmpty RegistrationError) RegistrationResult
+verifyRegistrationResponseL3
+  origins
+  rpIdHash
+  registry
+  currentTime
   options@M.CredentialOptionsRegistration {..}
+  credentialMediationRequirement
   credential@M.Credential
     { M.cResponse =
         M.AuthenticatorResponseRegistration
@@ -399,8 +438,8 @@ verifyRegistrationResponse
         failure $
           RegistrationRpIdHashMismatch rpIdHash (M.adRpIdHash authData)
 
-      -- 14. Verify that the User Present bit of the flags in authData is set.
-      unless (M.adfUserPresent (M.adFlags authData)) $
+      -- 14. If credentialMediationRequirement is not Conditional, verify that the User Present bit of the flags in authData is set.
+      unless (credentialMediationRequirement == M.CredentialMediationRequirementConditional || M.adfUserPresent (M.adFlags authData)) $
         failure RegistrationUserNotPresent
 
       -- 15. If user verification is required for this registration, verify that
