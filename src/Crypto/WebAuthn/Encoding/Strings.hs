@@ -15,6 +15,8 @@ module Crypto.WebAuthn.Encoding.Strings
     decodeAttestationConveyancePreference,
     encodeAuthenticatorTransport,
     decodeAuthenticatorTransport,
+    encodePublicKeyCredentialHint,
+    decodePublicKeyCredentialHint,
   )
 where
 
@@ -131,3 +133,22 @@ decodeAuthenticatorTransport "internal" = T.AuthenticatorTransportInternal
 -- > The values SHOULD be members of AuthenticatorTransport but Relying
 -- > Parties SHOULD accept and store unknown values.
 decodeAuthenticatorTransport str = T.AuthenticatorTransportUnknown str
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-3/#enumdef-publickeycredentialhint)
+-- Encodes a 'T.PublicKeyCredentialHint' to a string.
+encodePublicKeyCredentialHint :: T.PublicKeyCredentialHint -> Text
+encodePublicKeyCredentialHint T.PublicKeyCredentialHintSecurityKey = "security-key"
+encodePublicKeyCredentialHint T.PublicKeyCredentialHintClientDevice = "client-device"
+encodePublicKeyCredentialHint T.PublicKeyCredentialHintHybrid = "hybrid"
+encodePublicKeyCredentialHint (T.PublicKeyCredentialHintUnknown str) = str
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-3/#enumdef-publickeycredentialhint)
+-- Decodes a string into a 'T.PublicKeyCredentialHint', returning
+-- 'T.PublicKeyCredentialHintUnknown' when the string isn't a known enum value.
+-- This is required for forward compatibility when new hint values are added
+-- to the specification.
+decodePublicKeyCredentialHint :: Text -> T.PublicKeyCredentialHint
+decodePublicKeyCredentialHint "security-key" = T.PublicKeyCredentialHintSecurityKey
+decodePublicKeyCredentialHint "client-device" = T.PublicKeyCredentialHintClientDevice
+decodePublicKeyCredentialHint "hybrid" = T.PublicKeyCredentialHintHybrid
+decodePublicKeyCredentialHint str = T.PublicKeyCredentialHintUnknown str

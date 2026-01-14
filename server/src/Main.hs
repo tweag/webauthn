@@ -321,6 +321,7 @@ beginLogin db pending = do
           WA.coaChallenge = challenge,
           WA.coaAllowCredentials = map mkCredentialDescriptor credentials,
           WA.coaUserVerification = WA.UserVerificationRequirementPreferred,
+          WA.coaHints = [],
           WA.coaExtensions = Nothing
         }
 
@@ -452,6 +453,7 @@ defaultPkcco userEntity challenge =
               WA.ascResidentKey = WA.ResidentKeyRequirementDiscouraged,
               WA.ascUserVerification = WA.UserVerificationRequirementPreferred
             },
+      WA.corHints = [],
       WA.corAttestation = WA.AttestationConveyancePreferenceDirect,
       WA.corExtensions = Nothing
     }
