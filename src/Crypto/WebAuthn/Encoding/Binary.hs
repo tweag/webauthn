@@ -408,16 +408,20 @@ encodeRawAuthenticatorData M.AuthenticatorData {..} =
     bytes :: BS.ByteString
     bytes = LBS.toStrict $ toLazyByteString builder
 
-    -- https://www.w3.org/TR/webauthn-2/#flags
+    -- https://www.w3.org/TR/webauthn-3/#flags
     flags :: Word8
     flags =
       userPresentFlag
         .|. userVerifiedFlag
+        .|. backupEligibleFlag
+        .|. backupStateFlag
         .|. attestedCredentialDataPresentFlag
         .|. extensionsPresentFlag
       where
         userPresentFlag = if M.adfUserPresent adFlags then Bits.bit 0 else 0
         userVerifiedFlag = if M.adfUserVerified adFlags then Bits.bit 2 else 0
+        backupEligibleFlag = if M.adfBackupEligible adFlags then Bits.bit 3 else 0
+        backupStateFlag = if M.adfBackupState adFlags then Bits.bit 4 else 0
         attestedCredentialDataPresentFlag = case sing @c of
           K.SRegistration -> Bits.bit 6
           K.SAuthentication -> 0
@@ -472,12 +476,14 @@ decodeAuthenticatorData strictBytes = runPartialBinaryDecoder strictBytes $ do
     M.RpIdHash . fromJust . Hash.digestFromByteString
       <$> runBinary (Binary.getByteString 32)
 
-  -- https://www.w3.org/TR/webauthn-2/#flags
+  -- https://www.w3.org/TR/webauthn-3/#flags
   bitFlags <- runBinary Binary.getWord8
   let adFlags =
         M.AuthenticatorDataFlags
           { M.adfUserPresent = Bits.testBit bitFlags 0,
-            M.adfUserVerified = Bits.testBit bitFlags 2
+            M.adfUserVerified = Bits.testBit bitFlags 2,
+            M.adfBackupEligible = Bits.testBit bitFlags 3,
+            M.adfBackupState = Bits.testBit bitFlags 4
           }
 
   -- https://www.w3.org/TR/webauthn-2/#signcount
