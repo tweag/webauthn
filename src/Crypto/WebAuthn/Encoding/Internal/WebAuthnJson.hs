@@ -605,6 +605,8 @@ data PublicKeyCredential response = PublicKeyCredential
     rawId :: Base64UrlString,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-response)
     response :: response,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredential-authenticatorattachment)
+    authenticatorAttachment :: Maybe Text,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
     clientExtensionResults :: AuthenticationExtensionsClientOutputs
   }
@@ -622,8 +624,14 @@ instance Encode (T.Credential 'K.Registration 'True) where
     PublicKeyCredential
       { rawId = encode cIdentifier,
         response = encode cResponse,
+        authenticatorAttachment = encode cAuthenticatorAttachment,
         clientExtensionResults = encode cClientExtensionResults
       }
+
+-- | Decodes the authenticatorAttachment field, treating unknown values as Nothing
+-- per the spec: "Relying Parties SHOULD treat unknown values as if the value were null."
+decodeAuthenticatorAttachment :: Maybe Text -> Maybe T.AuthenticatorAttachment
+decodeAuthenticatorAttachment = (>>= either (const Nothing) Just . S.decodeAuthenticatorAttachment)
 
 instance
   (MonadReader T.SupportedAttestationStatementFormats m) =>
@@ -632,6 +640,7 @@ instance
   decode PublicKeyCredential {..} = do
     cIdentifier <- decode rawId
     cResponse <- decode response
+    let cAuthenticatorAttachment = decodeAuthenticatorAttachment authenticatorAttachment
     cClientExtensionResults <- decode clientExtensionResults
     pure $ T.Credential {..}
 
@@ -641,6 +650,7 @@ instance Encode (T.Credential 'K.Authentication 'True) where
     PublicKeyCredential
       { rawId = encode cIdentifier,
         response = encode cResponse,
+        authenticatorAttachment = encode cAuthenticatorAttachment,
         clientExtensionResults = encode cClientExtensionResults
       }
 
@@ -648,6 +658,7 @@ instance Decode m (T.Credential 'K.Authentication 'True) where
   decode PublicKeyCredential {..} = do
     cIdentifier <- decode rawId
     cResponse <- decode response
+    let cAuthenticatorAttachment = decodeAuthenticatorAttachment authenticatorAttachment
     cClientExtensionResults <- decode clientExtensionResults
     pure $ T.Credential {..}
 

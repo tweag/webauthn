@@ -1667,6 +1667,11 @@ data Credential (c :: CeremonyKind) raw = Credential
     -- was created in response to `[get()](https://w3c.github.io/webappsec-credential-management/#dom-credentialscontainer-get)`,
     -- and this attribute’s value will be an `[AuthenticatorAssertionResponse](https://www.w3.org/TR/webauthn-2/#authenticatorassertionresponse)`.
     cResponse :: AuthenticatorResponse c raw,
+    -- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredential-authenticatorattachment)
+    -- This attribute reports the [authenticator attachment modality](https://www.w3.org/TR/webauthn-3/#authenticator-attachment-modality)
+    -- in effect at the time the navigator.credentials.create() or navigator.credentials.get() methods successfully complete.
+    -- The attribute's value SHOULD be a member of 'AuthenticatorAttachment'. Relying Parties SHOULD treat unknown values as if the value were null.
+    cAuthenticatorAttachment :: Maybe AuthenticatorAttachment,
     -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-getclientextensionresults)
     -- This operation returns the value of `[[[clientExtensionsResults]]](https://www.w3.org/TR/webauthn-2/#dom-publickeycredential-clientextensionsresults-slot)`,
     -- which is a [map](https://infra.spec.whatwg.org/#ordered-map) containing

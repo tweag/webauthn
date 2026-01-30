@@ -273,11 +273,13 @@ instance Arbitrary (M.Credential 'M.Registration 'False) where
       <$> arbitrary
       <*> arbitrary
       <*> arbitrary
+      <*> arbitrary
 
 instance Arbitrary (M.Credential 'M.Authentication 'False) where
   arbitrary =
     M.Credential
       <$> arbitrary
+      <*> arbitrary
       <*> arbitrary
       <*> arbitrary
 
