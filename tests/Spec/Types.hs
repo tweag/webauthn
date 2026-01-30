@@ -98,6 +98,17 @@ instance Arbitrary M.UserVerificationRequirement where
 instance Arbitrary M.AttestationConveyancePreference where
   arbitrary = arbitraryBoundedEnum
 
+instance Arbitrary M.PublicKeyCredentialHint where
+  arbitrary = elements publicKeyCredentialHintsList
+
+publicKeyCredentialHintsList :: [M.PublicKeyCredentialHint]
+publicKeyCredentialHintsList =
+  [ M.PublicKeyCredentialHintSecurityKey,
+    M.PublicKeyCredentialHintClientDevice,
+    M.PublicKeyCredentialHintHybrid,
+    M.PublicKeyCredentialHintUnknown "unknown"
+  ]
+
 instance Arbitrary (M.AuthenticatorResponse 'M.Registration 'False) where
   arbitrary = M.AuthenticatorResponseRegistration <$> arbitrary <*> arbitrary <*> arbitrary
 
@@ -248,6 +259,7 @@ instance Arbitrary (M.CredentialOptions 'M.Registration) where
       <*> arbitrary
       <*> resize 4 arbitrary
       <*> arbitrary
+      <*> resize 3 arbitrary
       <*> arbitrary
       <*> arbitrary
 
@@ -259,6 +271,7 @@ instance Arbitrary (M.CredentialOptions 'M.Authentication) where
       <*> arbitrary
       <*> resize 4 arbitrary
       <*> arbitrary
+      <*> resize 3 arbitrary
       <*> arbitrary
 
 instance Arbitrary M.CredentialPropertiesOutput where

@@ -14,8 +14,10 @@ module Crypto.WebAuthn.Model.Defaults
     ascResidentKeyDefault,
     corAttestationDefault,
     corExcludeCredentialsDefault,
+    corHintsDefault,
     coaUserVerificationDefault,
     coaAllowCredentialsDefault,
+    coaHintsDefault,
   )
 where
 
@@ -43,6 +45,11 @@ corAttestationDefault = M.AttestationConveyancePreferenceNone
 corExcludeCredentialsDefault :: [M.CredentialDescriptor]
 corExcludeCredentialsDefault = []
 
+-- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialcreationoptions-hints)
+-- Returns the default of the field 'M.corHints'
+corHintsDefault :: [M.PublicKeyCredentialHint]
+corHintsDefault = []
+
 -- | [(spec)](https://www.w3.org/TR/webauthn-2/#dom-publickeycredentialrequestoptions-userverification)
 -- Returns the default of the field 'M.coaUserVerification'
 coaUserVerificationDefault :: M.UserVerificationRequirement
@@ -52,3 +59,8 @@ coaUserVerificationDefault = M.UserVerificationRequirementPreferred
 -- Returns the default of the field 'M.coaAllowCredentials'
 coaAllowCredentialsDefault :: [M.CredentialDescriptor]
 coaAllowCredentialsDefault = []
+
+-- | [(spec)](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialrequestoptions-hints)
+-- Returns the default of the field 'M.coaHints'
+coaHintsDefault :: [M.PublicKeyCredentialHint]
+coaHintsDefault = []
