@@ -22,7 +22,6 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.X509 as X509
 import qualified Data.X509.Validation as X509
-import Unsafe.Coerce (unsafeCoerce)
 
 -- | This type holds a bytestring and has no restrictions to its contents. Its main purpose is to simplify debugging:
 -- its 'Aeson.ToJSON' and 'Show' instances convert it to base16 (hexadecimal).
@@ -85,7 +84,7 @@ instance ToJSON X509.DistinguishedName where
       getPair :: X509.DnElement -> Maybe Pair
       getPair el = do
         asnStr <- X509.getDnElement el dn
-        str <- ASN1.asn1CharacterToString (unsafeCoerce asnStr)
+        str <- ASN1.asn1CharacterToString asnStr
         let key = fromString $ show el
             value = String $ Text.pack str
         pure (key, value)
