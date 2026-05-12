@@ -35,7 +35,7 @@ description:
   however follow the [PVP](https://pvp.haskell.org/) and properly label changes
   with the appropriate version increase.
 category: Web, Authentication
-tested-with: GHC == 9.4.7
+tested-with: GHC == 9.10.3
 extra-source-files:
   README.md,
   changelog.md,

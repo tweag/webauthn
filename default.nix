@@ -15,7 +15,7 @@ let
   src = gitignoreSource ./.;
 
   # Keep this in sync with the `tested-with` field in `webauthn.cabal`
-  expectedGhcVersion = "9.4.7";
+  expectedGhcVersion = "9.10.3";
 
   hpkgs = pkgs.haskellPackages.extend
     (hself: hsuper: {
