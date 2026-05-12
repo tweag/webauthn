@@ -64,6 +64,10 @@ let
       pkgs.yarn
       pkgs.nodejs
       pkgs.jq
+      pkgs.zlib
+      pkgs.pkg-config
+
+      pkgs.haskellPackages.cabal-plan
 
       deploy
     ];
