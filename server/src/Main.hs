@@ -44,7 +44,7 @@ import PendingCeremonies
     newPendingCeremonies,
   )
 import System.Environment (getArgs)
-import System.Hourglass (dateCurrent)
+import Time.System (dateCurrent)
 import qualified Web.Cookie as Cookie
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
