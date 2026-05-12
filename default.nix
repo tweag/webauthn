@@ -5,7 +5,9 @@ let
 
   pkgs = import sources.nixpkgs {
     overlays = [ ];
-    config = { };
+    config = { problems.handlers = {
+             connection.broken = "warn"; # or "ignore"
+           }; };
     inherit system;
   };
 
@@ -38,6 +40,48 @@ let
         pkg = "jose";
         ver = "0.11";
         sha256 = "sha256-41u6RvbrtZwlccv2d94LsnTygvMXkex/jxWrz7Dngx8=";
+      } {};
+
+      crypton = hself.callHackageDirect {
+        pkg = "crypton";
+        ver = "0.34";
+        sha256 = "sha256-dHvzmwq5l1dPZsp0sYFe9l8mXF/Ya5aFbkDg0ljEEKY=";
+      } {};
+
+      crypton-x509-store = hself.callHackageDirect {
+        pkg = "crypton-x509-store";
+        ver = "1.8.0";
+        sha256 = "sha256-U6DH5Ke3JXAzZuqxLM6mPKDxqj4HTf5kjoBXaerLOcc=";
+      } {};
+
+      crypton-x509-system = hself.callHackageDirect {
+        pkg = "crypton-x509-system";
+        ver = "1.8.0";
+        sha256 = "sha256-uUNhwQnTPuVd1feZLUZJYKHIk/5v6t7nHpf1jqrMGTQ=";
+      } {};
+
+      crypton-x509 = hself.callHackageDirect {
+        pkg = "crypton-x509";
+        ver = "1.8.0";
+        sha256 = "sha256-wxU8Ou52UCuCT2gbxqPKssteIVGUyg5WEbv1xRIyZTg=";
+      } {};
+
+      crypton-x509-validation = hself.callHackageDirect {
+        pkg = "crypton-x509-validation";
+        ver = "1.8.0";
+        sha256 = "sha256-CyRqTUOcUzzVlQfTd3yylwDVtOaumBbBg9hMyvtcu7c=";
+      } {};
+
+      tls = hself.callHackageDirect {
+        pkg = "tls";
+        ver = "1.6.0";
+        sha256 = "sha256-XkYW2Zbp0FOTELPFJqic6PdXOvroGbiZ7UPd3lfxg68=";
+      } {};
+
+      http-client-tls = hself.callHackageDirect {
+        pkg = "http-client-tls";
+        ver = "0.3.6.1";
+        sha256 = "sha256-q7QjLXcuwVkR/buh/EvuBh+Ze+F0z/IjP5iYRHUWP8I=";
       } {};
     });
 

@@ -80,7 +80,7 @@ library
     crypton                 >= 0.32 && < 1.1,
     crypton-asn1-encoding   >= 0.9 && < 0.11,
     crypton-asn1-parse      >= 0.9 && < 0.11,
-    crypton-asn1-types      >= 0.3 && < 0.5,
+    crypton-asn1-types      >= 0.4.1 && < 0.5,
     crypton-x509            >= 1.8 && < 1.9,
     crypton-x509-store      >= 1.8 && < 1.9,
     crypton-x509-validation >= 1.8 && < 1.9,
