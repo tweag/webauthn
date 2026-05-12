@@ -37,7 +37,7 @@ executable server
     binary                >= 0.8.7 && < 0.9,
     bytestring            >= 0.10.10 && < 0.12,
     clock                 >= 0.8 && < 0.9,
-    containers            >= 0.6.2 && < 0.7,
+    containers            >= 0.6.2 && < 0.9,
     cookie                >= 0.4.5 && < 0.5,
     crypton               >= 0.32 && < 0.35,
     http-client           >= 0.6.4 && < 0.8,
