@@ -209,7 +209,8 @@ instance ToJSON (AuthenticatorModel k) where
 -- that was returned along with information about the [authenticator](https://www.w3.org/TR/webauthn-2/#authenticator)
 -- model that created it. This result may be inspected to enforce relying party
 -- policy, see the individual fields for more information.
-data SomeAttestationStatement = forall k.
+data SomeAttestationStatement
+  = forall k.
   SomeAttestationStatement
   { -- | The [attestation type](https://www.w3.org/TR/webauthn-2/#sctn-attestation-types)
     -- of the attestation statement. This could be used to only allow specific
@@ -310,15 +311,14 @@ verifyRegistrationResponse
   rpIdHash
   registry
   currentTime
-  options
-  =
-      verifyRegistrationResponseL3
-        origins
-        rpIdHash
-        registry
-        currentTime
-        options
-        M.CredentialMediationRequirementOptional
+  options =
+    verifyRegistrationResponseL3
+      origins
+      rpIdHash
+      registry
+      currentTime
+      options
+      M.CredentialMediationRequirementOptional
 
 -- | Like 'verifyRegistrationResponse', but allows passing the credential mediation requirement
 -- If you don't need conditional create functionality, use 'verifyRegistrationResponse' instead.

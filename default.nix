@@ -42,12 +42,6 @@ let
         sha256 = "sha256-41u6RvbrtZwlccv2d94LsnTygvMXkex/jxWrz7Dngx8=";
       } {};
 
-      crypton = hself.callHackageDirect {
-        pkg = "crypton";
-        ver = "0.34";
-        sha256 = "sha256-dHvzmwq5l1dPZsp0sYFe9l8mXF/Ya5aFbkDg0ljEEKY=";
-      } {};
-
       crypton-x509-store = hself.callHackageDirect {
         pkg = "crypton-x509-store";
         ver = "1.8.0";
@@ -74,15 +68,10 @@ let
 
       tls = hself.callHackageDirect {
         pkg = "tls";
-        ver = "1.6.0";
-        sha256 = "sha256-XkYW2Zbp0FOTELPFJqic6PdXOvroGbiZ7UPd3lfxg68=";
+        ver = "2.2.2";
+        sha256 = "sha256-lbroDPZiOa2YH1jqEzxzNgBGcPZDP6WJEeD0odDgNqs=";
       } {};
 
-      http-client-tls = hself.callHackageDirect {
-        pkg = "http-client-tls";
-        ver = "0.3.6.1";
-        sha256 = "sha256-q7QjLXcuwVkR/buh/EvuBh+Ze+F0z/IjP5iYRHUWP8I=";
-      } {};
     });
 
   deploy = pkgs.writeShellScriptBin "deploy" ''
