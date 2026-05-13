@@ -24,7 +24,7 @@ import qualified Data.Text as Text
 import Data.These (These (That, These, This))
 import Network.HTTP.Client (Manager, httpLbs, responseBody)
 import Network.HTTP.Client.TLS (newTlsManager)
-import System.Hourglass (dateCurrent)
+import Time.System (dateCurrent)
 
 -- | Reads metadata entries from a JSON list. See extra-entries.json for an example
 registryFromJsonFile :: FilePath -> IO WA.MetadataServiceRegistry

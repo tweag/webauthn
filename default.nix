@@ -5,7 +5,9 @@ let
 
   pkgs = import sources.nixpkgs {
     overlays = [ ];
-    config = { };
+    config = { problems.handlers = {
+             connection.broken = "warn"; # or "ignore"
+           }; };
     inherit system;
   };
 
@@ -15,7 +17,7 @@ let
   src = gitignoreSource ./.;
 
   # Keep this in sync with the `tested-with` field in `webauthn.cabal`
-  expectedGhcVersion = "9.4.7";
+  expectedGhcVersion = "9.10.3";
 
   hpkgs = pkgs.haskellPackages.extend
     (hself: hsuper: {
@@ -39,6 +41,37 @@ let
         ver = "0.11";
         sha256 = "sha256-41u6RvbrtZwlccv2d94LsnTygvMXkex/jxWrz7Dngx8=";
       } {};
+
+      crypton-x509-store = hself.callHackageDirect {
+        pkg = "crypton-x509-store";
+        ver = "1.8.0";
+        sha256 = "sha256-U6DH5Ke3JXAzZuqxLM6mPKDxqj4HTf5kjoBXaerLOcc=";
+      } {};
+
+      crypton-x509-system = hself.callHackageDirect {
+        pkg = "crypton-x509-system";
+        ver = "1.8.0";
+        sha256 = "sha256-uUNhwQnTPuVd1feZLUZJYKHIk/5v6t7nHpf1jqrMGTQ=";
+      } {};
+
+      crypton-x509 = hself.callHackageDirect {
+        pkg = "crypton-x509";
+        ver = "1.8.0";
+        sha256 = "sha256-wxU8Ou52UCuCT2gbxqPKssteIVGUyg5WEbv1xRIyZTg=";
+      } {};
+
+      crypton-x509-validation = hself.callHackageDirect {
+        pkg = "crypton-x509-validation";
+        ver = "1.8.0";
+        sha256 = "sha256-CyRqTUOcUzzVlQfTd3yylwDVtOaumBbBg9hMyvtcu7c=";
+      } {};
+
+      tls = hself.callHackageDirect {
+        pkg = "tls";
+        ver = "2.2.2";
+        sha256 = "sha256-lbroDPZiOa2YH1jqEzxzNgBGcPZDP6WJEeD0odDgNqs=";
+      } {};
+
     });
 
   deploy = pkgs.writeShellScriptBin "deploy" ''
@@ -64,6 +97,10 @@ let
       pkgs.yarn
       pkgs.nodejs
       pkgs.jq
+      pkgs.zlib
+      pkgs.pkg-config
+
+      pkgs.haskellPackages.cabal-plan
 
       deploy
     ];
