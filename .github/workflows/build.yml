@@ -53,4 +53,4 @@ jobs:
       run: nix-shell --run "cabal run test:tests"
 
     - name: "Style check"
-      run: nix-shell --run "bin/autoformat.sh"
+      run: nix-shell --run "bin/format-check.sh"
