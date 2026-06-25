@@ -34,6 +34,8 @@ import Crypto.JWT
     HasX5u (x5u),
     JWSHeader,
     JWTError,
+    RequiredProtection,
+    SignedJWT,
     decodeCompact,
     defaultJWTValidationSettings,
     param,
@@ -114,7 +116,7 @@ fidoAllianceRootCertificate =
       Left err -> error err
       Right cert -> cert
 
-instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
+instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader RequiredProtection) p RootCertificate where
   getVerificationKeys header _ (RootCertificate rootStore hostName) = do
     -- TODO: Implement step 4 of the spec, which says to try to get the chain
     -- from x5u first before trying x5c. See:
@@ -164,7 +166,7 @@ jwtToAdditionalData ::
   DateTime ->
   Either ProcessingError addData
 jwtToAdditionalData blob rootCert now = runExcept $ do
-  jwt <- decodeCompact $ LBS.fromStrict blob
+  jwt <- decodeCompact @SignedJWT $ LBS.fromStrict blob
   payload <- runReaderT (verifyJWT (defaultJWTValidationSettings (const True)) rootCert jwt) now
   return $ Service.additionalData payload
 

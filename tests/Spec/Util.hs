@@ -1,10 +1,16 @@
-module Spec.Util (decodeFile, runSeededMonadRandom, timeZero, predeterminedDateTime) where
+module Spec.Util (decodeFile, runSeededMonadRandom, timeZero, predeterminedDateTime, toEither) where
 
 import qualified Crypto.Random as Random
 import Data.Aeson (FromJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString
 import qualified Data.Hourglass as HG
+import Data.Validation (Validation (Failure, Success))
+
+-- | validation 1.2 dropped 'Data.Validation.toEither'.
+toEither :: Validation e a -> Either e a
+toEither (Failure e) = Left e
+toEither (Success a) = Right a
 
 decodeFile :: (FromJSON a, Show a) => FilePath -> IO a
 decodeFile filePath = do

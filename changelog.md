@@ -1,3 +1,20 @@
+### Next release: 0.12.0.0
+
+* Require `crypton >= 1.1`, `crypton-x509 >= 1.9.1`, `crypton-x509-store >= 1.9`,
+  `crypton-x509-validation >= 1.9.1` and `jose >= 0.13`, and switch from `memory` to `ram`.
+  `crypton-x509` and `crypton-x509-validation` below 1.9.1 do not enforce the X.509 Name
+  Constraints extension. See
+  [HSEC-2026-0008](https://haskell.github.io/security-advisories/advisory/HSEC-2026-0008.html).
+  `X509.UnknownCriticalExtension` in `uaFailures` now carries an OID, and the
+  `VerificationKeyStore` instances use `JWSHeader RequiredProtection` instead of
+  `JWSHeader ()`.
+* `crypton-x509-validation` reports every critical certificate extension outside its
+  recognized set as a validation failure. An attestation chain with such an extension now
+  results in `UnverifiedAuthenticator`. Microsoft TPM certificates mark the Certificate
+  Policies extension (OID 2.5.29.32) critical. A relying party that accepts TPM attestation
+  must decide whether that failure is acceptable.
+* Raise the `aeson` upper bound to `< 2.4`.
+
 ### 0.11.0.0
 
 * [#195](https://github.com/tweag/webauthn/pull/195) Allow for conditional mediation during registration.

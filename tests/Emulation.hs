@@ -20,7 +20,6 @@ import Data.Hourglass (DateTime)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
-import Data.Validation (toEither)
 import Emulation.Authenticator
   ( Authenticator (AuthenticatorNone, aAuthenticatorDataFlags, aConformance, aSignatureCounter),
     AuthenticatorNonConformingBehaviour (RandomPrivateKey, RandomSignatureData, StaticCounter),
@@ -35,7 +34,7 @@ import Emulation.Client
     clientAttestation,
   )
 import Emulation.Client.Arbitrary ()
-import Spec.Util (predeterminedDateTime)
+import Spec.Util (predeterminedDateTime, toEither)
 import Test.Hspec (SpecWith, describe, it, shouldSatisfy)
 import Test.QuickCheck (property, (==>))
 

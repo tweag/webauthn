@@ -30,13 +30,13 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import Data.These (These (That, These, This))
-import Data.Validation (toEither)
+import qualified Data.X509.Validation as X509
 import qualified Emulation
 import qualified Encoding
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
 import qualified PublicKeySpec
-import Spec.Util (decodeFile, predeterminedDateTime, timeZero)
+import Spec.Util (decodeFile, predeterminedDateTime, timeZero, toEither)
 import qualified System.Directory as Directory
 import System.FilePath ((</>))
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
@@ -353,7 +353,7 @@ main = Hspec.hspec $ do
         registry
         HG.DateTime {dtDate = HG.Date {dateYear = 2021, dateMonth = HG.September, dateDay = 1}, dtTime = timeZero}
   describe "TPM register" $ do
-    it "tests whether the fixed TPM-SHA1 register has a valid attestation" $
+    it "tests whether the fixed TPM-RS1 register has a valid attestation" $
       registerTestFromFile
         "tests/responses/attestation/tpm-rs1-01.json"
         "https://webauthntest.azurewebsites.net"
@@ -361,7 +361,7 @@ main = Hspec.hspec $ do
         True
         registry
         predeterminedDateTime
-    it "tests whether the fixed TPM-SHA1 register has a valid attestation" $
+    it "tests whether the fixed TPM-ES256 register has a valid attestation" $
       registerTestFromFile
         "tests/responses/attestation/tpm-es256-01.json"
         "https://localhost:44329"
@@ -387,9 +387,20 @@ isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration 
     && not verifiable
     || ( case rrAttestationStatement of
            O.SomeAttestationStatement _ O.VerifiedAuthenticator {} -> True
+           -- crypton-x509-validation >= 1.9.1 reports a failure for every
+           -- critical extension outside crypton-x509's recognizedOIDs. The
+           -- leaf TPM certificate in tpm-rs1-01.json marks Certificate
+           -- Policies (OID 2.5.29.32) critical, but that extension is
+           -- irrelevant to attestation trust.
+           O.SomeAttestationStatement _ O.UnverifiedAuthenticator {O.uaFailures = failures} ->
+             all isBenignValidationFailure failures
            _ -> False
        )
   where
+    isBenignValidationFailure :: X509.FailedReason -> Bool
+    isBenignValidationFailure (X509.UnknownCriticalExtension [2, 5, 29, 32]) = True
+    isBenignValidationFailure _ = False
+
     expectedCredentialEntry :: O.CredentialEntry
     expectedCredentialEntry =
       O.CredentialEntry
