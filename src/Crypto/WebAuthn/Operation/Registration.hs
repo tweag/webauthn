@@ -601,7 +601,11 @@ validateAttestationChain
         X509.validatePure
           currentTime
           X509.defaultHooks
-            { X509.hookValidateName = \_fqhn _cert -> []
+            { X509.hookValidateName = \_fqhn _cert -> [],
+              X509.hookFilterReason = filter (\case
+                    X509.UnknownCriticalExtension oids -> any (`notElem` [2,5,29,32]) oids
+                    _ -> False
+                  )
             }
           X509.defaultChecks
           (formatRootCerts <> metadataRootCerts)

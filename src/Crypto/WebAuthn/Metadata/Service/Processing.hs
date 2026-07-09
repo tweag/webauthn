@@ -37,7 +37,7 @@ import Crypto.JWT
     decodeCompact,
     defaultJWTValidationSettings,
     param,
-    verifyJWT,
+    verifyJWT, SignedJWTWithHeader,
   )
 import Crypto.WebAuthn.Internal.DateOrphans ()
 import qualified Crypto.WebAuthn.Metadata.Service.Types as Service
@@ -58,6 +58,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.X509 as X509
 import qualified Data.X509.CertificateStore as X509
 import qualified Data.X509.Validation as X509
+import qualified Crypto.JOSE as JOSE
 
 -- | A root certificate along with the host it should be verified against
 data RootCertificate = RootCertificate
@@ -114,7 +115,7 @@ fidoAllianceRootCertificate =
       Left err -> error err
       Right cert -> cert
 
-instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader ()) p RootCertificate where
+instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationKeyStore m (JWSHeader JOSE.RequiredProtection) p RootCertificate where
   getVerificationKeys header _ (RootCertificate rootStore hostName) = do
     -- TODO: Implement step 4 of the spec, which says to try to get the chain
     -- from x5u first before trying x5c. See:
@@ -139,7 +140,12 @@ instance (MonadError ProcessingError m, MonadReader DateTime m) => VerificationK
     let validationErrors =
           X509.validatePure
             now
-            X509.defaultHooks
+            X509.defaultHooks {
+              X509.hookFilterReason = filter (\case
+                    X509.UnknownCriticalExtension oids -> all (`elem` [2,5,29,32]) oids
+                    _ -> False
+                  )
+            }
             X509.defaultChecks
             rootStore
             (hostName, "")
@@ -164,7 +170,7 @@ jwtToAdditionalData ::
   DateTime ->
   Either ProcessingError addData
 jwtToAdditionalData blob rootCert now = runExcept $ do
-  jwt <- decodeCompact $ LBS.fromStrict blob
+  jwt <- decodeCompact @(SignedJWTWithHeader JWSHeader) $ LBS.fromStrict blob
   payload <- runReaderT (verifyJWT (defaultJWTValidationSettings (const True)) rootCert jwt) now
   return $ Service.additionalData payload
 

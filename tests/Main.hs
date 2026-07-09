@@ -42,6 +42,7 @@ import System.FilePath ((</>))
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
 import qualified Test.Hspec as Hspec
 import Test.QuickCheck.Instances.Text ()
+import Debug.Trace (trace)
 
 -- | Load all files in the given directory, and ensure that all of them can be
 -- decoded. The caller can pass in a function to run further checks on the
@@ -353,7 +354,7 @@ main = Hspec.hspec $ do
         registry
         HG.DateTime {dtDate = HG.Date {dateYear = 2021, dateMonth = HG.September, dateDay = 1}, dtTime = timeZero}
   describe "TPM register" $ do
-    it "tests whether the fixed TPM-SHA1 register has a valid attestation" $
+    it "tests whether the fixed TPM-SHA1 register for RS1 has a valid attestation" $
       registerTestFromFile
         "tests/responses/attestation/tpm-rs1-01.json"
         "https://webauthntest.azurewebsites.net"
@@ -361,7 +362,7 @@ main = Hspec.hspec $ do
         True
         registry
         predeterminedDateTime
-    it "tests whether the fixed TPM-SHA1 register has a valid attestation" $
+    it "tests whether the fixed TPM-SHA1 register for ECC256 has a valid attestation" $
       registerTestFromFile
         "tests/responses/attestation/tpm-es256-01.json"
         "https://localhost:44329"
@@ -381,7 +382,7 @@ main = Hspec.hspec $ do
 
 -- | Checks if the received attestation response if one we expect
 isExpectedAttestationResponse :: M.Credential 'M.Registration 'True -> M.CredentialOptions 'M.Registration -> Bool -> Either (NonEmpty O.RegistrationError) O.RegistrationResult -> Bool
-isExpectedAttestationResponse _ _ _ (Left _) = False -- We should never receive errors
+isExpectedAttestationResponse _ _ _ (Left _) = trace "Left False" False -- We should never receive errors
 isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration {..} verifiable (Right O.RegistrationResult {..}) =
   rrEntry == expectedCredentialEntry
     && not verifiable
