@@ -30,13 +30,13 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import Data.These (These (That, These, This))
-import Data.Validation (toEither)
+import qualified Data.X509.Validation as X509
 import qualified Emulation
 import qualified Encoding
 import GHC.Stack (HasCallStack)
 import qualified MetadataSpec
 import qualified PublicKeySpec
-import Spec.Util (decodeFile, predeterminedDateTime, timeZero)
+import Spec.Util (decodeFile, predeterminedDateTime, timeZero, toEither)
 import qualified System.Directory as Directory
 import System.FilePath ((</>))
 import Test.Hspec (Spec, describe, it, shouldSatisfy)
@@ -73,15 +73,21 @@ registryFromBlobFile = do
 -- This is because some of our tests cannot be verfied (for different reasons).
 registerTestFromFile :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
 registerTestFromFile fp origin rpId verifiable service now = do
-  registerTestFromFile' fp origin rpId verifiable service now M.CredentialMediationRequirementOptional
+  registerTestFromFile' fp origin rpId verifiable Nothing service now M.CredentialMediationRequirementOptional
+
+-- | Like 'registerTestFromFile', but expects chain validation to fail for the
+-- specified reasons.
+registerTestFromFileWithExpectedValidationFailures :: FilePath -> M.Origin -> M.RpId -> NonEmpty X509.FailedReason -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
+registerTestFromFileWithExpectedValidationFailures fp origin rpId expectedFailures service now = do
+  registerTestFromFile' fp origin rpId True (Just expectedFailures) service now M.CredentialMediationRequirementOptional
 
 -- | Same as 'registerTestFromFile', but allows to specifies the mediation requirement as conditional.
 registerTestFromFileConditional :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> IO ()
 registerTestFromFileConditional fp origin rpId verifiable service now = do
-  registerTestFromFile' fp origin rpId verifiable service now M.CredentialMediationRequirementConditional
+  registerTestFromFile' fp origin rpId verifiable Nothing service now M.CredentialMediationRequirementConditional
 
-registerTestFromFile' :: FilePath -> M.Origin -> M.RpId -> Bool -> Service.MetadataServiceRegistry -> HG.DateTime -> M.CredentialMediationRequirement -> IO ()
-registerTestFromFile' fp origin rpId verifiable service now mediation = do
+registerTestFromFile' :: FilePath -> M.Origin -> M.RpId -> Bool -> Maybe (NonEmpty X509.FailedReason) -> Service.MetadataServiceRegistry -> HG.DateTime -> M.CredentialMediationRequirement -> IO ()
+registerTestFromFile' fp origin rpId verifiable expectedFailures service now mediation = do
   pkCredential <-
     either (error . show) id . WJ.wjDecodeCredentialRegistration
       <$> decodeFile fp
@@ -96,7 +102,7 @@ registerTestFromFile' fp origin rpId verifiable service now mediation = do
             options
             mediation
             pkCredential
-  registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options verifiable
+  registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options verifiable expectedFailures
 
 main :: IO ()
 main = Hspec.hspec $ do
@@ -141,7 +147,7 @@ main = Hspec.hspec $ do
                   predeterminedDateTime
                   options
                   pkCredential
-        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False Nothing
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
         loginReq <-
           either (error . show) id . WJ.wjDecodeCredentialAuthentication
@@ -180,7 +186,7 @@ main = Hspec.hspec $ do
                   predeterminedDateTime
                   options
                   pkCredential
-        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False
+        registerResult `shouldSatisfy` isExpectedAttestationResponse pkCredential options False Nothing
         let Right O.RegistrationResult {O.rrEntry = credentialEntry} = registerResult
         loginReq <-
           either (error . show) id . WJ.wjDecodeCredentialAuthentication
@@ -353,15 +359,19 @@ main = Hspec.hspec $ do
         registry
         HG.DateTime {dtDate = HG.Date {dateYear = 2021, dateMonth = HG.September, dateDay = 1}, dtTime = timeZero}
   describe "TPM register" $ do
-    it "tests whether the fixed TPM-SHA1 register has a valid attestation" $
-      registerTestFromFile
+    it "reports the expected validation failure for the fixed TPM-RS1 registration" $
+      registerTestFromFileWithExpectedValidationFailures
         "tests/responses/attestation/tpm-rs1-01.json"
         "https://webauthntest.azurewebsites.net"
         "webauthntest.azurewebsites.net"
-        True
+        -- crypton-x509-validation >= 1.9.1 reports a failure for every
+        -- critical extension outside crypton-x509's recognizedOIDs. This
+        -- certificate marks Certificate Policies critical, but that extension
+        -- is irrelevant to attestation trust.
+        (NE.singleton $ X509.UnknownCriticalExtension [2, 5, 29, 32])
         registry
         predeterminedDateTime
-    it "tests whether the fixed TPM-SHA1 register has a valid attestation" $
+    it "tests whether the fixed TPM-ES256 register has a valid attestation" $
       registerTestFromFile
         "tests/responses/attestation/tpm-es256-01.json"
         "https://localhost:44329"
@@ -380,14 +390,15 @@ main = Hspec.hspec $ do
         predeterminedDateTime
 
 -- | Checks if the received attestation response if one we expect
-isExpectedAttestationResponse :: M.Credential 'M.Registration 'True -> M.CredentialOptions 'M.Registration -> Bool -> Either (NonEmpty O.RegistrationError) O.RegistrationResult -> Bool
-isExpectedAttestationResponse _ _ _ (Left _) = False -- We should never receive errors
-isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration {..} verifiable (Right O.RegistrationResult {..}) =
+isExpectedAttestationResponse :: M.Credential 'M.Registration 'True -> M.CredentialOptions 'M.Registration -> Bool -> Maybe (NonEmpty X509.FailedReason) -> Either (NonEmpty O.RegistrationError) O.RegistrationResult -> Bool
+isExpectedAttestationResponse _ _ _ _ (Left _) = False -- We should never receive errors
+isExpectedAttestationResponse M.Credential {..} M.CredentialOptionsRegistration {..} verifiable expectedFailures (Right O.RegistrationResult {..}) =
   rrEntry == expectedCredentialEntry
-    && not verifiable
-    || ( case rrAttestationStatement of
-           O.SomeAttestationStatement _ O.VerifiedAuthenticator {} -> True
-           _ -> False
+    && ( not verifiable
+           || case (rrAttestationStatement, expectedFailures) of
+             (O.SomeAttestationStatement _ O.VerifiedAuthenticator {}, Nothing) -> True
+             (O.SomeAttestationStatement _ O.UnverifiedAuthenticator {O.uaFailures = failures}, Just expected) -> failures == expected
+             _ -> False
        )
   where
     expectedCredentialEntry :: O.CredentialEntry
