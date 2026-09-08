@@ -1,6 +1,13 @@
-### Next release: 0.12.0.0
+### 0.12.0.0
 
-* Require `crypton >= 1.1`, `crypton-x509 >= 1.9.1`, `crypton-x509-store >= 1.9`,
+* [#196](https://github.com/tweag/webauthn/pull/196) Add the WebAuthn Level 3
+  backup eligibility (BE) and backup state (BS) authenticator data flags.
+* [#197](https://github.com/tweag/webauthn/pull/197) Add the WebAuthn Level 3
+  credential hints field to registration and authentication options.
+* [#198](https://github.com/tweag/webauthn/pull/198) Add the WebAuthn Level 3
+  `authenticatorAttachment` field to registration and authentication credentials.
+* [#207](https://github.com/tweag/webauthn/pull/207) Require `crypton >= 1.1`,
+  `crypton-x509 >= 1.9.1`, `crypton-x509-store >= 1.9`,
   `crypton-x509-validation >= 1.9.1` and `jose >= 0.13`, and switch from `memory` to `ram`.
   `crypton-x509` and `crypton-x509-validation` below 1.9.1 do not enforce the X.509 Name
   Constraints extension. See
