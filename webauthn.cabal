@@ -30,9 +30,9 @@ description:
   shows how this module may be used to implement a relying party.
   .
   == Stability
-  While the general design of the library won't change, it's still in an alpha
-  state, so smaller breaking changes should be expected for now. We will
-  however follow the [PVP](https://pvp.haskell.org/) and properly label changes
+  The API of this library is unlikely to change in the near-future unless required
+  by future WebAuthn specifications. We will, in any case,
+  follow the [PVP](https://pvp.haskell.org/) and properly label changes
   with the appropriate version increase.
 category: Web, Authentication
 tested-with: GHC == 9.10.3
